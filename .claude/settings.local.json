@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sed -i '' 's/FORGE — Train\\\\. Track\\\\. Transform\\\\./ATHRION — Train. Track. Transform./g; s/>FORGE</>ATHRION</g; s/forge_session/athrion_session/g; s/forge_users/athrion_users/g; s/forge_/athrion_/g' \"/Users/viacheslavkrasnopolskii/ATHRION app/ATHRION/src/index.html\")",
+      "Read(//Users/viacheslavkrasnopolskii/**)",
+      "Read(//Users/viacheslavkrasnopolskii/.vercel/**)",
+      "Bash(python3 -m json.tool)"
+    ],
+    "additionalDirectories": [
+      "/Users/viacheslavkrasnopolskii/ATHRION app/ATHRION/src"
+    ]
+  }
+}

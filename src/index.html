@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ATHRION — Train. Track. Transform.</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --neon: #c8f135;
+        --dark: #0a0a0a;
+        --card: #111111;
+        --border: #222222;
+        --muted: #555555;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: var(--dark);
+        color: #fff;
+        font-family: "DM Sans", sans-serif;
+        min-height: 100vh;
+        overflow: hidden;
+      }
+      .logo {
+        font-family: "Bebas Neue", sans-serif;
+        letter-spacing: 0.08em;
+      }
+      .bg-grid {
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        background-image:
+          linear-gradient(rgba(200, 241, 53, 0.04) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(200, 241, 53, 0.04) 1px, transparent 1px);
+        background-size: 60px 60px;
+      }
+      .glow-circle {
+        position: fixed;
+        border-radius: 50%;
+        filter: blur(120px);
+        opacity: 0.15;
+        z-index: 0;
+      }
+      input {
+        background: #161616;
+        border: 1px solid var(--border);
+        color: #fff;
+        padding: 14px 16px;
+        border-radius: 10px;
+        width: 100%;
+        font-family: "DM Sans", sans-serif;
+        font-size: 15px;
+        transition: border-color 0.2s;
+        outline: none;
+      }
+      input:focus {
+        border-color: var(--neon);
+      }
+      input::placeholder {
+        color: var(--muted);
+      }
+      .btn-primary {
+        background: var(--neon);
+        color: #000;
+        font-weight: 700;
+        padding: 14px;
+        border-radius: 10px;
+        width: 100%;
+        font-size: 15px;
+        cursor: pointer;
+        border: none;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        transition:
+          transform 0.15s,
+          box-shadow 0.15s;
+        font-family: "DM Sans", sans-serif;
+      }
+      .btn-primary:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 8px 30px rgba(200, 241, 53, 0.35);
+      }
+      .tab {
+        padding: 10px 28px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 14px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        transition: all 0.2s;
+        color: var(--muted);
+        background: transparent;
+        border: none;
+        font-family: "DM Sans", sans-serif;
+      }
+      .tab.active {
+        background: var(--neon);
+        color: #000;
+      }
+      .error {
+        color: #ff4d4d;
+        font-size: 13px;
+        margin-top: 4px;
+        display: none;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+      }
+      @keyframes slideUp {
+        from {
+          opacity: 0;
+          transform: translateY(30px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .animate-up {
+        animation: slideUp 0.5s ease forwards;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bg-grid"></div>
+    <div
+      class="glow-circle"
+      style="
+        width: 500px;
+        height: 500px;
+        background: #c8f135;
+        top: -150px;
+        right: -150px;
+      "
+    ></div>
+    <div
+      class="glow-circle"
+      style="
+        width: 400px;
+        height: 400px;
+        background: #3b82f6;
+        bottom: -100px;
+        left: -100px;
+      "
+    ></div>
+
+    <div
+      class="relative z-10 flex flex-col items-center justify-center min-h-screen px-4"
+    >
+      <!-- Logo -->
+      <div class="mb-10 text-center animate-up">
+        <div class="logo text-6xl text-white">ATHRION</div>
+        <div class="text-sm text-gray-500 tracking-widest uppercase mt-1">
+          Train · Track · Transform
+        </div>
+      </div>
+
+      <!-- Auth Card -->
+      <div
+        class="card p-8 w-full max-w-sm animate-up"
+        style="animation-delay: 0.1s"
+      >
+        <!-- Tabs -->
+        <div class="flex gap-1 bg-[#161616] p-1 rounded-xl mb-8">
+          <button
+            class="tab active flex-1"
+            id="tabLogin"
+            onclick="switchTab('login')"
+          >
+            Login
+          </button>
+          <button
+            class="tab flex-1"
+            id="tabRegister"
+            onclick="switchTab('register')"
+          >
+            Register
+          </button>
+        </div>
+
+        <!-- Login Form -->
+        <div id="loginForm">
+          <div class="space-y-4">
+            <div>
+              <input type="email" id="loginEmail" placeholder="Email address" />
+            </div>
+            <div>
+              <input
+                type="password"
+                id="loginPassword"
+                placeholder="Password"
+              />
+            </div>
+            <p class="error" id="loginError">Invalid email or password.</p>
+            <button class="btn-primary mt-2" onclick="handleLogin()">
+              Sign In
+            </button>
+          </div>
+          <p class="text-center text-gray-600 text-sm mt-5">
+            Don't have an account?
+            <button
+              onclick="switchTab('register')"
+              class="text-[#C8F135] hover:underline"
+            >
+              Register
+            </button>
+          </p>
+        </div>
+
+        <!-- Register Form -->
+        <div id="registerForm" class="hidden">
+          <div class="space-y-4">
+            <div>
+              <input type="text" id="regName" placeholder="Full name" />
+            </div>
+            <div>
+              <input type="email" id="regEmail" placeholder="Email address" />
+            </div>
+            <div>
+              <input
+                type="password"
+                id="regPassword"
+                placeholder="Password (min 6 chars)"
+              />
+            </div>
+            <div>
+              <input
+                type="password"
+                id="regConfirm"
+                placeholder="Confirm password"
+              />
+            </div>
+            <p class="error" id="registerError">Passwords do not match.</p>
+            <button class="btn-primary mt-2" onclick="handleRegister()">
+              Create Account
+            </button>
+          </div>
+          <p class="text-center text-gray-600 text-sm mt-5">
+            Already have an account?
+            <button
+              onclick="switchTab('login')"
+              class="text-[#C8F135] hover:underline"
+            >
+              Login
+            </button>
+          </p>
+        </div>
+      </div>
+
+      <p
+        class="text-gray-700 text-xs mt-8 animate-up"
+        style="animation-delay: 0.2s"
+      >
+        Your data stays local. No servers. No tracking.
+      </p>
+    </div>
+
+    <script>
+      function switchTab(tab) {
+        document
+          .getElementById("loginForm")
+          .classList.toggle("hidden", tab !== "login");
+        document
+          .getElementById("registerForm")
+          .classList.toggle("hidden", tab !== "register");
+        document
+          .getElementById("tabLogin")
+          .classList.toggle("active", tab === "login");
+        document
+          .getElementById("tabRegister")
+          .classList.toggle("active", tab === "register");
+      }
+
+      function handleLogin() {
+        const email = document.getElementById("loginEmail").value.trim();
+        const pass = document.getElementById("loginPassword").value;
+        const errEl = document.getElementById("loginError");
+        errEl.style.display = "none";
+
+        const users = JSON.parse(localStorage.getItem("athrion_users") || "[]");
+        const user = users.find(
+          (u) => u.email === email && u.password === btoa(pass),
+        );
+        if (!user) {
+          errEl.style.display = "block";
+          return;
+        }
+
+        localStorage.setItem(
+          "athrion_session",
+          JSON.stringify({ name: user.name, email: user.email }),
+        );
+        window.location.href = "pages/workout.html";
+      }
+
+      function handleRegister() {
+        const name = document.getElementById("regName").value.trim();
+        const email = document.getElementById("regEmail").value.trim();
+        const pass = document.getElementById("regPassword").value;
+        const confirm = document.getElementById("regConfirm").value;
+        const errEl = document.getElementById("registerError");
+        errEl.style.display = "none";
+
+        if (!name || !email || !pass) {
+          errEl.textContent = "All fields required.";
+          errEl.style.display = "block";
+          return;
+        }
+        if (pass.length < 6) {
+          errEl.textContent = "Password too short.";
+          errEl.style.display = "block";
+          return;
+        }
+        if (pass !== confirm) {
+          errEl.textContent = "Passwords do not match.";
+          errEl.style.display = "block";
+          return;
+        }
+
+        const users = JSON.parse(localStorage.getItem("athrion_users") || "[]");
+        if (users.find((u) => u.email === email)) {
+          errEl.textContent = "Email already registered.";
+          errEl.style.display = "block";
+          return;
+        }
+
+        users.push({ name, email, password: btoa(pass) });
+        localStorage.setItem("athrion_users", JSON.stringify(users));
+        localStorage.setItem("athrion_session", JSON.stringify({ name, email }));
+        window.location.href = "pages/workout.html";
+      }
+
+      // Auto-login if session exists
+      if (localStorage.getItem("athrion_session")) {
+        window.location.href = "pages/workout.html";
+      }
+    </script>
+  </body>
+</html>
