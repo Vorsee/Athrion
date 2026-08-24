@@ -8,17 +8,32 @@
   --card: #111111;
   --border: #222222;
   --muted: #555555;
+
+  /* Header height — matches Nav.jsx h-[56px] xs:h-[64px] */
+  --header-h: 56px;
+}
+
+@media (min-width: 390px) {
+  :root { --header-h: 64px; }
 }
 
 * { box-sizing: border-box; }
+
+html {
+  /* Scale base font 14px on narrow phones → 16px on 430px+ phones */
+  font-size: clamp(14px, 3.7vw, 16px);
+}
 
 body {
   background: #0A0A0A;
   color: #fff;
   font-family: 'DM Sans', sans-serif;
   margin: 0;
-  min-height: 100vh;
+  /* dvh accounts for browser URL bar appearing/disappearing on scroll */
+  min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
+  /* Prevent horizontal overflow on any screen */
+  overflow-x: hidden;
 }
 
 @layer utilities {

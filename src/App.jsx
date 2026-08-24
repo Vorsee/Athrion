@@ -13,6 +13,7 @@ import Plan from './pages/Plan.jsx'
 import Upgrade from './pages/Upgrade.jsx'
 import Nav from './components/Nav.jsx'
 import ProfileModal from './components/ProfileModal.jsx'
+import HomeScreenPrompt from './components/HomeScreenPrompt.jsx'
 
 export default function App() {
   // undefined = auth not yet resolved; null = logged out; object = logged in
@@ -103,8 +104,8 @@ export default function App() {
     />
   )
 
-  // Every user who has not completed fitness onboarding sees this gate
-  if (!fitnessProfile?.onboarding_completed) return (
+  // Pro users who haven't done fitness onboarding get the setup gate
+  if (isPro && !fitnessProfile?.onboarding_completed) return (
     <FitnessOnboarding
       existingProfile={profile}
       onComplete={refreshFitnessProfile}
@@ -119,9 +120,9 @@ export default function App() {
   const pageProps = {
     workout: { pendingWorkout, onClearPending: () => setPendingWorkout(null), isPro, onUpgrade: goUpgrade },
     library: { onStartWorkout: handleStartFromLibrary },
-    calories: { profile, isPro, onUpgrade: goUpgrade },
+    calories: { profile, isPro, onUpgrade: goUpgrade, onGoToPlan: () => setPage('plan') },
     group: { session },
-    plan: {},
+    plan: { onGoToWorkout: () => setPage('workout') },
   }
 
   const pages = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan }
@@ -130,7 +131,7 @@ export default function App() {
   const isLight = theme === 'light'
 
   return (
-    <div className={`min-h-screen bg-[#0A0A0A] text-white font-dm${isLight ? ' light' : ''}`}>
+    <div className={`min-h-dvh bg-[#0A0A0A] text-white font-dm${isLight ? ' light' : ''}`}>
       <div
         className="fixed inset-0 z-0 pointer-events-none"
         style={{
@@ -141,9 +142,12 @@ export default function App() {
         }}
       />
       <Nav page={page} setPage={setPage} session={session} isPro={isPro} onProfileClick={() => setShowProfile(true)} />
-      <main className="relative z-10 max-w-lg mx-auto px-4 pt-[72px] pb-[90px]">
+      <main className="relative z-10 max-w-lg mx-auto px-3 xs:px-4 pb-[82px] xs:pb-[90px]"
+        style={{ paddingTop: 'calc(var(--header-h) + env(safe-area-inset-top))' }}>
         <PageComponent {...pageProps[page]} />
       </main>
+
+      <HomeScreenPrompt />
 
       {showProfile && (
         <ProfileModal

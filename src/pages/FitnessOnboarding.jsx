@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { calculateNutritionTargets, GOAL_LABELS, GOAL_ICONS } from '../lib/nutrition.js'
 import { saveFitnessProfile, saveNutritionTarget, generatePlan } from '../lib/fitnessApi.js'
+import { saveGoals } from '../lib/api.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TOTAL_STEPS = 6
+const TOTAL_STEPS = 4
 
 const ACTIVITY_OPTS = [
   { id: 'sedentary',         label: 'Sedentary',          sub: 'Little or no exercise, desk job' },
@@ -23,29 +24,13 @@ const EXPERIENCE_OPTS = [
 ]
 
 const LOCATION_OPTS = [
-  { id: 'gym',          label: 'Gym',           icon: '🏛️' },
-  { id: 'home',         label: 'Home',          icon: '🏠' },
-  { id: 'outdoors',     label: 'Outdoors',      icon: '🌲' },
-  { id: 'any',          label: 'Flexible',      icon: '⚡' },
-]
-
-const EQUIPMENT_OPTS = [
-  'Dumbbells', 'Barbell & Plates', 'Resistance Bands', 'Pull-up Bar',
-  'Kettlebells', 'Cable Machine', 'Bench', 'Squat Rack', 'Cardio Machine', 'None',
-]
-
-const WORKOUT_TYPE_OPTS = [
-  'Strength Training', 'HIIT', 'Cardio', 'Yoga / Flexibility',
-  'Bodyweight', 'Circuit Training', 'Sport-Specific',
+  { id: 'gym',     label: 'Gym',      icon: '🏛️' },
+  { id: 'home',    label: 'Home',     icon: '🏠' },
+  { id: 'outdoors',label: 'Outdoors', icon: '🌲' },
+  { id: 'any',     label: 'Flexible', icon: '⚡' },
 ]
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-
-const SESSION_PREF_OPTS = [
-  { id: 'solo',  label: 'Solo',      icon: '🎯', sub: 'Train at my own pace' },
-  { id: 'group', label: 'Group',     icon: '👥', sub: 'Prefer group energy' },
-  { id: 'both',  label: 'Both',      icon: '⚡', sub: 'Whatever works' },
-]
 
 const GOAL_OPTS = Object.entries(GOAL_LABELS).map(([id, label]) => ({ id, label, icon: GOAL_ICONS[id] }))
 
@@ -110,7 +95,7 @@ function ToggleChip({ active, onClick, children }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 1 — Primary Goal
 // ─────────────────────────────────────────────────────────────────────────────
-function GoalStep({ step, goal, setGoal, onNext }) {
+function GoalStep({ goal, setGoal, onNext }) {
   return (
     <div className="space-y-5">
       <div>
@@ -133,7 +118,7 @@ function GoalStep({ step, goal, setGoal, onNext }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 2 — Activity & Experience
 // ─────────────────────────────────────────────────────────────────────────────
-function ActivityStep({ step, activityLevel, setActivityLevel, experienceLevel, setExperienceLevel, onNext, onBack }) {
+function ActivityStep({ activityLevel, setActivityLevel, experienceLevel, setExperienceLevel, onNext, onBack }) {
   return (
     <div className="space-y-5">
       <div>
@@ -176,14 +161,13 @@ function ActivityStep({ step, activityLevel, setActivityLevel, experienceLevel, 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Step 3 — Workout Preferences
+// Step 3 — Workout Setup
 // ─────────────────────────────────────────────────────────────────────────────
-function WorkoutPrefsStep({ step, workoutDays, setWorkoutDays, sessionDuration, setSessionDuration,
-  location, setLocation, equipment, setEquipment, workoutTypes, setWorkoutTypes,
-  trainingDays, setTrainingDays, sessionPref, setSessionPref, onNext, onBack }) {
+function WorkoutSetupStep({ workoutDays, setWorkoutDays, sessionDuration, setSessionDuration,
+  location, setLocation, trainingDays, setTrainingDays, onNext, onBack }) {
 
-  function toggle(arr, setArr, val) {
-    setArr(arr.includes(val) ? arr.filter(v => v !== val) : [...arr, val])
+  function toggleDay(d) {
+    setTrainingDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])
   }
 
   const DURATION_OPTS = [20, 30, 45, 60, 75, 90]
@@ -198,7 +182,9 @@ function WorkoutPrefsStep({ step, workoutDays, setWorkoutDays, sessionDuration, 
 
       {/* Days per week */}
       <div>
-        <div className="text-xs text-gray-500 uppercase tracking-widest mb-2">Days per Week <span className="text-neon">{workoutDays}</span></div>
+        <div className="text-xs text-gray-500 uppercase tracking-widest mb-2">
+          Days per Week <span className="text-neon">{workoutDays}</span>
+        </div>
         <input type="range" min={1} max={7} value={workoutDays}
           onChange={e => setWorkoutDays(Number(e.target.value))}
           className="w-full accent-neon" />
@@ -222,7 +208,7 @@ function WorkoutPrefsStep({ step, workoutDays, setWorkoutDays, sessionDuration, 
         </div>
       </div>
 
-      {/* Workout location */}
+      {/* Where you train */}
       <div>
         <div className="text-xs text-gray-500 uppercase tracking-widest mb-2">Where You Train</div>
         <div className="grid grid-cols-2 gap-2">
@@ -237,47 +223,12 @@ function WorkoutPrefsStep({ step, workoutDays, setWorkoutDays, sessionDuration, 
         </div>
       </div>
 
-      {/* Equipment */}
+      {/* Preferred days */}
       <div>
-        <div className="text-xs text-gray-500 uppercase tracking-widest mb-2">Available Equipment</div>
-        <div className="flex flex-wrap gap-2">
-          {EQUIPMENT_OPTS.map(e => (
-            <ToggleChip key={e} active={equipment.includes(e)} onClick={() => toggle(equipment, setEquipment, e)}>{e}</ToggleChip>
-          ))}
-        </div>
-      </div>
-
-      {/* Workout types */}
-      <div>
-        <div className="text-xs text-gray-500 uppercase tracking-widest mb-2">Preferred Types</div>
-        <div className="flex flex-wrap gap-2">
-          {WORKOUT_TYPE_OPTS.map(t => (
-            <ToggleChip key={t} active={workoutTypes.includes(t)} onClick={() => toggle(workoutTypes, setWorkoutTypes, t)}>{t}</ToggleChip>
-          ))}
-        </div>
-      </div>
-
-      {/* Preferred training days */}
-      <div>
-        <div className="text-xs text-gray-500 uppercase tracking-widest mb-2">Preferred Days</div>
+        <div className="text-xs text-gray-500 uppercase tracking-widest mb-2">Preferred Days <span className="text-gray-700 normal-case">(optional)</span></div>
         <div className="flex flex-wrap gap-2">
           {DAYS_OF_WEEK.map(d => (
-            <ToggleChip key={d} active={trainingDays.includes(d)} onClick={() => toggle(trainingDays, setTrainingDays, d)}>{d.slice(0, 3)}</ToggleChip>
-          ))}
-        </div>
-      </div>
-
-      {/* Session preference */}
-      <div>
-        <div className="text-xs text-gray-500 uppercase tracking-widest mb-2">Session Style</div>
-        <div className="grid grid-cols-3 gap-2">
-          {SESSION_PREF_OPTS.map(o => (
-            <button key={o.id} onClick={() => setSessionPref(o.id)}
-              className={`flex flex-col items-center gap-1 py-3 rounded-xl border text-xs font-semibold transition-all ${
-                sessionPref === o.id ? 'bg-neon/10 border-neon/50 text-neon' : 'bg-[#1a1a1a] border-[#262626] text-gray-500'
-              }`}>
-              <span className="text-base">{o.icon}</span>{o.label}
-            </button>
+            <ToggleChip key={d} active={trainingDays.includes(d)} onClick={() => toggleDay(d)}>{d.slice(0, 3)}</ToggleChip>
           ))}
         </div>
       </div>
@@ -288,83 +239,20 @@ function WorkoutPrefsStep({ step, workoutDays, setWorkoutDays, sessionDuration, 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Step 4 — Health & Limitations
+// Step 4 — Review & Generate
 // ─────────────────────────────────────────────────────────────────────────────
-function HealthStep({ step, injuries, setInjuries, limitations, setLimitations, medicalNotes, setMedicalNotes, onNext, onBack }) {
-  return (
-    <div className="space-y-5">
-      <div>
-        <BackBtn onClick={onBack} />
-        <div className="font-bebas text-4xl text-white tracking-wide">Health Notes</div>
-        <div className="text-sm text-gray-500 mt-1">Step 4 of {TOTAL_STEPS} · All fields optional</div>
-      </div>
-
-      <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3">
-        <p className="text-xs text-amber-400">This app is not medical advice. Always consult a doctor before starting a new program, especially if you have any health conditions.</p>
-      </div>
-
-      {[
-        { label: 'Injuries', hint: 'e.g. bad left knee, rotator cuff', val: injuries, set: setInjuries },
-        { label: 'Limitations', hint: 'e.g. avoid running, no jumping', val: limitations, set: setLimitations },
-        { label: 'Medical Notes', hint: 'e.g. diabetes, high blood pressure', val: medicalNotes, set: setMedicalNotes },
-      ].map(({ label, hint, val, set }) => (
-        <div key={label}>
-          <div className="text-xs text-gray-500 uppercase tracking-widest mb-1.5">{label}</div>
-          <textarea value={val} onChange={e => set(e.target.value)} placeholder={hint} rows={2}
-            className="w-full bg-[#1a1a1a] border border-[#262626] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-700 focus:outline-none focus:border-neon/40 resize-none" />
-        </div>
-      ))}
-
-      <NextBtn onClick={onNext} />
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Step 5 — Preferences (likes / dislikes)
-// ─────────────────────────────────────────────────────────────────────────────
-function PreferencesStep({ step, likedExercises, setLikedExercises, dislikedExercises, setDislikedExercises, onNext, onBack }) {
-  return (
-    <div className="space-y-5">
-      <div>
-        <BackBtn onClick={onBack} />
-        <div className="font-bebas text-4xl text-white tracking-wide">Your Preferences</div>
-        <div className="text-sm text-gray-500 mt-1">Step 5 of {TOTAL_STEPS} · Both fields optional</div>
-      </div>
-
-      <div>
-        <div className="text-xs text-gray-500 uppercase tracking-widest mb-1.5">Exercises You Like</div>
-        <textarea value={likedExercises} onChange={e => setLikedExercises(e.target.value)}
-          placeholder="e.g. deadlifts, pull-ups, running" rows={3}
-          className="w-full bg-[#1a1a1a] border border-[#262626] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-700 focus:outline-none focus:border-neon/40 resize-none" />
-      </div>
-
-      <div>
-        <div className="text-xs text-gray-500 uppercase tracking-widest mb-1.5">Exercises You Dislike or Want to Avoid</div>
-        <textarea value={dislikedExercises} onChange={e => setDislikedExercises(e.target.value)}
-          placeholder="e.g. burpees, box jumps" rows={3}
-          className="w-full bg-[#1a1a1a] border border-[#262626] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-700 focus:outline-none focus:border-neon/40 resize-none" />
-      </div>
-
-      <NextBtn onClick={onNext} />
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Step 6 — Review & Generate
-// ─────────────────────────────────────────────────────────────────────────────
-function ReviewStep({ step, data, nutritionPreview, onGenerate, generating, error, onBack }) {
+function ReviewStep({ data, nutritionPreview, onGenerate, generating, error, onBack }) {
   const { goal, activityLevel, workoutDays, experienceLevel, location } = data
   const actLabel = ACTIVITY_OPTS.find(a => a.id === activityLevel)?.label ?? activityLevel
   const locLabel = LOCATION_OPTS.find(l => l.id === location)?.label ?? location
+  const expLabel = EXPERIENCE_OPTS.find(e => e.id === experienceLevel)?.label ?? experienceLevel
 
   return (
     <div className="space-y-5">
       <div>
         <BackBtn onClick={onBack} />
         <div className="font-bebas text-4xl text-white tracking-wide">Ready to<br/>Generate</div>
-        <div className="text-sm text-gray-500 mt-1">Step 6 of {TOTAL_STEPS} · Review your plan</div>
+        <div className="text-sm text-gray-500 mt-1">Step 4 of {TOTAL_STEPS} · Review your plan</div>
       </div>
 
       <div className="bg-[#1a1a1a] border border-[#262626] rounded-2xl p-4 space-y-3">
@@ -376,19 +264,18 @@ function ReviewStep({ step, data, nutritionPreview, onGenerate, generating, erro
           </div>
         </div>
         <div className="w-full h-px bg-[#2a2a2a]" />
-        <div className="grid grid-cols-3 gap-4 text-center">
-          <div>
-            <div className="text-xs text-gray-600">Activity</div>
-            <div className="text-xs font-semibold text-white mt-0.5">{actLabel}</div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-600">Days/week</div>
-            <div className="text-xs font-semibold text-white mt-0.5">{workoutDays}</div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-600">Location</div>
-            <div className="text-xs font-semibold text-white mt-0.5">{locLabel}</div>
-          </div>
+        <div className="grid grid-cols-4 gap-2 text-center">
+          {[
+            { label: 'Activity', val: actLabel },
+            { label: 'Experience', val: expLabel },
+            { label: 'Days/wk', val: workoutDays },
+            { label: 'Location', val: locLabel },
+          ].map(({ label, val }) => (
+            <div key={label}>
+              <div className="text-[10px] text-gray-600">{label}</div>
+              <div className="text-xs font-semibold text-white mt-0.5">{val}</div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -398,9 +285,9 @@ function ReviewStep({ step, data, nutritionPreview, onGenerate, generating, erro
           <div className="grid grid-cols-4 gap-3 text-center">
             {[
               { label: 'Calories', val: nutritionPreview.calorieTarget },
-              { label: 'Protein', val: `${nutritionPreview.proteinGrams}g` },
-              { label: 'Carbs', val: `${nutritionPreview.carbGrams}g` },
-              { label: 'Fat', val: `${nutritionPreview.fatGrams}g` },
+              { label: 'Protein',  val: `${nutritionPreview.proteinGrams}g` },
+              { label: 'Carbs',    val: `${nutritionPreview.carbGrams}g` },
+              { label: 'Fat',      val: `${nutritionPreview.fatGrams}g` },
             ].map(({ label, val }) => (
               <div key={label}>
                 <div className="font-bebas text-xl text-neon">{val}</div>
@@ -408,12 +295,6 @@ function ReviewStep({ step, data, nutritionPreview, onGenerate, generating, erro
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {data.injuries && (
-        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-2">
-          <p className="text-xs text-amber-400">Injuries noted — the plan will account for your limitations.</p>
         </div>
       )}
 
@@ -441,7 +322,7 @@ function ReviewStep({ step, data, nutritionPreview, onGenerate, generating, erro
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Main FitnessOnboarding
+// Main
 // ─────────────────────────────────────────────────────────────────────────────
 export default function FitnessOnboarding({ existingProfile, onComplete }) {
   const ep = existingProfile ?? {}
@@ -449,45 +330,18 @@ export default function FitnessOnboarding({ existingProfile, onComplete }) {
   const [animKey, setAnimKey] = useState(0)
   const [animDir, setAnimDir] = useState('slide-from-right')
 
-  // Step 1 — Goal
-  const [goal, setGoal]       = useState('')
-
-  // Step 2 — Activity
+  const [goal, setGoal]                         = useState('')
   const [activityLevel, setActivityLevel]       = useState('moderately_active')
   const [experienceLevel, setExperienceLevel]   = useState('beginner')
-
-  // Step 3 — Workout Prefs
   const [workoutDays, setWorkoutDays]           = useState(3)
   const [sessionDuration, setSessionDuration]   = useState(45)
   const [location, setLocation]                 = useState('gym')
-  const [equipment, setEquipment]               = useState([])
-  const [workoutTypes, setWorkoutTypes]         = useState([])
   const [trainingDays, setTrainingDays]         = useState([])
-  const [sessionPref, setSessionPref]           = useState('both')
+  const [generating, setGenerating]             = useState(false)
+  const [genError, setGenError]                 = useState('')
 
-  // Step 4 — Health
-  const [injuries, setInjuries]                 = useState('')
-  const [limitations, setLimitations]           = useState('')
-  const [medicalNotes, setMedicalNotes]         = useState('')
-
-  // Step 5 — Preferences
-  const [likedExercises, setLikedExercises]     = useState('')
-  const [dislikedExercises, setDislikedExercises] = useState('')
-
-  // Step 6 — Generate
-  const [generating, setGenerating] = useState(false)
-  const [genError, setGenError]     = useState('')
-
-  function goNext() {
-    setAnimDir('slide-from-right')
-    setAnimKey(k => k + 1)
-    setStep(s => s + 1)
-  }
-  function goBack() {
-    setAnimDir('slide-from-left')
-    setAnimKey(k => k + 1)
-    setStep(s => s - 1)
-  }
+  function goNext() { setAnimDir('slide-from-right'); setAnimKey(k => k + 1); setStep(s => s + 1) }
+  function goBack() { setAnimDir('slide-from-left');  setAnimKey(k => k + 1); setStep(s => s - 1) }
 
   const nutritionPreview = goal && ep.sex && ep.weight_lb && ep.height_cm && ep.age
     ? calculateNutritionTargets({
@@ -508,18 +362,17 @@ export default function FitnessOnboarding({ existingProfile, onComplete }) {
         workoutDaysPerWeek: workoutDays,
         preferredSessionDuration: sessionDuration,
         workoutLocation: location,
-        availableEquipment: equipment,
-        preferredWorkoutTypes: workoutTypes,
+        availableEquipment: [],
+        preferredWorkoutTypes: [],
         preferredTrainingDays: trainingDays,
         preferredRestDays: DAYS_OF_WEEK.filter(d => !trainingDays.includes(d)),
-        sessionPreference: sessionPref,
-        injuries,
-        limitations,
-        medicalNotes,
-        likedExercises,
-        dislikedExercises,
+        sessionPreference: 'both',
+        injuries: '',
+        limitations: '',
+        medicalNotes: '',
+        likedExercises: '',
+        dislikedExercises: '',
         onboardingCompleted: true,
-        // Body stats from existing profile (used by the AI, not re-entered here)
         sex: ep.sex,
         weightLb: ep.weight_lb,
         heightCm: ep.height_cm,
@@ -535,14 +388,17 @@ export default function FitnessOnboarding({ existingProfile, onComplete }) {
         primaryGoal: goal,
       })
 
-      // Save to DB in parallel, then generate the plan
-      const [savedProfile] = await Promise.all([
+      await Promise.all([
         saveFitnessProfile(fitnessProfileData),
         saveNutritionTarget(nutritionTargets),
+        saveGoals({
+          calorie_goal: nutritionTargets.calorieTarget,
+          protein_goal: nutritionTargets.proteinGrams,
+          carb_goal:    nutritionTargets.carbGrams,
+        }),
       ])
 
       await generatePlan(fitnessProfileData, nutritionTargets)
-
       onComplete()
     } catch (e) {
       setGenError(e.message || 'Something went wrong. Please try again.')
@@ -550,34 +406,21 @@ export default function FitnessOnboarding({ existingProfile, onComplete }) {
     }
   }
 
-  const reviewData = { goal, activityLevel, workoutDays, experienceLevel, location, injuries }
-
   const steps = [
-    <GoalStep step={step} goal={goal} setGoal={setGoal} onNext={goNext} />,
-    <ActivityStep step={step}
+    <GoalStep goal={goal} setGoal={setGoal} onNext={goNext} />,
+    <ActivityStep
       activityLevel={activityLevel} setActivityLevel={setActivityLevel}
       experienceLevel={experienceLevel} setExperienceLevel={setExperienceLevel}
       onNext={goNext} onBack={goBack} />,
-    <WorkoutPrefsStep step={step}
+    <WorkoutSetupStep
       workoutDays={workoutDays} setWorkoutDays={setWorkoutDays}
       sessionDuration={sessionDuration} setSessionDuration={setSessionDuration}
       location={location} setLocation={setLocation}
-      equipment={equipment} setEquipment={setEquipment}
-      workoutTypes={workoutTypes} setWorkoutTypes={setWorkoutTypes}
       trainingDays={trainingDays} setTrainingDays={setTrainingDays}
-      sessionPref={sessionPref} setSessionPref={setSessionPref}
       onNext={goNext} onBack={goBack} />,
-    <HealthStep step={step}
-      injuries={injuries} setInjuries={setInjuries}
-      limitations={limitations} setLimitations={setLimitations}
-      medicalNotes={medicalNotes} setMedicalNotes={setMedicalNotes}
-      onNext={goNext} onBack={goBack} />,
-    <PreferencesStep step={step}
-      likedExercises={likedExercises} setLikedExercises={setLikedExercises}
-      dislikedExercises={dislikedExercises} setDislikedExercises={setDislikedExercises}
-      onNext={goNext} onBack={goBack} />,
-    <ReviewStep step={step}
-      data={reviewData} nutritionPreview={nutritionPreview}
+    <ReviewStep
+      data={{ goal, activityLevel, workoutDays, experienceLevel, location }}
+      nutritionPreview={nutritionPreview}
       onGenerate={handleGenerate} generating={generating} error={genError}
       onBack={goBack} />,
   ]

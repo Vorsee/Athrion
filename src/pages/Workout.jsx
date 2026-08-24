@@ -2,9 +2,18 @@ import { useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { EXERCISES, getTodaysExercises, todayKey, fmtTime, getExerciseIcon } from '../lib/data.js'
 import { fetchWorkoutHistory, saveWorkoutEntry, fetchCustomWorkouts, saveCustomWorkout, deleteCustomWorkout } from '../lib/api.js'
+import { fetchActivePlan } from '../lib/fitnessApi.js'
 
 const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 const dayIdx = new Date().getDay()
+const TODAY_FULL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dayIdx]
+
+function matchPlanExercises(planExercises) {
+  return planExercises.map(pe => {
+    const found = EXERCISES.find(e => e.name.toLowerCase() === pe.name.toLowerCase())
+    return found ?? { name: pe.name, muscle: '', icon: 'mdi:dumbbell', sets: pe.sets, reps: pe.reps, restSeconds: pe.restSeconds }
+  })
+}
 
 const FREE_WORKOUT_LIMIT = 3
 
@@ -14,6 +23,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
   const [activeWorkoutName, setActiveWorkoutName] = useState('')
   const [totalSets, setTotalSets]             = useState(3)
   const [restDuration, setRestDuration]       = useState(60)
+  const [restPerExercise, setRestPerExercise] = useState([]) // per-exercise overrides from AI plan
   const [exIdx, setExIdx]                     = useState(0)
   const [setIdx, setSetIdx]                   = useState(0)
   const [loggedSets, setLoggedSets]           = useState([])
@@ -24,6 +34,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
   const [customWorkouts, setCustomWorkouts]   = useState([])
   const [editingWorkout, setEditingWorkout]   = useState(null)
   const [freeWorkout, setFreeWorkout]         = useState(false)
+  const [planWorkout, setPlanWorkout]         = useState(null)
 
   // ── localStorage helpers ───────────────────────────────────────────────────
   function persistWorkout(overrides = {}) {
@@ -33,6 +44,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       exerciseNames: overrides.exerciseNames ?? activeExercises.map(e => e.name),
       totalSets,
       restDuration,
+      restPerExercise,
       exIdx: overrides.exIdx ?? exIdx,
       setIdx: overrides.setIdx ?? setIdx,
       loggedSets: overrides.loggedSets ?? loggedSets,
@@ -49,6 +61,13 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
   useEffect(() => {
     fetchWorkoutHistory().then(h => setHistory(h)).catch(() => {})
     fetchCustomWorkouts().then(w => setCustomWorkouts(w)).catch(() => {})
+    fetchActivePlan().then(plan => {
+      if (!plan?.plan_data?.weeklySchedule) return
+      const todayDay = plan.plan_data.weeklySchedule.find(d => d.day === TODAY_FULL)
+      if (todayDay?.type === 'workout' && todayDay.workout?.exercises?.length) {
+        setPlanWorkout(todayDay)  // store full dayData, same shape Plan.jsx uses
+      }
+    }).catch(() => {})
 
     // Restore in-progress workout
     try {
@@ -62,6 +81,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       setActiveWorkoutName(s.name || '')
       setTotalSets(s.totalSets || 3)
       setRestDuration(s.restDuration || 60)
+      setRestPerExercise(s.restPerExercise || [])
       setExIdx(s.exIdx || 0)
       setSetIdx(s.setIdx || 0)
       setLoggedSets(s.loggedSets || [])
@@ -82,10 +102,32 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
   function startWorkout(exercises, name) {
     setActiveExercises(exercises)
     setActiveWorkoutName(name)
+    setRestPerExercise([])
     setExIdx(0); setSetIdx(0); setLoggedSets([])
     setWeight(''); setReps('')
     setFreeWorkout(false)
     setScreen('config')
+  }
+
+  // Skips config screen — sets/rest per exercise pre-determined by AI plan
+  function startPlanWorkout(exercises, name, sets, perExRest) {
+    setActiveExercises(exercises)
+    setActiveWorkoutName(name)
+    setTotalSets(sets)
+    setRestDuration(perExRest[0] ?? 60)
+    setRestPerExercise(perExRest)
+    setFreeWorkout(false)
+    const t = Date.now()
+    setExIdx(0); setSetIdx(0); setLoggedSets([])
+    setWeight(''); setReps('')
+    setStartTime(t)
+    localStorage.setItem('athrion_workout', JSON.stringify({
+      screen: 'training', name,
+      exerciseNames: exercises.map(e => e.name),
+      totalSets: sets, restDuration: perExRest[0] ?? 60, restPerExercise: perExRest,
+      exIdx: 0, setIdx: 0, loggedSets: [], startTime: t, freeWorkout: false,
+    }))
+    setScreen('training')
   }
 
   function startFreeWorkout() {
@@ -150,7 +192,9 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
     <HomeScreen
       history={history}
       customWorkouts={customWorkouts}
+      planWorkout={planWorkout}
       onStart={startWorkout}
+      onPlanStart={startPlanWorkout}
       onFreeStart={startFreeWorkout}
       onCreateNew={() => openBuilder()}
       onEdit={openBuilder}
@@ -223,17 +267,20 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
         const r = parseInt(reps) || 0
         const newLog = [...loggedSets, { ex: activeExercises[exIdx].name, set: setIdx + 1, weight: w, reps: r }]
         setLoggedSets(newLog)
-        localStorage.setItem('athrion_rest_end', String(Date.now() + restDuration * 1000))
+        const thisRest = restPerExercise[exIdx] ?? restDuration
+        localStorage.setItem('athrion_rest_end', String(Date.now() + thisRest * 1000))
         persistWorkout({ screen: 'rest', loggedSets: newLog })
         setScreen('rest')
       }}
     />
   )
 
+  const currentRest = restPerExercise[exIdx] ?? restDuration
+
   if (screen === 'rest') return (
     <RestScreen
       exercises={activeExercises}
-      restDuration={restDuration} exIdx={exIdx} setIdx={setIdx} totalSets={totalSets}
+      restDuration={currentRest} exIdx={exIdx} setIdx={setIdx} totalSets={totalSets}
       freeWorkout={freeWorkout}
       onEnd={handleEndWorkout}
       onAdvance={() => {
@@ -284,24 +331,35 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
 // ─────────────────────────────────────────────────────────────────────────────
 // Home
 // ─────────────────────────────────────────────────────────────────────────────
-function HomeScreen({ history, customWorkouts, onStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade }) {
+function HomeScreen({ history, customWorkouts, planWorkout, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade }) {
   const [selectedSession, setSelectedSession] = useState(null)
   const weekSessions = history.filter(h => (Date.now() - new Date(h.date)) < 7 * 86400000).length
   const totalMins = history.reduce((a, h) => a + (parseInt(h.duration) || 0), 0)
 
-  // Rotation: oldest-first order, advance by completed session count
+  // AI plan (full dayData) takes priority; fall back to custom rotation, then default
   const rotation = [...customWorkouts].reverse()
-  const hasPlan = rotation.length > 0
-  const rotationIdx = hasPlan ? history.length % rotation.length : 0
-  const todayCustom = hasPlan ? rotation[rotationIdx] : null
-  const todayExs = hasPlan
+  const rotationIdx = rotation.length > 0 ? history.length % rotation.length : 0
+  const todayCustom = rotation.length > 0 ? rotation[rotationIdx] : null
+  const fallbackExs = todayCustom
     ? (todayCustom.exercises || []).map(n => EXERCISES.find(e => e.name === n)).filter(Boolean)
     : getTodaysExercises()
-  const todayName = hasPlan ? todayCustom.name : `${DAY_NAMES[dayIdx]} Workout`
+  const fallbackName = todayCustom ? todayCustom.name : `${DAY_NAMES[dayIdx]} Workout`
+
+  const planExercises = planWorkout?.workout?.exercises ?? []
+  const planName = planWorkout?.title ?? fallbackName
+
+  const planSets = planExercises[0]?.sets ?? 3
+
+  function handlePlanStart() {
+    const mapped = matchPlanExercises(planExercises)
+    const perExRest = planExercises.map(e => e.restSeconds ?? 60)
+    onPlanStart(mapped, planName, planSets, perExRest)
+  }
 
   return (
     <div className="space-y-4 py-4 slide-up">
-      {/* Stats */}
+
+      {/* ── Stats ── */}
       <div className="grid grid-cols-2 gap-3">
         <Card className="p-4">
           <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-1">This Week</div>
@@ -313,59 +371,83 @@ function HomeScreen({ history, customWorkouts, onStart, onFreeStart, onCreateNew
         </Card>
       </div>
 
-      {/* Today's Plan */}
-      <Card className="p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-1">
-              Today's Plan{hasPlan ? ` · ${rotationIdx + 1} of ${rotation.length}` : ''}
-            </div>
-            <div className="font-bold text-lg">{todayName}</div>
-          </div>
-          <span className="bg-neon/20 text-neon text-xs font-bold px-3 py-1 rounded-full">{todayExs.length} exercises</span>
-        </div>
-        <div className="space-y-1 mb-5">
-          {todayExs.map((ex, i) => (
-            <div key={i} className="flex items-center gap-3 py-2 border-b border-[#1a1a1a] last:border-0">
-              <Icon icon={getExerciseIcon(ex)} width={24} className="flex-shrink-0 text-gray-400" />
-              <div className="flex-1">
-                <div className="font-medium text-sm">{ex.name}</div>
-                <div className="text-xs text-gray-500">{ex.muscle}</div>
-              </div>
-              <div className="text-xs text-gray-700">{i + 1}/{todayExs.length}</div>
-            </div>
-          ))}
-        </div>
-        <NeonBtn onClick={() => onStart(todayExs, todayName)} className="w-full">
-          🚀 Start Today's Plan
-        </NeonBtn>
-        <button
-          onClick={onFreeStart}
-          className="w-full mt-2.5 py-3 rounded-xl border border-[#2a2a2a] bg-[#0d0d0d] text-gray-400 hover:text-white hover:border-[#444] text-sm font-semibold transition-all"
-        >
-          + Free Workout
-        </button>
-      </Card>
+      {/* ── Today's Training — neon border, plan data straight from AI ── */}
+      <div className="rounded-2xl p-px" style={{ background: 'linear-gradient(135deg, #C8F135 0%, #C8F13560 100%)', boxShadow: '0 0 14px 0 #C8F13530' }}>
+        <div className="bg-[#111] rounded-[15px] p-5">
 
-      {/* My Workouts */}
+          {/* Header */}
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-0.5">Today's Training</div>
+              <div className="font-bold text-base text-white">{planWorkout ? planName : fallbackName}</div>
+              {planWorkout && planWorkout.durationMinutes && (
+                <div className="text-xs text-gray-500 mt-0.5">{planWorkout.durationMinutes} min · {planExercises.length} exercises</div>
+              )}
+            </div>
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-neon/15 text-neon border border-neon/20">Workout</span>
+          </div>
+
+          {/* Exercise list */}
+          {planWorkout ? (
+            <div className="space-y-2 mb-5">
+              {planExercises.map((ex, i) => (
+                <div key={i} className="flex items-center justify-between bg-[#1a1a1a] rounded-xl px-3 py-2.5">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-white truncate">{ex.name}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">{ex.sets} sets × {ex.reps}</div>
+                  </div>
+                  <div className="text-[10px] text-gray-600 text-right flex-shrink-0 ml-2">
+                    <div>{ex.restSeconds}s rest</div>
+                    {ex.equipment && <div className="mt-0.5">{ex.equipment}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-1 mb-5">
+              {fallbackExs.map((ex, i) => (
+                <div key={i} className="flex items-center gap-3 py-2 border-b border-[#1a1a1a] last:border-0">
+                  <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-gray-400" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm truncate">{ex.name}</div>
+                    <div className="text-xs text-gray-500">{ex.muscle}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <NeonBtn onClick={planWorkout ? handlePlanStart : () => onStart(fallbackExs, fallbackName)} className="w-full">
+            🚀 Start Training
+          </NeonBtn>
+          <button
+            onClick={onFreeStart}
+            className="w-full mt-2.5 py-3 rounded-xl border border-[#2a2a2a] bg-[#0d0d0d] text-gray-400 hover:text-white hover:border-[#444] text-sm font-semibold transition-all"
+          >
+            + Free Workout
+          </button>
+        </div>
+      </div>
+
+      {/* ── My Workouts ── */}
       <Card className="p-5">
         <div className="flex items-center justify-between mb-4">
           <div className="text-[10px] text-gray-600 uppercase tracking-widest">My Workouts</div>
-          {!isPro && (
-            <span className="text-[10px] text-gray-600 font-semibold">
-              {customWorkouts.length}/{FREE_WORKOUT_LIMIT}
-            </span>
-          )}
-          <button
-            onClick={!isPro && customWorkouts.length >= FREE_WORKOUT_LIMIT ? onUpgrade : onCreateNew}
-            className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all flex items-center gap-1 ${
-              !isPro && customWorkouts.length >= FREE_WORKOUT_LIMIT
-                ? 'text-gray-500 border border-[#2a2a2a] bg-[#1a1a1a] hover:border-neon/30 hover:text-neon'
-                : 'text-neon border border-neon/30 bg-neon/10 hover:bg-neon/20'
-            }`}
-          >
-            {!isPro && customWorkouts.length >= FREE_WORKOUT_LIMIT ? '🔒 Upgrade' : '+ New'}
-          </button>
+          <div className="flex items-center gap-2">
+            {!isPro && (
+              <span className="text-[10px] text-gray-600 font-semibold">{customWorkouts.length}/{FREE_WORKOUT_LIMIT}</span>
+            )}
+            <button
+              onClick={!isPro && customWorkouts.length >= FREE_WORKOUT_LIMIT ? onUpgrade : onCreateNew}
+              className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all ${
+                !isPro && customWorkouts.length >= FREE_WORKOUT_LIMIT
+                  ? 'text-gray-500 border border-[#2a2a2a] bg-[#1a1a1a] hover:border-neon/30 hover:text-neon'
+                  : 'text-neon border border-neon/30 bg-neon/10 hover:bg-neon/20'
+              }`}
+            >
+              {!isPro && customWorkouts.length >= FREE_WORKOUT_LIMIT ? '🔒 Upgrade' : '+ New'}
+            </button>
+          </div>
         </div>
 
         {customWorkouts.length === 0 ? (
@@ -378,31 +460,24 @@ function HomeScreen({ history, customWorkouts, onStart, onFreeStart, onCreateNew
         ) : (
           <div className="space-y-1.5">
             {customWorkouts.map(w => {
-              const exercises = (w.exercises || [])
-                .map(name => EXERCISES.find(e => e.name === name))
-                .filter(Boolean)
+              const exs = (w.exercises || []).map(n => EXERCISES.find(e => e.name === n)).filter(Boolean)
               return (
                 <div key={w.id} className="flex items-center gap-3 bg-[#0d0d0d] rounded-xl px-3 py-2.5">
-                  {/* Icons strip */}
                   <div className="flex gap-0.5 flex-shrink-0">
-                    {exercises.slice(0, 4).map((ex, i) => (
+                    {exs.slice(0, 4).map((ex, i) => (
                       <Icon key={i} icon={getExerciseIcon(ex)} width={16} className="text-gray-500" />
                     ))}
-                    {exercises.length > 4 && (
-                      <span className="text-[9px] text-gray-600 self-center ml-0.5">+{exercises.length - 4}</span>
-                    )}
+                    {exs.length > 4 && <span className="text-[9px] text-gray-600 self-center ml-0.5">+{exs.length - 4}</span>}
                   </div>
-                  {/* Name + count */}
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-xs truncate">{w.name}</div>
-                    <div className="text-[10px] text-gray-600">{exercises.length} exercises</div>
+                    <div className="text-[10px] text-gray-600">{exs.length} exercises</div>
                   </div>
-                  {/* Actions */}
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <button onClick={() => onEdit(w)} className="text-[10px] text-gray-600 hover:text-white transition-colors">Edit</button>
                     <button onClick={() => onDelete(w.id)} className="text-[10px] text-red-600 hover:text-red-400 transition-colors">Del</button>
                     <button
-                      onClick={() => onStart(exercises, w.name)}
+                      onClick={() => onStart(exs, w.name)}
                       className="bg-neon text-black font-bold py-1 px-3 rounded-lg text-[10px] uppercase tracking-widest hover:shadow-[0_4px_12px_rgba(200,241,53,0.35)] transition-all"
                     >
                       Start
@@ -415,11 +490,10 @@ function HomeScreen({ history, customWorkouts, onStart, onFreeStart, onCreateNew
         )}
       </Card>
 
-      {/* Recent Sessions */}
+      {/* ── Recent Sessions ── */}
       {history.length > 0 && (
         <Card className="p-4">
           <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-2">Recent Sessions</div>
-          {/* Header */}
           <div className="grid grid-cols-[1fr_4rem_4rem] gap-2 px-2 pb-1 border-b border-[#1a1a1a]">
             <span className="text-[9px] text-gray-700 uppercase tracking-widest">Workout</span>
             <span className="text-[9px] text-gray-700 uppercase tracking-widest text-right">Volume</span>
@@ -444,7 +518,6 @@ function HomeScreen({ history, customWorkouts, onStart, onFreeStart, onCreateNew
         </Card>
       )}
 
-      {/* Session detail modal */}
       {selectedSession && (
         <SessionModal session={selectedSession} onClose={() => setSelectedSession(null)} history={history} />
       )}

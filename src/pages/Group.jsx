@@ -14,6 +14,7 @@ import {
   logGroupSet,
   subscribeToGroupSession,
 } from '../lib/groupApi.js'
+import { saveWorkoutEntry } from '../lib/api.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -210,13 +211,17 @@ export default function Group({ session }) {
     const nextSet = setIdx + 1
     if (nextSet >= totalSets) {
       const nextEx = exIdx + 1
-      if (nextEx >= exercises.length) { setScreen('done'); return }
+      if (nextEx >= exercises.length) {
+        saveGroupWorkoutToHistory()
+        goScreen('done')
+        return
+      }
       setExIdx(nextEx); setSetIdx(0)
     } else {
       setSetIdx(nextSet)
     }
     setWeight(''); setReps('')
-    setScreen('training')
+    goScreen('training')
   }
 
   async function handleAddExercise(ex) {
@@ -290,7 +295,30 @@ export default function Group({ session }) {
     } catch (err) { console.error(err) }
   }
 
+  async function saveGroupWorkoutToHistory(setsSnapshot) {
+    const mySets = (setsSnapshot ?? allSets).filter(s => s.display_name === displayName)
+    if (!mySets.length) return
+    const volume   = mySets.reduce((sum, s) => sum + (s.weight || 0) * (s.reps || 0), 0)
+    const duration = startTime ? Math.round((Date.now() - startTime) / 60000) : 0
+    const name     = exercises.length > 0
+      ? `Group: ${exercises.slice(0, 2).map(e => e.name).join(', ')}${exercises.length > 2 ? '…' : ''}`
+      : 'Group Workout'
+    const formattedSets = mySets.map(s => ({ ex: s.exercise, set: s.set_num, weight: s.weight, reps: s.reps }))
+    try {
+      await saveWorkoutEntry({
+        date:     new Date().toISOString().split('T')[0],
+        name,
+        duration: `${duration}min`,
+        volume,
+        sets:     formattedSets,
+      })
+    } catch (err) {
+      console.error('Failed to save group workout to history:', err)
+    }
+  }
+
   async function handleEnd() {
+    await saveGroupWorkoutToHistory()
     try { if (isHost && groupSession?.id) await endGroupSession(groupSession.id) } catch {}
     localStorage.removeItem(SESSION_PERSIST_KEY)
     goScreen('done')

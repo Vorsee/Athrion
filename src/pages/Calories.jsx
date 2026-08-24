@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { todayKey } from '../lib/data.js'
 import { fetchTodayCalorieLog, saveTodayCalorieLog, fetchCalorieLogs, saveGoals } from '../lib/api.js'
 import { resolveGoals } from '../lib/goals.js'
+import { fetchLatestNutritionTarget } from '../lib/fitnessApi.js'
 
 const MEALS = [
   { id: 'breakfast', label: 'Breakfast', icon: '🌅', hours: [5,  11], color: '#f59e0b' },
@@ -20,7 +21,7 @@ function getCurrentMeal() {
 
 const EMPTY_FORM = { name: '', kcal: '', protein: '', carbs: '', fat: '' }
 
-export default function Calories({ profile, isPro, onUpgrade }) {
+export default function Calories({ profile, isPro, onUpgrade, onGoToPlan }) {
   const [foods, setFoods]             = useState([])
   const [logId, setLogId]             = useState(null)
   const [logs, setLogs]               = useState([])
@@ -34,10 +35,18 @@ export default function Calories({ profile, isPro, onUpgrade }) {
   const [aiMeal, setAiMeal]           = useState(getCurrentMeal)
   const [editingGoals, setEditingGoals] = useState(false)
   const [localGoals, setLocalGoals]   = useState(null)
+  const [planNutrition, setPlanNutrition] = useState(null)
   const fileRef = useRef()
 
-  const goals = localGoals ?? resolveGoals(profile)
-  const fatGoal = Math.max(30, Math.round((goals.calories - goals.protein * 4 - goals.carbs * 4) / 9))
+  // For Pro: use AI plan nutrition targets; for Free: use profile-based goals
+  const baseGoals = localGoals ?? resolveGoals(profile)
+  const activeGoals = (isPro && planNutrition)
+    ? { calories: planNutrition.calorie_target, protein: planNutrition.protein_grams, carbs: planNutrition.carb_grams }
+    : baseGoals
+  const goals = activeGoals
+  const fatGoal = (isPro && planNutrition?.fat_grams)
+    ? planNutrition.fat_grams
+    : Math.max(30, Math.round((goals.calories - goals.protein * 4 - goals.carbs * 4) / 9))
 
   useEffect(() => {
     fetchTodayCalorieLog(todayKey())
@@ -46,6 +55,11 @@ export default function Calories({ profile, isPro, onUpgrade }) {
     fetchCalorieLogs()
       .then(l => setLogs(l || []))
       .catch(() => {})
+    if (isPro) {
+      fetchLatestNutritionTarget()
+        .then(t => { if (t) setPlanNutrition(t) })
+        .catch(() => {})
+    }
   }, [])
 
   async function saveFoods(f) {
@@ -150,10 +164,18 @@ export default function Calories({ profile, isPro, onUpgrade }) {
       <div className="bg-[#111] border border-[#222] rounded-2xl p-5">
         <div className="flex items-center justify-between mb-4">
           <div className="text-[10px] text-gray-600 uppercase tracking-widest">Today's Intake</div>
-          <button onClick={() => setEditingGoals(true)}
-            className="text-xs text-neon border border-neon/30 bg-neon/10 hover:bg-neon/20 px-2.5 py-1 rounded-lg font-semibold transition-all">
-            Edit Targets
-          </button>
+          {isPro && planNutrition ? (
+            <button onClick={onGoToPlan}
+              className="text-xs text-neon border border-neon/30 bg-neon/10 hover:bg-neon/20 px-2.5 py-1 rounded-lg font-semibold transition-all flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-neon inline-block" />
+              From Plan →
+            </button>
+          ) : (
+            <button onClick={() => setEditingGoals(true)}
+              className="text-xs text-neon border border-neon/30 bg-neon/10 hover:bg-neon/20 px-2.5 py-1 rounded-lg font-semibold transition-all">
+              Edit Targets
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-5">
           <div className="relative w-36 h-36 flex-shrink-0">
@@ -376,7 +398,7 @@ export default function Calories({ profile, isPro, onUpgrade }) {
         <DayModal log={selectedLog} onClose={() => setSelectedLog(null)} />
       )}
 
-      {editingGoals && (
+      {editingGoals && !isPro && (
         <GoalEditSheet
           goals={goals}
           calculated={resolveGoals(profile).calculated}

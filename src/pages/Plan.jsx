@@ -61,7 +61,7 @@ function NoPlan({ onRegenerate, generating, genError }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Today's Workout
 // ─────────────────────────────────────────────────────────────────────────────
-function TodayWorkout({ dayData }) {
+function TodayWorkout({ dayData, onGoToWorkout }) {
   const [expanded, setExpanded] = useState(false)
 
   if (!dayData) return null
@@ -134,6 +134,14 @@ function TodayWorkout({ dayData }) {
             <button onClick={() => setExpanded(e => !e)}
               className="w-full text-xs text-gray-600 hover:text-white mt-2 py-1.5 border border-[#222] rounded-xl transition-colors">
               {expanded ? 'Show less ↑' : `Show ${exercises.length - 3} more ↓`}
+            </button>
+          )}
+
+          {onGoToWorkout && (
+            <button
+              onClick={onGoToWorkout}
+              className="w-full mt-4 bg-neon text-black font-bold py-3 rounded-xl text-sm uppercase tracking-widest hover:shadow-[0_6px_24px_rgba(200,241,53,0.35)] active:scale-[0.98] transition-all">
+              🚀 Start in Workout Tab →
             </button>
           )}
 
@@ -379,7 +387,7 @@ function CheckinModal({ planId, onClose, onSaved }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Plan Page
 // ─────────────────────────────────────────────────────────────────────────────
-export default function Plan() {
+export default function Plan({ onGoToWorkout }) {
   const [plan, setPlan]             = useState(undefined) // undefined=loading
   const [nutrition, setNutrition]   = useState(null)
   const [checkin, setCheckin]       = useState(null)
@@ -478,7 +486,7 @@ export default function Plan() {
       </div>
 
       {/* Today */}
-      {todayData && <TodayWorkout dayData={todayData} />}
+      {todayData && <TodayWorkout dayData={todayData} onGoToWorkout={onGoToWorkout} />}
 
       {/* Nutrition */}
       <NutritionCard planNutrition={planData.nutrition} dbNutrition={nutrition} />
