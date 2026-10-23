@@ -66,15 +66,24 @@ export function ExerciseDemoSheet({ name, onClose }) {
       </a>
     }>
       <div className="font-semibold text-white break-words">{name}</div>
-      {loading && <div className="w-full max-w-[300px] mx-auto aspect-square bg-[#1a1a1a] rounded-xl animate-pulse" />}
+      {loading && (
+        <div className="space-y-2 animate-pulse">
+          {[0, 1, 2, 3].map(i => <div key={i} className="h-3 bg-[#1a1a1a] rounded" />)}
+        </div>
+      )}
       {!loading && demo && (
         <>
+          {/* Animation hidden until the ExerciseDB HD licence is in place; turn back on by restoring this block.
           <DemoAnimation demo={demo} />
           {(demo.name.toLowerCase() !== name.toLowerCase() || demo.gif) && (
             <div className="flex justify-between gap-3 text-[11px] text-gray-600">
               <span>{demo.name.toLowerCase() !== name.toLowerCase() && `Shown: ${demo.name}`}</span>
               {demo.gif && <span className="flex-shrink-0">Animation: ExerciseDB</span>}
             </div>
+          )}
+          */}
+          {demo.name.toLowerCase() !== name.toLowerCase() && (
+            <div className="text-[11px] text-gray-600">Steps for: {demo.name}</div>
           )}
           <div className="flex flex-wrap gap-1.5">
             {[...demo.primaryMuscles, ...demo.secondaryMuscles.slice(0, 2)].map((m, i) => (
