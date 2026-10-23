@@ -67,6 +67,19 @@ export function getExerciseIcon(ex) {
   if (name.includes('leg press'))         return 'mdi:seat-recline-extra'
   if (name.includes('leg curl') || name.includes('leg extension')) return 'mdi:human-handsdown'
   if (name.includes('calf'))              return 'mdi:walk'
+  if (name.includes('bike'))              return 'mdi:bike'
+  if (name.includes('rower'))             return 'mdi:rowing'
+  if (name.includes('treadmill') || name.includes('walk') || name.includes('zone 2')) return 'mdi:walk'
+  if (name.includes('swim'))              return 'mdi:swim'
+  if (name.includes('stretch') || name.includes('pose') || name.includes('yoga') ||
+      name.includes('flow') || name.includes('cat-cow') || name.includes('90/90')) return 'mdi:yoga'
+  if (name.includes('carry'))             return 'mdi:bag-personal'
+  if (name.includes('swing'))             return 'mdi:kettlebell'
+  if (name.includes('burpee') || name.includes('jack') || name.includes('climber') ||
+      name.includes('shuttle') || name.includes('bound') || name.includes('rope')) return 'mdi:run-fast'
+  if (name.includes('dead bug') || name.includes('bird dog') || name.includes('hollow') ||
+      name.includes('rollout') || name.includes('leg raise') || name.includes('pallof')) return 'mdi:yoga'
+  if (name.includes('hang'))              return 'mdi:human-handsup'
 
   // Muscle-group fallbacks
   if (muscle === 'Biceps')    return 'mdi:arm-flex'

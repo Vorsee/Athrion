@@ -3,6 +3,8 @@ import { todayKey } from '../lib/data.js'
 import { fetchTodayCalorieLog, saveTodayCalorieLog, fetchCalorieLogs, saveGoals } from '../lib/api.js'
 import { resolveGoals } from '../lib/goals.js'
 import { fetchLatestNutritionTarget } from '../lib/fitnessApi.js'
+import AdaptiveNutritionCard from '../components/AdaptiveNutritionCard.jsx'
+import BarcodeScanner from '../components/BarcodeScanner.jsx'
 
 const MEALS = [
   { id: 'breakfast', label: 'Breakfast', icon: '🌅', hours: [5,  11], color: '#f59e0b' },
@@ -36,6 +38,7 @@ export default function Calories({ profile, isPro, onUpgrade, onGoToPlan }) {
   const [editingGoals, setEditingGoals] = useState(false)
   const [localGoals, setLocalGoals]   = useState(null)
   const [planNutrition, setPlanNutrition] = useState(null)
+  const [scanning, setScanning]       = useState(false)
   const fileRef = useRef()
 
   // For Pro: use AI plan nutrition targets; for Free: use profile-based goals
@@ -208,6 +211,10 @@ export default function Calories({ profile, isPro, onUpgrade, onGoToPlan }) {
         </div>
       </div>
 
+      {isPro && planNutrition && (
+        <AdaptiveNutritionCard calorieLogs={logs} current={planNutrition} profile={profile} onApplied={setPlanNutrition} />
+      )}
+
       {/* Tab switcher */}
       <div className="flex bg-[#111] border border-[#222] rounded-2xl p-1">
         {[['today','Today'],['log','Log']].map(([id, label]) => (
@@ -237,6 +244,14 @@ export default function Calories({ profile, isPro, onUpgrade, onGoToPlan }) {
               <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden"
                 onChange={e => { if (e.target.files[0]) analyzeImage(e.target.files[0]) }} />
             </div>
+            <button onClick={() => setScanning(true)}
+              className="mt-3 w-full flex items-center justify-center gap-2 border border-[#2a2a2a] hover:border-neon/40 text-gray-300 hover:text-neon font-semibold py-3 rounded-xl text-xs uppercase tracking-widest transition-all">
+              <span className="text-base">▥</span> Scan Barcode
+            </button>
+            {scanning && (
+              <BarcodeScanner meals={MEALS} defaultMeal={getCurrentMeal()} onClose={() => setScanning(false)}
+                onAdd={food => { saveFoods([...foods, food]); setScanning(false) }} />
+            )}
 
             {aiState === 'loading' && (
               <div className="mt-3 flex items-center gap-3 text-gray-400 text-sm p-3 bg-[#0d0d0d] rounded-xl">

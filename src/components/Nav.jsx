@@ -2,6 +2,7 @@ const TABS = [
   { id: 'workout',  label: 'Workout',  icon: '🏋️' },
   { id: 'calories', label: 'Calories', icon: '🥗' },
   { id: 'plan',     label: 'Plan',     icon: '📋' },
+  { id: 'progress', label: 'Progress', icon: '📈' },
   { id: 'library',  label: 'Library',  icon: '📚' },
   { id: 'group',    label: 'Group',    icon: '👥' },
 ]
@@ -45,12 +46,12 @@ export default function Nav({ page, setPage, session, isPro, onProfileClick }) {
             <button
               key={t.id}
               onClick={() => setPage(t.id)}
-              className={`flex flex-col items-center gap-0.5 xs:gap-1 px-2.5 xs:px-4 py-1.5 xs:py-2 rounded-xl transition-all duration-200 ${
+              className={`flex flex-col items-center gap-0.5 xs:gap-1 px-1.5 xs:px-3 py-1.5 xs:py-2 rounded-xl transition-all duration-200 ${
                 page === t.id ? 'bg-neon/10' : ''
               }`}
             >
               <span className="text-lg xs:text-xl">{t.icon}</span>
-              <span className={`text-[9px] xs:text-[10px] font-semibold uppercase tracking-widest transition-colors ${
+              <span className={`text-[8px] xs:text-[10px] font-semibold uppercase tracking-wider xs:tracking-widest transition-colors ${
                 page === t.id ? 'text-neon' : 'text-[#555]'
               }`}>{t.label}</span>
             </button>

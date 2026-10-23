@@ -1,8 +1,14 @@
 import { useState, useEffect } from 'react'
+import { Icon } from '@iconify/react'
+import { getExerciseIcon } from '../lib/data.js'
+import Sheet from '../components/Sheet.jsx'
+import { DemoButton, SwapSheet } from '../components/ExerciseDemo.jsx'
 import {
   fetchActivePlan, fetchLatestNutritionTarget, fetchLatestCheckin, saveCheckin,
-  fetchFitnessProfile, generatePlan, dbProfileToPayload, dbNutritionToPayload,
+  fetchFitnessProfile, saveFitnessProfile, saveNutritionTarget, generatePlan,
+  dbProfileToPayload, dbNutritionToPayload, updatePlanData,
 } from '../lib/fitnessApi.js'
+import { saveGoals } from '../lib/api.js'
 import { calculateNutritionTargets, GOAL_LABELS, GOAL_ICONS } from '../lib/nutrition.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -22,6 +28,51 @@ function Card({ children, className = '' }) {
 function SectionLabel({ children }) {
   return <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-2">{children}</div>
 }
+
+// "3 sets × 10 · 60s rest · Dumbbells", dropping parts that don't apply
+function formatVolume(ex) {
+  const parts = [ex.sets > 1 ? `${ex.sets} sets × ${ex.reps}` : ex.reps]
+  if (ex.restSeconds > 0) parts.push(`${ex.restSeconds}s rest`)
+  if (ex.equipment) parts.push(ex.equipment)
+  return parts.filter(Boolean).join(' · ')
+}
+
+function PlanExerciseCard({ ex, onSwap }) {
+  const [swapping, setSwapping] = useState(false)
+  return (
+    <div className="bg-[#1a1a1a] rounded-xl p-3">
+      <div className="flex items-start gap-3">
+        <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-gray-400 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-white leading-snug break-words">{ex.name}</div>
+          <div className="text-xs text-gray-500 mt-0.5">{formatVolume(ex)}</div>
+        </div>
+        <div className="flex gap-1.5 flex-shrink-0">
+          <DemoButton name={ex.name} />
+          {onSwap && (
+            <button onClick={() => setSwapping(true)} aria-label={`Swap ${ex.name}`}
+              className="w-8 h-8 rounded-lg bg-[#222] hover:bg-[#2a2a2a] flex items-center justify-center text-gray-400 hover:text-neon transition-colors">
+              <Icon icon="mdi:swap-horizontal" width={18} />
+            </button>
+          )}
+        </div>
+      </div>
+      {(ex.intensityNote || ex.formTip || ex.easierVersion || ex.swappedFrom) && (
+        <div className="mt-2 pl-[34px] space-y-1 text-xs leading-relaxed break-words">
+          {ex.intensityNote && <div className="text-gray-400">{ex.intensityNote}</div>}
+          {ex.formTip && <div className="text-gray-600 italic">{ex.formTip}</div>}
+          {ex.easierVersion && <div className="text-gray-600">Easier: {ex.easierVersion}</div>}
+          {ex.swappedFrom && <div className="text-gray-700">Swapped from {ex.swappedFrom}</div>}
+        </div>
+      )}
+      {swapping && (
+        <SwapSheet exercise={ex} onClose={() => setSwapping(false)}
+          onSwap={name => { setSwapping(false); onSwap(name) }} />
+      )}
+    </div>
+  )
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // No Plan State — with regenerate button
@@ -61,9 +112,7 @@ function NoPlan({ onRegenerate, generating, genError }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Today's Workout
 // ─────────────────────────────────────────────────────────────────────────────
-function TodayWorkout({ dayData, onGoToWorkout }) {
-  const [expanded, setExpanded] = useState(false)
-
+function TodayWorkout({ dayData, onGoToWorkout, onSwap }) {
   if (!dayData) return null
 
   const isRest = dayData.type !== 'workout'
@@ -110,32 +159,10 @@ function TodayWorkout({ dayData, onGoToWorkout }) {
 
           {/* Exercises */}
           <div className="space-y-2.5">
-            {(expanded ? exercises : exercises.slice(0, 3)).map((ex, i) => (
-              <div key={i} className="bg-[#1a1a1a] rounded-xl p-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-white">{ex.name}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">{ex.sets} sets × {ex.reps} · {ex.restSeconds}s rest</div>
-                    {ex.formTip && <div className="text-xs text-gray-700 mt-1 italic">{ex.formTip}</div>}
-                  </div>
-                  <div className="text-xs text-gray-700 text-right flex-shrink-0">
-                    <div>{ex.intensityNote}</div>
-                    {ex.equipment && <div className="mt-0.5">{ex.equipment}</div>}
-                  </div>
-                </div>
-                {ex.easierVersion && (
-                  <div className="mt-2 text-[10px] text-gray-700">Easier: {ex.easierVersion}</div>
-                )}
-              </div>
+            {exercises.map((ex, i) => (
+              <PlanExerciseCard key={i} ex={ex} onSwap={onSwap && (name => onSwap(dayData.day, i, name))} />
             ))}
           </div>
-
-          {exercises.length > 3 && (
-            <button onClick={() => setExpanded(e => !e)}
-              className="w-full text-xs text-gray-600 hover:text-white mt-2 py-1.5 border border-[#222] rounded-xl transition-colors">
-              {expanded ? 'Show less ↑' : `Show ${exercises.length - 3} more ↓`}
-            </button>
-          )}
 
           {onGoToWorkout && (
             <button
@@ -146,7 +173,7 @@ function TodayWorkout({ dayData, onGoToWorkout }) {
           )}
 
           {/* Cooldown */}
-          {expanded && dayData.workout?.cooldown?.length > 0 && (
+          {dayData.workout?.cooldown?.length > 0 && (
             <div className="mt-3">
               <div className="text-[10px] text-gray-700 uppercase tracking-widest mb-1.5">Cool-down</div>
               {dayData.workout.cooldown.map((c, i) => (
@@ -172,10 +199,11 @@ function TodayWorkout({ dayData, onGoToWorkout }) {
 function NutritionCard({ planNutrition, dbNutrition }) {
   const n = planNutrition ?? dbNutrition
   if (!n) return null
-  const cals = n.dailyCalories ?? n.calorie_target
-  const protein = n.proteinGrams ?? n.protein_grams
-  const carbs = n.carbGrams ?? n.carb_grams
-  const fat = n.fatGrams ?? n.fat_grams
+  // The latest saved target wins: adaptive updates change it without a new plan
+  const cals = dbNutrition?.calorie_target ?? n.dailyCalories
+  const protein = dbNutrition?.protein_grams ?? n.proteinGrams
+  const carbs = dbNutrition?.carb_grams ?? n.carbGrams
+  const fat = dbNutrition?.fat_grams ?? n.fatGrams
 
   return (
     <Card>
@@ -203,9 +231,53 @@ function NutritionCard({ planNutrition, dbNutrition }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Weekly adaptation
+// ─────────────────────────────────────────────────────────────────────────────
+const DAY_MS = 24 * 60 * 60 * 1000
+
+function AdaptCard({ plan, checkin, generating, onAdapt }) {
+  const adaptation = plan.plan_data?.adaptation
+  const week = plan.plan_data?.week ?? 1
+  const planAgeDays = (Date.now() - new Date(plan.created_at).getTime()) / DAY_MS
+  const checkinSincePlan = checkin && new Date(checkin.created_at) > new Date(plan.created_at)
+  const ready = planAgeDays >= 6 || checkinSincePlan
+  const nextDate = new Date(new Date(plan.created_at).getTime() + 7 * DAY_MS)
+
+  return (
+    <Card>
+      <div className="flex items-center justify-between mb-2">
+        <SectionLabel>Week {week}{week > 1 ? ' · Adapted' : ''}</SectionLabel>
+        {plan.ai_model?.startsWith('fallback') && <span className="text-[10px] text-gray-600">Standard plan</span>}
+      </div>
+      {adaptation?.summary && <p className="text-xs text-gray-400 leading-relaxed">{adaptation.summary}</p>}
+      {adaptation?.changes?.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {adaptation.changes.map((c, i) => (
+            <li key={i} className="flex items-start gap-2 text-xs text-gray-500">
+              <span className="text-neon mt-0.5">↻</span><span className="break-words">{c}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {ready ? (
+        <button onClick={onAdapt} disabled={generating}
+          className="mt-3 w-full bg-neon text-black font-bold py-3 rounded-xl text-xs uppercase tracking-widest disabled:opacity-50 hover:shadow-[0_6px_24px_rgba(200,241,53,0.35)] transition-all">
+          {generating ? 'Adapting your plan...' : `Adapt Week ${week + 1} to My Progress →`}
+        </button>
+      ) : (
+        <p className="mt-3 text-[11px] text-gray-600">
+          Do your weekly check-in or wait until {nextDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} to adapt next week to your progress.
+        </p>
+      )}
+    </Card>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Weekly Schedule
 // ─────────────────────────────────────────────────────────────────────────────
-function WeeklySchedule({ schedule }) {
+function WeeklySchedule({ schedule, onSwap }) {
+  const [openDay, setOpenDay] = useState(null)
   if (!schedule?.length) return null
   const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
   return (
@@ -217,24 +289,33 @@ function WeeklySchedule({ schedule }) {
           if (!d) return null
           const isToday = day === TODAY_NAME
           const isWorkout = d.type === 'workout'
+          const exercises = d.workout?.exercises ?? []
+          const open = openDay === day
           return (
-            <div key={day} className={`flex items-center justify-between py-2 px-3 rounded-xl transition-all ${
-              isToday ? 'bg-neon/10 border border-neon/20' : ''
-            }`}>
-              <div className="flex items-center gap-2.5">
-                <div className={`text-xs font-semibold w-8 ${isToday ? 'text-neon' : 'text-gray-600'}`}>
-                  {day.slice(0, 3)}
+            <div key={day} className={`rounded-xl transition-all ${isToday ? 'bg-neon/10 border border-neon/20' : ''}`}>
+              <button onClick={() => setOpenDay(open ? null : day)}
+                className="w-full flex items-center justify-between gap-2 py-2 px-3 text-left">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`text-xs font-semibold w-8 flex-shrink-0 ${isToday ? 'text-neon' : 'text-gray-600'}`}>
+                    {day.slice(0, 3)}
+                  </div>
+                  <div className={`text-xs break-words ${isToday ? 'text-white' : 'text-gray-500'}`}>{d.title}</div>
                 </div>
-                <div className={`text-xs ${isToday ? 'text-white' : 'text-gray-500'}`}>
-                  {d.title}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {isWorkout && d.durationMinutes > 0 && (
+                    <span className="text-[10px] text-gray-700">{d.durationMinutes}m</span>
+                  )}
+                  <span className={`w-2 h-2 rounded-full ${isWorkout ? 'bg-neon' : 'bg-[#333]'}`} />
+                  <Icon icon={open ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={16} className="text-gray-600" />
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {isWorkout && d.durationMinutes > 0 && (
-                  <span className="text-[10px] text-gray-700">{d.durationMinutes}m</span>
-                )}
-                <span className={`w-2 h-2 rounded-full ${isWorkout ? 'bg-neon' : 'bg-[#333]'}`} />
-              </div>
+              </button>
+              {open && (
+                <div className="px-2 pb-2 space-y-2">
+                  {exercises.length > 0
+                    ? exercises.map((ex, i) => <PlanExerciseCard key={i} ex={ex} onSwap={onSwap && (name => onSwap(day, i, name))} />)
+                    : <p className="text-xs text-gray-500 px-1">{d.recoveryNotes || 'Rest day.'}</p>}
+                </div>
+              )}
             </div>
           )
         })}
@@ -331,12 +412,12 @@ function CheckinModal({ planId, onClose, onSaved }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-lg bg-[#111] border-t border-[#1e1e1e] rounded-t-2xl p-5 pb-10 space-y-5">
-        <div className="flex items-center justify-between">
-          <div className="font-bebas text-2xl text-white tracking-wide">Weekly Check-In</div>
-          <button onClick={onClose} className="text-gray-600 hover:text-white text-xl transition-colors">✕</button>
-        </div>
+    <Sheet title="Weekly Check-In" onClose={onClose} footer={
+      <button onClick={handleSave} disabled={saving}
+        className="w-full bg-neon text-black font-bold py-3.5 rounded-xl text-sm uppercase tracking-widest disabled:opacity-50 transition-all hover:shadow-[0_6px_24px_rgba(200,241,53,0.35)]">
+        {saving ? 'Saving...' : 'Save Check-In'}
+      </button>
+    }>
 
         {SLIDER_FIELDS.map(({ key, label }) => (
           <div key={key}>
@@ -373,26 +454,55 @@ function CheckinModal({ planId, onClose, onSaved }) {
             className="w-full bg-[#1a1a1a] border border-[#262626] rounded-xl px-3 py-2 text-sm text-white placeholder-gray-700 focus:outline-none focus:border-neon/40 resize-none" />
         </div>
 
-        {err && <p className="text-xs text-red-400">{err}</p>}
+        {err && <p className="text-xs text-red-400 pb-2">{err}</p>}
+    </Sheet>
+  )
+}
 
-        <button onClick={handleSave} disabled={saving}
-          className="w-full bg-neon text-black font-bold py-3.5 rounded-xl text-sm uppercase tracking-widest disabled:opacity-50 transition-all hover:shadow-[0_6px_24px_rgba(200,241,53,0.35)]">
-          {saving ? 'Saving...' : 'Save Check-In'}
-        </button>
+// ─────────────────────────────────────────────────────────────────────────────
+// Change Goal Modal
+// ─────────────────────────────────────────────────────────────────────────────
+function GoalModal({ currentGoal, onClose, onConfirm }) {
+  const [goal, setGoal] = useState(currentGoal)
+  const changed = goal !== currentGoal
+
+  return (
+    <Sheet title="Change Goal" onClose={onClose} footer={
+      <button onClick={() => onConfirm(goal)}
+        className="w-full bg-neon text-black font-bold py-3.5 rounded-xl text-sm uppercase tracking-widest transition-all hover:shadow-[0_6px_24px_rgba(200,241,53,0.35)]">
+        {changed ? `Rebuild for ${GOAL_LABELS[goal]} →` : 'Regenerate Plan →'}
+      </button>
+    }>
+      <p className="text-xs text-gray-500">
+        Your plan, calories and macros will be rebuilt for the new goal. Takes about 30–60 seconds.
+      </p>
+      <div className="grid grid-cols-2 gap-2 pb-2">
+        {Object.entries(GOAL_LABELS).map(([id, label]) => (
+          <button key={id} onClick={() => setGoal(id)}
+            className={`flex items-center gap-2 px-3 py-3 rounded-xl border text-left text-sm transition-all ${
+              goal === id
+                ? 'border-neon bg-neon/10 text-white'
+                : 'border-[#1e1e1e] bg-[#141414] text-gray-400 hover:border-[#2a2a2a]'
+            }`}>
+            <span className="text-lg">{GOAL_ICONS[id]}</span>
+            <span className="leading-tight">{label}</span>
+          </button>
+        ))}
       </div>
-    </div>
+    </Sheet>
   )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Plan Page
 // ─────────────────────────────────────────────────────────────────────────────
-export default function Plan({ onGoToWorkout }) {
+export default function Plan({ onGoToWorkout, profile, onProfileChange }) {
   const [plan, setPlan]             = useState(undefined) // undefined=loading
   const [nutrition, setNutrition]   = useState(null)
   const [checkin, setCheckin]       = useState(null)
   const [loading, setLoading]       = useState(true)
   const [showCheckin, setShowCheckin] = useState(false)
+  const [showGoal, setShowGoal]     = useState(false)
   const [generating, setGenerating] = useState(false)
   const [genError, setGenError]     = useState('')
 
@@ -417,11 +527,33 @@ export default function Plan({ onGoToWorkout }) {
     }
   }
 
-  async function handleRegenerate() {
+  // Replace one exercise in the active plan, keeping its sets, reps and rest
+  async function handleSwap(day, index, newName) {
+    const data = structuredClone(plan.plan_data)
+    const dayData = data.weeklySchedule.find(d => d.day === day)
+    const old = dayData.workout.exercises[index]
+    dayData.workout.exercises[index] = {
+      ...old,
+      name: newName,
+      swappedFrom: old.swappedFrom ?? old.name,
+      formTip: '', easierVersion: '', harderVersion: '', equipment: '',
+    }
+    const prev = plan
+    setPlan({ ...plan, plan_data: data })
+    try {
+      await updatePlanData(plan.id, data)
+    } catch (e) {
+      setPlan(prev)
+      setGenError(e.message || 'Could not save the swap')
+    }
+  }
+
+  // Rebuild the plan, optionally switching to a new primary goal first
+  async function handleRegenerate(newGoal, mode = 'new') {
+    setShowGoal(false)
     setGenerating(true)
     setGenError('')
     try {
-      // Fetch saved profile and nutrition target from DB
       const [dbProfile, dbNutrition] = await Promise.all([
         fetchFitnessProfile(),
         fetchLatestNutritionTarget(),
@@ -429,23 +561,50 @@ export default function Plan({ onGoToWorkout }) {
 
       if (!dbProfile) throw new Error('No fitness profile found. Please contact support.')
 
-      // Convert DB snake_case rows to camelCase for the Edge Function
-      const profilePayload = dbProfileToPayload(dbProfile)
+      // Convert DB snake_case rows to camelCase for the Edge Function, plus body stats
+      const profilePayload = {
+        ...dbProfileToPayload(dbProfile),
+        sex:      profile?.sex,
+        weightLb: profile?.weight_lb,
+        heightCm: profile?.height_cm,
+        age:      profile?.age,
+      }
+      const goal = newGoal ?? profilePayload.primaryGoal ?? 'general_fitness'
+      const goalChanged = goal !== profilePayload.primaryGoal
+      profilePayload.primaryGoal = goal
 
-      // Use saved nutrition targets if available, otherwise recalculate
-      const nutritionPayload = dbNutrition
-        ? dbNutritionToPayload(dbNutrition)
-        : calculateNutritionTargets({
-            sex: 'other', weightLb: 154, heightCm: 170, age: 30,
-            activityLevel: dbProfile.activity_level ?? 'moderately_active',
-            primaryGoal: dbProfile.primary_goal ?? 'general_fitness',
-          })
+      // Calories and macros depend on the goal, so recalculate when it changes
+      let nutritionPayload
+      if (dbNutrition && !goalChanged) {
+        nutritionPayload = dbNutritionToPayload(dbNutrition)
+      } else {
+        nutritionPayload = calculateNutritionTargets({
+          sex:      profile?.sex ?? 'other',
+          weightLb: profile?.weight_lb ?? 154,
+          heightCm: profile?.height_cm ?? 170,
+          age:      profile?.age ?? 30,
+          activityLevel: profilePayload.activityLevel ?? 'moderately_active',
+          primaryGoal: goal,
+        })
+        await Promise.all([
+          saveNutritionTarget(nutritionPayload),
+          saveGoals({
+            calorie_goal: nutritionPayload.calorieTarget,
+            protein_goal: nutritionPayload.proteinGrams,
+            carb_goal:    nutritionPayload.carbGrams,
+          }),
+        ])
+      }
 
-      await generatePlan(profilePayload, nutritionPayload)
-      // Reload the plan after generation
+      if (goalChanged) await saveFitnessProfile(profilePayload)
+
+      await generatePlan(profilePayload, nutritionPayload, mode)
       await load()
+      // Calorie goals and the fitness profile live in App state too
+      onProfileChange?.()
     } catch (e) {
       setGenError(e.message || 'Generation failed. Check your internet connection and try again.')
+    } finally {
       setGenerating(false)
     }
   }
@@ -457,7 +616,7 @@ export default function Plan({ onGoToWorkout }) {
   )
 
   if (!plan) return (
-    <NoPlan onRegenerate={handleRegenerate} generating={generating} genError={genError} />
+    <NoPlan onRegenerate={() => handleRegenerate()} generating={generating} genError={genError} />
   )
 
   const planData = plan.plan_data ?? {}
@@ -483,16 +642,32 @@ export default function Plan({ onGoToWorkout }) {
         <div className="text-xs text-gray-600">
           {summary.durationWeeks ?? plan.duration_weeks} weeks · {plan.training_days_per_week} days/week · {goalLabel}
         </div>
+        <button onClick={() => setShowGoal(true)} disabled={generating}
+          className="mt-3 w-full border border-[#2a2a2a] text-gray-300 font-semibold py-2.5 rounded-xl text-xs uppercase tracking-widest hover:border-neon/40 hover:text-neon transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+          {generating ? (
+            <>
+              <span className="inline-block w-3.5 h-3.5 border-2 border-neon/30 border-t-neon rounded-full animate-spin" />
+              Rebuilding your plan...
+            </>
+          ) : 'Change Goal / Regenerate'}
+        </button>
+        {genError && (
+          <div className="mt-2 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-xs text-red-400">
+            {genError}
+          </div>
+        )}
       </div>
 
+      <AdaptCard plan={plan} checkin={checkin} generating={generating} onAdapt={() => handleRegenerate(undefined, 'adapt')} />
+
       {/* Today */}
-      {todayData && <TodayWorkout dayData={todayData} onGoToWorkout={onGoToWorkout} />}
+      {todayData && <TodayWorkout dayData={todayData} onGoToWorkout={onGoToWorkout} onSwap={handleSwap} />}
 
       {/* Nutrition */}
       <NutritionCard planNutrition={planData.nutrition} dbNutrition={nutrition} />
 
       {/* Weekly schedule */}
-      <WeeklySchedule schedule={schedule} />
+      <WeeklySchedule schedule={schedule} onSwap={handleSwap} />
 
       {/* Advice */}
       {planData.advice && <AdviceCard advice={planData.advice} />}
@@ -525,6 +700,14 @@ export default function Plan({ onGoToWorkout }) {
           </button>
         )}
       </div>
+
+      {showGoal && (
+        <GoalModal
+          currentGoal={plan.primary_goal}
+          onClose={() => setShowGoal(false)}
+          onConfirm={handleRegenerate}
+        />
+      )}
 
       {showCheckin && (
         <CheckinModal

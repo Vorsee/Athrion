@@ -127,7 +127,8 @@ export function dbNutritionToPayload(row) {
 
 // ── Plan Generation (calls Edge Function) ─────────────────────────────────────
 
-export async function generatePlan(fitnessProfile, nutritionTargets) {
+// mode 'adapt' rewrites the active plan using recent check-ins, workouts and health data
+export async function generatePlan(fitnessProfile, nutritionTargets, mode = 'new') {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session?.access_token) throw new Error('Not authenticated')
 
@@ -139,7 +140,7 @@ export async function generatePlan(fitnessProfile, nutritionTargets) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ fitnessProfile, nutritionTargets }),
+      body: JSON.stringify({ fitnessProfile, nutritionTargets, mode }),
     }
   )
   const data = await resp.json()
@@ -159,6 +160,15 @@ export async function fetchActivePlan() {
     .maybeSingle()
   if (error) throw error
   return data
+}
+
+// Save edits to the active plan (e.g. a swapped exercise)
+export async function updatePlanData(planId, planData) {
+  const { error } = await supabase
+    .from('fitness_plans')
+    .update({ plan_data: planData, updated_at: new Date().toISOString() })
+    .eq('id', planId)
+  if (error) throw error
 }
 
 // ── Progress Check-ins ────────────────────────────────────────────────────────

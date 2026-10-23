@@ -80,6 +80,31 @@ export function calcTDEE(bmr, activityLevel) {
   return Math.round(bmr * mult)
 }
 
+// Split a calorie target into protein / fat / carbs for a goal, with safety floors
+export function macrosForCalories({ calories, sex, weightLb, primaryGoal }) {
+  const safetyFlags = []
+  const minCal = MIN_CALORIES[sex] ?? MIN_CALORIES.other
+  if (calories < minCal) {
+    safetyFlags.push('calorie_floor_applied')
+    calories = minCal
+  }
+  calories = Math.round(calories)
+
+  // Protein — capped at 40% of calories to stay reasonable
+  const proteinPerLb = PROTEIN_PER_LB[primaryGoal] ?? 0.80
+  const proteinGrams = Math.min(Math.round(weightLb * proteinPerLb), Math.round((calories * 0.40) / 4))
+
+  const fatFrac = FAT_FRACTION[primaryGoal] ?? 0.28
+  const fatGrams = Math.max(MIN_FAT_GRAMS, Math.round((calories * fatFrac) / 9))
+
+  // Carbs fill the remainder
+  const carbGrams = Math.round(Math.max(0, calories - proteinGrams * 4 - fatGrams * 9) / 4)
+
+  return { calorieTarget: calories, proteinGrams, carbGrams, fatGrams, safetyFlags }
+}
+
+export { GOAL_ADJUSTMENTS }
+
 // ── Main orchestrator ─────────────────────────────────────────────────────────
 
 /**
@@ -102,34 +127,13 @@ export function calculateNutritionTargets({ sex, weightLb, heightCm, age, activi
   const tdee = Math.round(bmr * activityMultiplier)
   const goalAdj = GOAL_ADJUSTMENTS[primaryGoal] ?? 0
 
-  let calories = tdee + goalAdj
-
-  // Safety floor
-  const minCal = MIN_CALORIES[sex] ?? MIN_CALORIES.other
-  if (calories < minCal) {
-    safetyFlags.push('calorie_floor_applied')
-    calories = minCal
-  }
-
   // Age-based safety flags
   if (age < 16) safetyFlags.push('minor_professional_advice_recommended')
   if (age < 13) safetyFlags.push('plan_not_appropriate_for_age')
 
-  // Protein — capped at 40% of calories to stay reasonable
-  const proteinPerLb = PROTEIN_PER_LB[primaryGoal] ?? 0.80
-  const rawProteinGrams = Math.round(weightLb * proteinPerLb)
-  const maxProteinFromCals = Math.round((calories * 0.40) / 4)
-  const proteinGrams = Math.min(rawProteinGrams, maxProteinFromCals)
-
-  // Fat
-  const fatFrac = FAT_FRACTION[primaryGoal] ?? 0.28
-  const fatGrams = Math.max(MIN_FAT_GRAMS, Math.round((calories * fatFrac) / 9))
-
-  // Carbs fill the remainder
-  const proteinCals = proteinGrams * 4
-  const fatCals = fatGrams * 9
-  const carbCals = Math.max(0, calories - proteinCals - fatCals)
-  const carbGrams = Math.round(carbCals / 4)
+  const macros = macrosForCalories({ calories: tdee + goalAdj, sex, weightLb, primaryGoal })
+  safetyFlags.push(...macros.safetyFlags)
+  const { calorieTarget: calories, proteinGrams, carbGrams, fatGrams } = macros
 
   return {
     bmr,

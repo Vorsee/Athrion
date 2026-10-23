@@ -1,4 +1,4 @@
-const CACHE = 'athrion-v1'
+const CACHE = 'athrion-v2'
 
 // On install: take control immediately, no waiting
 self.addEventListener('install', () => self.skipWaiting())
@@ -23,6 +23,7 @@ self.addEventListener('fetch', e => {
     url.hostname.includes('supabase.com') ||
     url.hostname.includes('anthropic.com') ||
     url.hostname.includes('stripe.com') ||
+    url.hostname.includes('openfoodfacts.org') ||
     url.pathname.startsWith('/api/')
   ) return
 
@@ -48,3 +49,31 @@ self.addEventListener('fetch', e => {
 function cache(request, response) {
   if (response.ok) caches.open(CACHE).then(c => c.put(request, response))
 }
+
+// ── Push reminders (sent by the send-reminders Edge Function) ────────────────
+self.addEventListener('push', e => {
+  let data = {}
+  try { data = e.data?.json() ?? {} } catch { data = { body: e.data?.text() } }
+  e.waitUntil(
+    self.registration.showNotification(data.title || 'ATHRION', {
+      body: data.body || '',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      tag: data.tag || 'athrion-reminder',
+      data: { url: data.url || '/' },
+    })
+  )
+})
+
+// Focus an open app window, or open one
+self.addEventListener('notificationclick', e => {
+  e.notification.close()
+  const url = e.notification.data?.url || '/'
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(wins => {
+      const win = wins.find(w => new URL(w.url).origin === self.location.origin)
+      if (win) { win.focus(); return win.navigate(url) }
+      return self.clients.openWindow(url)
+    })
+  )
+})

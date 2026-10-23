@@ -10,6 +10,8 @@ import Calories from './pages/Calories.jsx'
 import Library from './pages/Library.jsx'
 import Group from './pages/Group.jsx'
 import Plan from './pages/Plan.jsx'
+import Progress from './pages/Progress.jsx'
+import { healthSyncAvailable, syncHealthData } from './lib/health.js'
 import Upgrade from './pages/Upgrade.jsx'
 import Nav from './components/Nav.jsx'
 import ProfileModal from './components/ProfileModal.jsx'
@@ -31,6 +33,15 @@ export default function App() {
     setPendingWorkout({ exercises, name })
     setPage('workout')
   }
+
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [page])
+
+  // In the native app, pull recent health data on launch if access was already granted
+  useEffect(() => {
+    if (session && healthSyncAvailable()) syncHealthData(3, { prompt: false }).catch(() => {})
+  }, [session?.email])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -122,10 +133,10 @@ export default function App() {
     library: { onStartWorkout: handleStartFromLibrary },
     calories: { profile, isPro, onUpgrade: goUpgrade, onGoToPlan: () => setPage('plan') },
     group: { session },
-    plan: { onGoToWorkout: () => setPage('workout') },
+    plan: { onGoToWorkout: () => setPage('workout'), profile, onProfileChange: () => { refreshProfile(); refreshFitnessProfile() } },
   }
 
-  const pages = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan }
+  const pages = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan, progress: Progress }
   const PageComponent = pages[page] ?? Workout
 
   const isLight = theme === 'light'
@@ -144,7 +155,7 @@ export default function App() {
       <Nav page={page} setPage={setPage} session={session} isPro={isPro} onProfileClick={() => setShowProfile(true)} />
       <main className="relative z-10 max-w-lg mx-auto px-3 xs:px-4 pb-[82px] xs:pb-[90px]"
         style={{ paddingTop: 'calc(var(--header-h) + env(safe-area-inset-top))' }}>
-        <PageComponent {...pageProps[page]} />
+        <PageComponent key={page} {...pageProps[page]} />
       </main>
 
       <HomeScreenPrompt />
