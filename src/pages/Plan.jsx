@@ -139,6 +139,14 @@ function TodayWorkout({ dayData, onGoToWorkout, onSwap }) {
         <p className="text-xs text-gray-500">{dayData.recoveryNotes}</p>
       )}
 
+      {isRest && onGoToWorkout && (
+        <button
+          onClick={onGoToWorkout}
+          className="w-full mt-4 py-3 rounded-xl border border-[#2a2a2a] text-gray-300 hover:text-neon hover:border-neon/40 text-sm font-semibold transition-all">
+          Train Anyway →
+        </button>
+      )}
+
       {!isRest && exercises.length > 0 && (
         <>
           {/* Warmup */}

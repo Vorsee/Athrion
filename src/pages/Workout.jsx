@@ -41,6 +41,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
   const [editingWorkout, setEditingWorkout]   = useState(null)
   const [freeWorkout, setFreeWorkout]         = useState(false)
   const [planWorkout, setPlanWorkout]         = useState(null)
+  const [planSchedule, setPlanSchedule]       = useState(null) // full week, so rest days match the Plan tab
   const [homeReady, setHomeReady]             = useState(false) // today's workout data loaded
   const [sessionPRs, setSessionPRs]           = useState([])
   const [earnedBadgeIds, setEarnedBadgeIds]   = useState(null)
@@ -79,6 +80,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       fetchCustomWorkouts().then(w => setCustomWorkouts(w)),
       fetchActivePlan().then(plan => {
         if (!plan?.plan_data?.weeklySchedule) return
+        setPlanSchedule(plan.plan_data.weeklySchedule)
         const todayDay = plan.plan_data.weeklySchedule.find(d => d.day === TODAY_FULL)
         if (todayDay?.type === 'workout' && todayDay.workout?.exercises?.length) {
           setPlanWorkout(todayDay)  // store full dayData, same shape Plan.jsx uses
@@ -226,6 +228,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       history={history}
       customWorkouts={customWorkouts}
       planWorkout={planWorkout}
+      planSchedule={planSchedule}
       onStart={startWorkout}
       onPlanStart={startPlanWorkout}
       onFreeStart={startFreeWorkout}
@@ -361,7 +364,15 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
 // ─────────────────────────────────────────────────────────────────────────────
 // Home
 // ─────────────────────────────────────────────────────────────────────────────
-function HomeScreen({ ready, history, customWorkouts, planWorkout, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade }) {
+// Plan workout days, starting with the next one after today
+function upcomingWorkoutDays(schedule) {
+  const order = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+  return (schedule ?? [])
+    .filter(d => d.type === 'workout' && d.workout?.exercises?.length)
+    .sort((a, b) => ((order.indexOf(a.day) - dayIdx + 7) % 7) - ((order.indexOf(b.day) - dayIdx + 7) % 7))
+}
+
+function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade }) {
   const [selectedSession, setSelectedSession] = useState(null)
   const weekSessions = history.filter(h => (Date.now() - new Date(h.date)) < 7 * 86400000).length
   const totalMins = history.reduce((a, h) => a + (parseInt(h.duration) || 0), 0)
@@ -375,8 +386,15 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, onStart, onPl
     : getTodaysExercises()
   const fallbackName = todayCustom ? todayCustom.name : `${DAY_NAMES[dayIdx]} Workout`
 
-  const planExercises = planWorkout?.workout?.exercises ?? []
-  const planName = planWorkout?.title ?? fallbackName
+  // A plan rest day stays a rest day here too; the person can still pick a plan workout
+  const todayPlan = planSchedule?.find(d => d.day === TODAY_FULL) ?? null
+  const isRestDay = !!todayPlan && todayPlan.type !== 'workout'
+  const otherDays = isRestDay ? upcomingWorkoutDays(planSchedule) : []
+  const [pickedDay, setPickedDay] = useState(null)
+  const shownWorkout = isRestDay ? (pickedDay ?? otherDays[0] ?? null) : planWorkout
+
+  const planExercises = shownWorkout?.workout?.exercises ?? []
+  const planName = shownWorkout?.title ?? fallbackName
 
   const planSets = planExercises[0]?.sets ?? 3
 
@@ -417,16 +435,40 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, onStart, onPl
           <div className="flex items-center justify-between mb-4">
             <div>
               <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-0.5">Today's Training</div>
-              <div className="font-bold text-base text-white">{planWorkout ? planName : fallbackName}</div>
-              {planWorkout && planWorkout.durationMinutes && (
+              <div className="font-bold text-base text-white">{isRestDay ? todayPlan.title : planWorkout ? planName : fallbackName}</div>
+              {!isRestDay && planWorkout?.durationMinutes && (
                 <div className="text-xs text-gray-500 mt-0.5">{planWorkout.durationMinutes} min · {planExercises.length} exercises</div>
               )}
             </div>
-            <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-neon/15 text-neon border border-neon/20">Workout</span>
+            {isRestDay
+              ? <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-[#222] text-gray-500 capitalize">{todayPlan.type.replace('_', ' ')}</span>
+              : <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-neon/15 text-neon border border-neon/20">Workout</span>}
           </div>
 
+          {isRestDay && (
+            <div className="mb-4">
+              <p className="text-xs text-gray-500 leading-relaxed">{todayPlan.recoveryNotes || 'Recovery is part of the plan. Your muscles grow while you rest.'}</p>
+              {otherDays.length > 0 && (
+                <>
+                  <div className="text-[10px] text-gray-600 uppercase tracking-widest mt-4 mb-2">Want to train anyway?</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {otherDays.map(d => (
+                      <button key={d.day} onClick={() => setPickedDay(d)}
+                        className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all text-left ${shownWorkout === d ? 'bg-neon/15 text-neon border-neon/30' : 'bg-[#1a1a1a] text-gray-400 border-[#2a2a2a] hover:text-white'}`}>
+                        <span className="font-semibold">{d.day.slice(0, 3)}</span> · {d.title}
+                      </button>
+                    ))}
+                  </div>
+                  {shownWorkout?.durationMinutes && (
+                    <div className="text-xs text-gray-500 mt-2">{shownWorkout.durationMinutes} min · {planExercises.length} exercises</div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {/* Exercise list */}
-          {planWorkout ? (
+          {shownWorkout ? (
             <div className="space-y-2 mb-5">
               {planExercises.map((ex, i) => (
                 <div key={i} className="flex items-start gap-3 bg-[#1a1a1a] rounded-xl px-3 py-2.5">
@@ -443,7 +485,7 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, onStart, onPl
                 </div>
               ))}
             </div>
-          ) : (
+          ) : !isRestDay && (
             <div className="space-y-1 mb-5">
               {fallbackExs.map((ex, i) => (
                 <div key={i} className="flex items-center gap-3 py-2 border-b border-[#1a1a1a] last:border-0">
@@ -458,9 +500,11 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, onStart, onPl
             </div>
           )}
 
-          <NeonBtn onClick={planWorkout ? handlePlanStart : () => onStart(fallbackExs, fallbackName)} className="w-full">
-            🚀 Start Training
-          </NeonBtn>
+          {(!isRestDay || shownWorkout) && (
+            <NeonBtn onClick={shownWorkout ? handlePlanStart : () => onStart(fallbackExs, fallbackName)} className="w-full">
+              {isRestDay ? '🚀 Train Anyway' : '🚀 Start Training'}
+            </NeonBtn>
+          )}
           <button
             onClick={onFreeStart}
             className="w-full mt-2.5 py-3 rounded-xl border border-[#2a2a2a] bg-[#0d0d0d] text-gray-400 hover:text-white hover:border-[#444] text-sm font-semibold transition-all"
