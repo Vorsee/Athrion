@@ -1,8 +1,15 @@
-// Exercise demos from free-exercise-db (public domain, github.com/yuhonas/free-exercise-db).
+// Exercise demos come from two libraries:
+//  - ExerciseDB (exercisedb.dev): animated GIFs, tried first. The index is bundled in
+//    public/exercisedb-index.json; VITE_EXERCISEDB_MEDIA points at the GIFs, so the free
+//    180px files can be swapped for licensed HD ones without code changes.
+//  - free-exercise-db (public domain, github.com/yuhonas/free-exercise-db): two photos per
+//    exercise, used when ExerciseDB has no match, and for swap suggestions.
 // Pinned to a commit so images and names don't shift under us.
 const BASE = 'https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@f00c92c7dcf1216a928a52c3706c7ce8e2f71ed5'
+const EDB_MEDIA = import.meta.env?.VITE_EXERCISEDB_MEDIA || 'https://static.exercisedb.dev/media'
 
 let dbPromise = null
+let edbPromise = null
 
 export function loadExerciseDb() {
   dbPromise ??= fetch(`${BASE}/dist/exercises.json`)
@@ -12,13 +19,27 @@ export function loadExerciseDb() {
   return dbPromise
 }
 
-export const imageUrl = path => `${BASE}/exercises/${path}`
+const titleCase = s => s.replace(/(^|[\s(-])([a-z])/g, (_, p, c) => p + c.toUpperCase())
+
+function loadExerciseDbGifs() {
+  edbPromise ??= fetch('/exercisedb-index.json')
+    .then(r => { if (!r.ok) throw new Error(`Exercise library unavailable (${r.status})`); return r.json() })
+    // Same shape as free-exercise-db entries, so matching and the demo sheet treat both alike
+    .then(list => list.map(e => prepare({
+      id: e.id, name: titleCase(e.name), primaryMuscles: e.target, secondaryMuscles: e.secondary,
+      equipment: e.equipment, instructions: e.instructions, images: [], gif: `${EDB_MEDIA}/${e.id}.gif`,
+    })))
+    .catch(err => { edbPromise = null; throw err })
+  return edbPromise
+}
+
+export const imageUrl = path => /^https?:/.test(path) ? path : `${BASE}/exercises/${path}`
 
 // Filler words, ignored everywhere
 const STOP = new Set(['the', 'a', 'with', 'and', 'or', 'on', 'to', 'of', 'for'])
 // Words in our plan names that describe effort or loading, not the movement.
 // Only ignored in queries: library names like "Weighted Squat" keep them.
-const QUERY_STOP = new Set(['each', 'light', 'heavy', 'steady', 'state', 'easy', 'brisk', 'fast', 'slow', 'weighted', 'standard', 'conventional', 'zone', 'interval', 'block', 'tempo', 'progression'])
+const QUERY_STOP = new Set(['each', 'light', 'heavy', 'steady', 'state', 'easy', 'brisk', 'fast', 'slow', 'weighted', 'standard', 'conventional', 'zone', 'interval', 'block', 'tempo', 'progression', 'paused', 'pause'])
 
 // Same movement, different spelling
 const SYNONYMS = {
@@ -62,6 +83,43 @@ const ALIASES = [
   [/^(hanging )?(straight )?leg raise/, 'Hanging Leg Raise'],
 ]
 
+// The same idea for ExerciseDB names, which are lower case and often lead with the equipment
+const EDB_ALIASES = [
+  [/^(barbell |flat )?bench press$/, 'barbell bench press'],
+  [/^(barbell |conventional )?deadlift$/, 'barbell deadlift'],
+  [/^(barbell |bent.over )?(barbell )?row$/, 'barbell bent over row'],
+  [/^(barbell )?(back )?squat$/, 'barbell full squat'],
+  [/^push.?ups?$/, 'push-up'],
+  [/^(dumbbell )?(bicep )?curls?$/, 'dumbbell standing biceps curl'],
+  [/farmer|suitcase carry/, 'farmers walk'],
+  [/jump rope|skipping/, 'jump rope'],
+  [/\bbike\b|cycling|spin class/, 'stationary bike run', /crunch/],
+  [/(bulgarian|rear.foot.elevated) split squat/, 'dumbbell single leg split squat'],
+  [/^(wide.grip )?lat pulldown|pull.?up or lat pulldown/, 'cable bar lateral pulldown'],
+  [/^(weighted |chest |parallel bar )?dips?$/, 'chest dip'],
+  [/tricep(s)? dip|bench dip/, 'triceps dip (between benches)'],
+  [/rope (tricep(s)? )?pushdown|tricep(s)? rope pushdown/, 'cable pushdown (with rope attachment)'],
+  [/tricep(s)? pushdown/, 'cable pushdown'],
+  [/hip thrust/, 'barbell glute bridge', /bodyweight/],
+  [/glute bridge|hip thrust/, 'low glute bridge on floor'],
+  [/ab wheel|rollout/, 'wheel rollout'],
+  [/reverse lunge/, 'dumbbell rear lunge', /barbell/],
+  [/chest.supported row/, 'dumbbell incline row'],
+  [/(single|one).arm (dumbbell )?row/, 'dumbbell bent over row', /cable/],
+  [/seated (cable )?row|cable row/, 'cable seated row', /single|one.arm/],
+  [/pallof/, 'band horizontal pallof press'],
+  [/lateral raise/, 'dumbbell lateral raise', /cable|bent|rear|reverse|lying|prone|seated/],
+  [/calf raise/, 'bodyweight standing calf raise', /seated|donkey|leg press|barbell|dumbbell|single/],
+  [/goblet squat/, 'dumbbell goblet squat', /kettlebell/],
+  [/^(hanging )?(straight )?leg raise/, 'hanging leg raise'],
+  [/^cable (chest )?(fly|flye|crossover)$/, 'cable standing fly'],
+  [/close.grip (barbell )?bench/, 'barbell close-grip bench press', /smith|dumbbell|ez/],
+  [/front squat/, 'barbell front squat', /kettlebell|dumbbell|goblet|smith/],
+  [/skull ?crusher/, 'barbell lying triceps extension skull crusher'],
+  [/^(weighted )?pull.?ups? or inverted row/, 'pull-up'],
+  [/^(standing |barbell )*(overhead|military) press$/, 'barbell standing wide military press'],
+]
+
 function stem(t) {
   if (t.length > 4 && t.endsWith('ies')) return t.slice(0, -3) + 'y'
   if (t.length > 3 && t.endsWith('es') && /(ss|sh|ch|x)es$/.test(t)) return t.slice(0, -2)
@@ -82,9 +140,10 @@ export function tokenize(name, { query = false } = {}) {
 }
 
 function prepare(e) {
-  // Text after " - " is a variant ("Medium Grip", "With Bands"), not a different exercise
-  const [core, ...rest] = e.name.split(' - ')
-  return { ...e, tokens: tokenize(core), qualifiers: tokenize(rest.join(' ')) }
+  // Text after " - " or in brackets is a variant ("Medium Grip", "(with rope)"), not a different exercise
+  const variant = (e.name.match(/\((.*?)\)/g) ?? []).join(' ').replace(/[()]/g, '')
+  const [core, ...rest] = e.name.replace(/\(.*?\)/g, ' ').split(' - ')
+  return { ...e, tokens: tokenize(core), qualifiers: tokenize(`${rest.join(' ')} ${variant}`) }
 }
 
 function score(query, entry) {
@@ -99,10 +158,26 @@ function score(query, entry) {
 
 const cache = new Map()
 
-// Best demo for an exercise name, or null when nothing is close enough
+// Best demo for an exercise name, or null when nothing is close enough.
+// Prefers an animated ExerciseDB match; falls back to free-exercise-db photos.
 export async function findDemo(name) {
   if (cache.has(name)) return cache.get(name)
-  const db = await loadExerciseDb()
+  const gifs = await loadExerciseDbGifs().catch(() => [])
+  const result = matchIn(gifs, name, EDB_ALIASES) ?? await findPhotoDemo(name)
+  cache.set(name, result)
+  return result
+}
+
+const photoCache = new Map()
+
+async function findPhotoDemo(name) {
+  if (photoCache.has(name)) return photoCache.get(name)
+  const result = matchIn(await loadExerciseDb(), name, ALIASES)
+  photoCache.set(name, result)
+  return result
+}
+
+function matchIn(db, name, aliases) {
   const lower = String(name).toLowerCase().replace(/\(.*?\)/g, '').trim()
 
   const q = tokenize(name, { query: true })
@@ -112,10 +187,11 @@ export async function findDemo(name) {
   // 1. Same words as a library name (ignoring order and plurals)
   let result = db.find(e => sameWords(e) && !e.qualifiers.length) ?? null
 
-  // 2. Known gym-name aliases
+  // 2. Known gym-name aliases ("unless" also sees bracketed notes like "(bodyweight)")
   if (!result) {
-    const alias = ALIASES.find(([re, , unless]) => re.test(lower) && !unless?.test(lower))
-    if (alias) result = db.find(e => e.name === alias[1]) ?? null
+    const full = String(name).toLowerCase()
+    const alias = aliases.find(([re, , unless]) => re.test(lower) && !unless?.test(full))
+    if (alias) result = db.find(e => e.name.toLowerCase() === alias[1].toLowerCase()) ?? null
   }
 
   // 3. Same words plus a variant qualifier ("Bench Press - With Bands")
@@ -130,7 +206,6 @@ export async function findDemo(name) {
     }
     if (bestScore < 0.7) result = null
   }
-  cache.set(name, result)
   return result
 }
 
@@ -139,7 +214,7 @@ const OLYMPIC = /\b(clean|snatch|jerk)\b/i
 // Exercises that train the same primary muscle, preferring the same equipment
 export async function findAlternatives(name, { limit = 6 } = {}) {
   const db = await loadExerciseDb()
-  const base = await findDemo(name)
+  const base = await findPhotoDemo(name)
   if (!base) return []
   const muscle = base.primaryMuscles[0]
   const secondary = new Set(base.secondaryMuscles)

@@ -3,14 +3,21 @@ import { Icon } from '@iconify/react'
 import Sheet from './Sheet.jsx'
 import { findDemo, findAlternatives, imageUrl, youtubeSearchUrl } from '../lib/exerciseDb.js'
 
-// Alternates the start and end photos so the movement reads as a short loop
+// Plays the ExerciseDB GIF, or alternates the start and end photos so the movement reads as a short loop
 function DemoAnimation({ demo }) {
   const [frame, setFrame] = useState(0)
   useEffect(() => {
-    if (demo.images.length < 2) return
+    if (demo.gif || demo.images.length < 2) return
     const id = setInterval(() => setFrame(f => (f + 1) % demo.images.length), 900)
     return () => clearInterval(id)
   }, [demo])
+
+  if (demo.gif) return (
+    // GIFs are square on white, so the frame matches instead of letterboxing
+    <div className="w-full max-w-[300px] mx-auto aspect-square bg-white rounded-xl overflow-hidden">
+      <img src={demo.gif} alt={`${demo.name} demonstration`} className="w-full h-full object-contain" />
+    </div>
+  )
 
   return (
     <div className="relative w-full aspect-[3/2] bg-[#1a1a1a] rounded-xl overflow-hidden">
@@ -59,12 +66,15 @@ export function ExerciseDemoSheet({ name, onClose }) {
       </a>
     }>
       <div className="font-semibold text-white break-words">{name}</div>
-      {loading && <div className="w-full aspect-[3/2] bg-[#1a1a1a] rounded-xl animate-pulse" />}
+      {loading && <div className="w-full max-w-[300px] mx-auto aspect-square bg-[#1a1a1a] rounded-xl animate-pulse" />}
       {!loading && demo && (
         <>
           <DemoAnimation demo={demo} />
-          {demo.name.toLowerCase() !== name.toLowerCase() && (
-            <div className="text-[11px] text-gray-600">Shown: {demo.name}</div>
+          {(demo.name.toLowerCase() !== name.toLowerCase() || demo.gif) && (
+            <div className="flex justify-between gap-3 text-[11px] text-gray-600">
+              <span>{demo.name.toLowerCase() !== name.toLowerCase() && `Shown: ${demo.name}`}</span>
+              {demo.gif && <span className="flex-shrink-0">Animation: ExerciseDB</span>}
+            </div>
           )}
           <div className="flex flex-wrap gap-1.5">
             {[...demo.primaryMuscles, ...demo.secondaryMuscles.slice(0, 2)].map((m, i) => (
