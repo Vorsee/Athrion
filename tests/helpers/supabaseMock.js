@@ -35,6 +35,7 @@ function createMock() {
     auth: {
       getUser: vi.fn(async () => ({ data: { user: state.user } })),
       getSession: vi.fn(async () => ({ data: { session: state.user ? { access_token: 'jwt-token', user: state.user } : null } })),
+      refreshSession: vi.fn(async () => ({ data: { session: state.user ? { access_token: 'fresh-token', user: state.user } : null } })),
       onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
       signInWithPassword: vi.fn(async () => ({ error: null })),
       signUp: vi.fn(async () => ({ data: {}, error: null })),

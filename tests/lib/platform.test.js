@@ -30,6 +30,21 @@ describe('stripe.js', () => {
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer jwt-token')
     expect(loc.href).toBe('https://checkout.stripe.com/x')
   })
+  it('renews an expired token and retries once when the server says 401', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({ error: 'Invalid token' }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ url: 'https://checkout.stripe.com/y' }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const loc = { href: '' }
+    Object.defineProperty(window, 'location', { value: loc, configurable: true })
+    await createCheckoutSession('monthly')
+    expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe('Bearer fresh-token')
+    expect(loc.href).toBe('https://checkout.stripe.com/y')
+  })
+  it('asks to sign in again when even a renewed token is rejected', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 401, json: async () => ({ error: 'Invalid token' }) })))
+    await expect(createCheckoutSession()).rejects.toThrow('Your sign-in expired')
+  })
   it('requires a signed-in user', async () => {
     sb.state.user = null
     await expect(createCheckoutSession()).rejects.toThrow('Not logged in')

@@ -1,32 +1,44 @@
 import { supabase } from './supabase.js'
 
-// plan is 'monthly' or 'annual'; the server picks the Stripe price
-export async function createCheckoutSession(plan = 'monthly') {
+// A token that is good for at least another minute. A tab that slept in the background
+// can still hold an expired one, which the payment routes reject as "Invalid token".
+async function freshToken() {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session?.access_token) throw new Error('Not logged in')
+  if (session.expires_at && session.expires_at * 1000 - Date.now() < 60_000) {
+    const { data } = await supabase.auth.refreshSession()
+    if (data?.session?.access_token) return data.session.access_token
+  }
+  return session.access_token
+}
 
-  const res = await fetch('/api/create-checkout', {
+// POST to one of our api/ routes as the signed-in user; on a 401, renew the token once and retry
+async function postAsUser(path, body) {
+  const send = token => fetch(path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-    body: JSON.stringify({ plan }),
+    headers: { ...(body && { 'Content-Type': 'application/json' }), Authorization: `Bearer ${token}` },
+    ...(body && { body: JSON.stringify(body) }),
   })
-
+  let res = await send(await freshToken())
+  if (res.status === 401) {
+    const { data } = await supabase.auth.refreshSession()
+    if (!data?.session?.access_token) throw new Error('Your sign-in expired. Sign in again and retry.')
+    res = await send(data.session.access_token)
+    if (res.status === 401) throw new Error('Your sign-in expired. Sign in again and retry.')
+  }
   const data = await res.json()
-  if (!res.ok) throw new Error(data.error || 'Checkout session failed')
+  return { res, data }
+}
 
+// plan is 'monthly' or 'annual'; the server picks the Stripe price
+export async function createCheckoutSession(plan = 'monthly') {
+  const { res, data } = await postAsUser('/api/create-checkout', { plan })
+  if (!res.ok) throw new Error(data.error || 'Checkout session failed')
   window.location.href = data.url
 }
 
 export async function cancelSubscription() {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session?.access_token) throw new Error('Not logged in')
-
-  const res = await fetch('/api/cancel-subscription', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${session.access_token}` },
-  })
-
-  const data = await res.json()
+  const { res, data } = await postAsUser('/api/cancel-subscription')
   if (!res.ok) throw new Error(data.error || 'Cancellation failed')
   return data // { success, cancel_at, period_end }
 }
