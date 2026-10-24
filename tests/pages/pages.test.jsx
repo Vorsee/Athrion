@@ -96,11 +96,16 @@ describe('Calories', () => {
     await addFood('Oats', 300)
     expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't save your food log")
   })
-  it('shows the upgrade screen to free users', async () => {
+  it('shows free users the real page with a sample day behind a dark overlay', async () => {
     const onUpgrade = vi.fn()
     render(<P.Calories profile={profile} isPro={false} onUpgrade={onUpgrade} onGoToPlan={() => {}} />)
     expect(await screen.findByText('PRO FEATURE')).toBeInTheDocument()
-    await userEvent.click(screen.getAllByText('Upgrade Your Plan →')[0])
+    const sample = screen.getByText('Chicken rice bowl')
+    expect(sample.closest('[inert]')).toHaveAttribute('aria-hidden', 'true')
+    expect(screen.getByText("Today's Intake")).toBeInTheDocument()
+    expect(sb.queriesFor('calorie_logs')).toHaveLength(0) // nothing loaded or saved
+    expect(sb.queriesFor('nutrition_targets')).toHaveLength(0)
+    await userEvent.click(screen.getByText('Get Pro →'))
     expect(onUpgrade).toHaveBeenCalled()
   })
 })

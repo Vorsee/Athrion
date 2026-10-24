@@ -6,6 +6,7 @@ import { resolveGoals } from '../lib/goals.js'
 import { fetchLatestNutritionTarget } from '../lib/fitnessApi.js'
 import AdaptiveNutritionCard from '../components/AdaptiveNutritionCard.jsx'
 import BarcodeScanner from '../components/BarcodeScanner.jsx'
+import ProLock from '../components/ProLock.jsx'
 
 const MEALS = [
   { id: 'breakfast', label: 'Breakfast', icon: '🌅', hours: [5,  11], color: '#f59e0b' },
@@ -24,8 +25,30 @@ function getCurrentMeal() {
 
 const EMPTY_FORM = { name: '', kcal: '', protein: '', carbs: '', fat: '' }
 
-export default function Calories({ profile, isPro, onUpgrade, onGoToPlan }) {
-  const [foods, setFoods]             = useState([])
+// Example day shown behind the Pro lock; never saved
+const SAMPLE_FOODS = [
+  { name: 'Greek yogurt with berries', kcal: 280, protein: 22, carbs: 32, fat: 6, meal: 'breakfast' },
+  { name: 'Oatmeal with banana', kcal: 350, protein: 10, carbs: 64, fat: 6, meal: 'breakfast' },
+  { name: 'Chicken rice bowl', kcal: 620, protein: 48, carbs: 70, fat: 14, meal: 'lunch' },
+  { name: 'Apple', kcal: 95, protein: 0, carbs: 25, fat: 0, meal: 'lunch' },
+  { name: 'Salmon, potatoes and greens', kcal: 680, protein: 42, carbs: 55, fat: 28, meal: 'dinner' },
+  { name: 'Protein shake', kcal: 160, protein: 30, carbs: 4, fat: 3, meal: 'snack' },
+]
+const SAMPLE_GOALS = { calories: 2600, protein: 180, carbs: 300 }
+
+export default function Calories({ isPro, onUpgrade, ...props }) {
+  if (!isPro) return (
+    <ProLock onUpgrade={onUpgrade}
+      description="Track calories, macros and meals, scan food with AI or barcodes, and get targets that adapt to your progress.">
+      <CaloriesPage {...props} preview />
+    </ProLock>
+  )
+  return <CaloriesPage {...props} />
+}
+
+// preview: render with sample data, without loading or saving anything
+function CaloriesPage({ profile, onGoToPlan, preview = false }) {
+  const [foods, setFoods]             = useState(preview ? SAMPLE_FOODS : [])
   const [saveError, setSaveError]     = useState('')
   const saveQueue = useRef(Promise.resolve()) // one save at a time, in order
   const [logs, setLogs]               = useState([])
@@ -43,31 +66,31 @@ export default function Calories({ profile, isPro, onUpgrade, onGoToPlan }) {
   const [scanning, setScanning]       = useState(false)
   const fileRef = useRef()
 
-  // For Pro: use AI plan nutrition targets; for Free: use profile-based goals
-  const baseGoals = localGoals ?? resolveGoals(profile)
-  const activeGoals = (isPro && planNutrition)
+  // Plan nutrition targets when there is a plan, otherwise profile-based (or custom) goals
+  const baseGoals = preview ? SAMPLE_GOALS : (localGoals ?? resolveGoals(profile))
+  const activeGoals = planNutrition
     ? { calories: planNutrition.calorie_target, protein: planNutrition.protein_grams, carbs: planNutrition.carb_grams }
     : baseGoals
   const goals = activeGoals
-  const fatGoal = (isPro && planNutrition?.fat_grams)
+  const fatGoal = planNutrition?.fat_grams
     ? planNutrition.fat_grams
     : Math.max(30, Math.round((goals.calories - goals.protein * 4 - goals.carbs * 4) / 9))
 
   useEffect(() => {
+    if (preview) return
     fetchTodayCalorieLog(todayKey())
       .then(log => { if (log) setFoods(log.foods || []) })
       .catch(() => {})
     fetchCalorieLogs()
       .then(l => setLogs(l || []))
       .catch(() => {})
-    if (isPro) {
-      fetchLatestNutritionTarget()
-        .then(t => { if (t) setPlanNutrition(t) })
-        .catch(() => {})
-    }
+    fetchLatestNutritionTarget()
+      .then(t => { if (t) setPlanNutrition(t) })
+      .catch(() => {})
   }, [])
 
   function saveFoods(f) {
+    if (preview) return
     setFoods(f)
     // Quick successive adds would otherwise race and lose foods or create a second log
     saveQueue.current = saveQueue.current.then(async () => {
@@ -137,40 +160,6 @@ export default function Calories({ profile, isPro, onUpgrade, onGoToPlan }) {
   const rv = 68, circ = 2 * Math.PI * rv
   const ringColor = pct > 100 ? '#ff6b6b' : pct > 80 ? '#f59e0b' : '#C8F135'
 
-  if (!isPro) return (
-    <div className="relative select-none">
-      {/* Blurred preview */}
-      <div className="pointer-events-none blur-sm opacity-40 space-y-4 py-4">
-        <div className="bg-[#111] border border-[#222] rounded-2xl p-5 h-48" />
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-[#111] border border-[#222] rounded-2xl p-4 h-24" />
-          <div className="bg-[#111] border border-[#222] rounded-2xl p-4 h-24" />
-        </div>
-        <div className="bg-[#111] border border-[#222] rounded-2xl p-4 h-32" />
-        <div className="bg-[#111] border border-[#222] rounded-2xl p-4 h-32" />
-      </div>
-
-      {/* Lock overlay */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
-        <div className="bg-[#111]/95 border border-[#2a2a2a] rounded-3xl p-8 w-full max-w-sm shadow-2xl">
-          <div className="w-14 h-14 rounded-2xl bg-neon/10 border border-neon/25 flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl">🔒</span>
-          </div>
-          <div className="font-bebas text-3xl tracking-wide mb-2">PRO FEATURE</div>
-          <p className="text-gray-400 text-sm leading-relaxed mb-5">
-            Track calories, macros, and meals with the full nutrition tracker. Upgrade to unlock.
-          </p>
-          <button
-            onClick={onUpgrade}
-            className="w-full bg-neon text-black font-bold py-3.5 rounded-xl text-sm uppercase tracking-widest hover:shadow-[0_6px_24px_rgba(200,241,53,0.4)] transition-all">
-            Upgrade Your Plan →
-          </button>
-          <div className="text-[10px] text-gray-700 mt-3">$5.99 / month · Cancel anytime</div>
-        </div>
-      </div>
-    </div>
-  )
-
   return (
     <div className="space-y-4 py-4 slide-up">
 
@@ -182,7 +171,7 @@ export default function Calories({ profile, isPro, onUpgrade, onGoToPlan }) {
       <div className="bg-[#111] border border-[#222] rounded-2xl p-5">
         <div className="flex items-center justify-between mb-4">
           <div className="text-[10px] text-gray-600 uppercase tracking-widest">Today's Intake</div>
-          {isPro && planNutrition ? (
+          {planNutrition ? (
             <button onClick={onGoToPlan}
               className="text-xs text-neon border border-neon/30 bg-neon/10 hover:bg-neon/20 px-2.5 py-1 rounded-lg font-semibold transition-all flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-neon inline-block" />
@@ -226,7 +215,7 @@ export default function Calories({ profile, isPro, onUpgrade, onGoToPlan }) {
         </div>
       </div>
 
-      {isPro && planNutrition && (
+      {planNutrition && (
         <AdaptiveNutritionCard calorieLogs={logs} current={planNutrition} profile={profile} onApplied={setPlanNutrition} />
       )}
 
@@ -428,7 +417,7 @@ export default function Calories({ profile, isPro, onUpgrade, onGoToPlan }) {
         <DayModal log={selectedLog} onClose={() => setSelectedLog(null)} />
       )}
 
-      {editingGoals && !isPro && (
+      {editingGoals && (
         <GoalEditSheet
           goals={goals}
           calculated={resolveGoals(profile).calculated}
