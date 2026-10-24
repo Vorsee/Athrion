@@ -332,11 +332,12 @@ function ReviewStep({ data, nutritionPreview, onGenerate, generating, error, onB
 // ─────────────────────────────────────────────────────────────────────────────
 // Free users answer the same questions: their targets are saved, and the last
 // step offers the trial instead of generating (generation is Pro, server-side too).
-// saved: an earlier fitness profile, so answers carry over after upgrading.
+// saved: an earlier fitness profile, so answers carry over after upgrading. It still
+// starts at step 1, with those answers filled in.
 export default function FitnessOnboarding({ existingProfile, saved = null, isPro = true, onComplete, onUpgrade, onCancel }) {
   const ep = existingProfile ?? {}
   const sv = saved ?? {}
-  const [step, setStep]       = useState(sv.primary_goal ? 3 : 0)
+  const [step, setStep]       = useState(0)
   const [animKey, setAnimKey] = useState(0)
   const [animDir, setAnimDir] = useState('slide-from-right')
 

@@ -280,7 +280,8 @@ describe('Onboarding', () => {
     const fetchMock = vi.fn(); vi.stubGlobal('fetch', fetchMock)
     const saved = { primary_goal: 'build_muscle', activity_level: 'moderately_active', experience_level: 'beginner', workout_days_per_week: 3 }
     render(<P.FitnessOnboarding existingProfile={profile} saved={saved} isPro={false} onUpgrade={onUpgrade} onCancel={onCancel} />)
-    expect(screen.getByText(/not medical advice/)).toBeInTheDocument()
+    for (let i = 0; i < 3; i++) await userEvent.click(await screen.findByText('Continue'))
+    expect(await screen.findByText(/not medical advice/)).toBeInTheDocument()
     await userEvent.click(screen.getByText('Start 7-day free trial'))
     await waitFor(() => expect(onUpgrade).toHaveBeenCalled())
     const upsert = sb.op(sb.queriesFor('fitness_profiles').find(q => sb.op(q, 'upsert')), 'upsert')[0]
@@ -289,9 +290,12 @@ describe('Onboarding', () => {
     expect(onCancel).toHaveBeenCalled()
     vi.unstubAllGlobals()
   })
-  it('takes a new Pro member with saved answers straight to building the plan', () => {
+  it('starts a new Pro member with saved answers at step 1, answers filled in', async () => {
     render(<P.FitnessOnboarding existingProfile={profile} saved={{ primary_goal: 'lose_fat' }} onComplete={() => {}} />)
-    expect(screen.getByText('Build my plan')).toBeInTheDocument()
+    expect(screen.getByText(/main goal/)).toBeInTheDocument()
+    expect(screen.getByText('Continue')).toBeEnabled() // the saved goal is already picked
+    for (let i = 0; i < 3; i++) await userEvent.click(await screen.findByText('Continue'))
+    expect(await screen.findByText('Build my plan')).toBeInTheDocument()
   })
 })
 
