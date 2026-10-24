@@ -72,7 +72,9 @@ export function suggestNext(sessions, { minReps = 8, maxReps = 12 } = {}) {
 // Parse a plan rep string like "8-12" or "10" into a range
 export function parseRepRange(reps) {
   const nums = String(reps ?? '').match(/\d+/g)?.map(Number) ?? []
-  if (!nums.length || /s|min|sec/i.test(String(reps))) return { minReps: 8, maxReps: 12 }
+  // Timed targets ("30s", "45 sec", "2 min") aren't rep ranges; words like "reps" or "each side" are fine
+  const timed = /\d\s*(s|secs?|seconds?|mins?|minutes?|m)\b/i.test(String(reps))
+  if (!nums.length || timed) return { minReps: 8, maxReps: 12 }
   return { minReps: nums[0], maxReps: nums[1] ?? nums[0] }
 }
 
@@ -95,25 +97,26 @@ export function findNewPRs(loggedSets, history) {
   return prs
 }
 
-// Consecutive ISO weeks (ending this week or last) with at least `perWeek` workouts
+// Consecutive ISO weeks (ending this week or last) with at least `perWeek` workouts.
+// Weeks are stepped by calendar date, not 7×24h, so daylight-saving changes don't break streaks.
 export function weeklyStreak(history, perWeek = 1) {
-  const weekKey = d => {
-    const date = new Date(d)
-    const monday = new Date(date)
-    monday.setHours(0, 0, 0, 0)
-    monday.setDate(date.getDate() - ((date.getDay() + 6) % 7))
-    return monday.getTime()
+  const mondayOf = d => {
+    const m = new Date(d)
+    m.setHours(0, 0, 0, 0)
+    m.setDate(m.getDate() - ((m.getDay() + 6) % 7))
+    return m
   }
+  const key = m => `${m.getFullYear()}-${m.getMonth()}-${m.getDate()}`
   const counts = {}
   for (const h of history || []) {
-    const k = weekKey(h.created_at)
+    const k = key(mondayOf(h.created_at))
     counts[k] = (counts[k] ?? 0) + 1
   }
-  const WEEK = 7 * 86400000
-  let cursor = weekKey(Date.now())
+  const cursor = mondayOf(Date.now())
+  const stepBack = () => cursor.setDate(cursor.getDate() - 7)
   // The current week doesn't break the streak until it's over
-  if ((counts[cursor] ?? 0) < perWeek) cursor -= WEEK
+  if ((counts[key(cursor)] ?? 0) < perWeek) stepBack()
   let streak = 0
-  while ((counts[cursor] ?? 0) >= perWeek) { streak++; cursor -= WEEK }
+  while ((counts[key(cursor)] ?? 0) >= perWeek) { streak++; stepBack() }
   return streak
 }

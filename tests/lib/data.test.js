@@ -62,10 +62,10 @@ describe('getTodaysExercises', () => {
 describe('todayKey', () => {
   it('returns YYYY-MM-DD', () => expect(todayKey()).toMatch(/^\d{4}-\d{2}-\d{2}$/))
 
-  describe('known bugs', () => {
+  describe('regression: fixed in the October 2026 review', () => {
     // Uses UTC, so in the US evening "today" is already tomorrow: calories logged after
     // ~8pm EDT go to the next day's log and the Today view empties.
-    it.fails('BUG: at 9pm in New York, today is still the local date', () => {
+    it('at 9pm in New York, today is still the local date', () => {
       vi.useFakeTimers({ toFake: ['Date'] })
       vi.setSystemTime(new Date('2026-10-23T21:00:00-04:00'))
       expect(todayKey()).toBe('2026-10-23')

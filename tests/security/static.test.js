@@ -27,16 +27,33 @@ describe('database policies (SQL migrations)', () => {
     }
   })
 
-  describe('known bugs', () => {
+  describe('regression: fixed in the October 2026 review', () => {
     // In "WHERE gp.session_id = session_id" the bare session_id resolves to gp.session_id,
     // so the condition is always true: anyone in any group can read every group's sets.
     // The live database has this exact policy on group_sets.
-    it.fails('BUG: no policy compares a column with itself', () => {
+    it('no policy compares a column with itself', () => {
       for (const f of sqlFiles) {
         const sql = read(f)
         expect(sql, f).not.toMatch(/\b(\w+)\.(\w+)\s*=\s*\2\b(?!\s*\.)/)
       }
     })
+  })
+})
+
+describe('group room lockdown (006/007)', () => {
+  const m006 = read('supabase/006_security_fixes.sql'), m007 = read('supabase/007_group_lockdown.sql')
+  it('join_group_session is SECURITY DEFINER with a fixed search_path, for signed-in users only', () => {
+    expect(m006).toMatch(/FUNCTION public\.join_group_session[\s\S]*SECURITY DEFINER SET search_path = public/)
+    expect(m006).toMatch(/REVOKE ALL ON FUNCTION public\.join_group_session\(text, text\) FROM public, anon/)
+    expect(m006).toMatch(/IF auth\.uid\(\) IS NULL/)
+  })
+  it('only the host can change room settings', () => {
+    expect(m006).toMatch(/NEW\.host_id\s+IS DISTINCT FROM OLD\.host_id/)
+    expect(m006).toMatch(/BEFORE UPDATE ON public\.group_sessions/)
+  })
+  it('rooms are visible to members only once 007 is applied', () => {
+    expect(m007).toMatch(/DROP POLICY IF EXISTS "auth users can read sessions"/)
+    expect(m007).toMatch(/auth\.uid\(\) = host_id OR public\.is_group_participant\(id\)/)
   })
 })
 
@@ -51,10 +68,10 @@ describe('Edge Functions', () => {
     expect(read('supabase/functions/send-reminders/index.ts')).toMatch(/x-cron-secret/)
   })
 
-  describe('known bugs (security)', () => {
+  describe('regression: fixed in the October 2026 review', () => {
     // analyze-meal forwards any image to Anthropic for anyone holding the public anon key
     // (shipped in the web bundle). Verified live: it answers a request made with only that key.
-    it.fails('BUG: every function that calls Anthropic checks who is calling', () => {
+    it('every function that calls Anthropic checks who is calling', () => {
       for (const f of fns) {
         const src = read(`supabase/functions/${f}/index.ts`)
         if (/anthropic/i.test(src)) expect(src, f).toMatch(/auth\.getUser\(|x-cron-secret/)
@@ -79,10 +96,10 @@ describe('secrets and repo hygiene', () => {
     expect(tracked.some(f => /^\.env(\.local)?$/.test(f))).toBe(false)
   })
 
-  describe('known issues', () => {
+  describe('regression: fixed in the October 2026 review', () => {
     // The GitHub repo is public. These expose project IDs, the database host, local paths
     // and an old copy of the source; none are secrets, but they don't belong in a public repo.
-    it.fails('BUG: local tool folders and the old bin/ copy are not committed', () => {
+    it('local tool folders and the old bin/ copy are not committed', () => {
       expect(tracked.filter(f => /^(\.vercel|\.claude|supabase\/\.temp|bin)\/|\.DS_Store$/.test(f))).toEqual([])
     })
   })

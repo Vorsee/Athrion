@@ -59,12 +59,12 @@ describe('api.js', () => {
     sb.set('subscriptions', () => { throw new Error('offline') })
     expect(await api.fetchSubscriptionStatus()).toBe(false)
   })
-  it('totals calories when saving the day log', async () => {
+  it('totals calories and upserts one log per user per day', async () => {
     sb.set('calorie_logs', ok({ id: 'c1' }))
     await api.saveTodayCalorieLog('2026-10-23', [{ kcal: 300 }, { kcal: 450 }, {}])
-    expect(sb.op(last('calorie_logs'), 'insert')[0]).toMatchObject({ user_id: USER.id, date: '2026-10-23', total_calories: 750 })
-    await api.saveTodayCalorieLog('2026-10-23', [{ kcal: 100 }], 'c1')
-    expect(sb.op(last('calorie_logs'), 'update')[0]).toEqual({ foods: [{ kcal: 100 }], total_calories: 100 })
+    const [row, opts] = sb.op(last('calorie_logs'), 'upsert')
+    expect(row).toMatchObject({ user_id: USER.id, date: '2026-10-23', total_calories: 750 })
+    expect(opts).toEqual({ onConflict: 'user_id,date' })
     sb.set('calorie_logs', ok([]))
     await api.fetchCalorieLogs()
     await api.fetchTodayCalorieLog('2026-10-23')
@@ -193,14 +193,14 @@ describe('groupApi.js', () => {
     expect(row).toMatchObject({ host_id: USER.id, status: 'lobby' })
     expect(sb.op(last('group_participants'), 'insert')[0]).toEqual({ session_id: 's1', user_id: USER.id, display_name: 'Sam' })
   })
-  it('joins by code (case-insensitive) and ignores "already joined"', async () => {
-    sb.set('group_sessions', ok([{ id: 's1' }]))
-    sb.set('group_participants', { data: null, error: { code: '23505' } })
-    expect(await group.joinGroupSession('abc123', 'Kim')).toEqual({ id: 's1' })
-    expect(sb.op(last('group_sessions'), 'eq')).toEqual(['code', 'ABC123'])
+  it('joins by code through the join_group_session function, without reading other rooms', async () => {
+    sb.supabase.rpc.mockResolvedValueOnce({ data: { id: 's1' }, error: null })
+    expect(await group.joinGroupSession(' abc123 ', 'Kim')).toEqual({ id: 's1' })
+    expect(sb.supabase.rpc).toHaveBeenCalledWith('join_group_session', { p_code: 'ABC123', p_display_name: 'Kim' })
+    expect(sb.queriesFor('group_sessions')).toHaveLength(0)
   })
   it('rejects unknown codes', async () => {
-    sb.set('group_sessions', ok([]))
+    sb.supabase.rpc.mockResolvedValueOnce({ data: null, error: { code: 'P0002', message: 'x' } })
     await expect(group.joinGroupSession('ZZZZZZ', 'Kim')).rejects.toThrow('Room not found')
   })
   it('updates, starts and ends sessions and logs sets', async () => {

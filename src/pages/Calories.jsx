@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { todayKey } from '../lib/data.js'
+import { supabase } from '../lib/supabase.js'
 import { fetchTodayCalorieLog, saveTodayCalorieLog, fetchCalorieLogs, saveGoals } from '../lib/api.js'
 import { resolveGoals } from '../lib/goals.js'
 import { fetchLatestNutritionTarget } from '../lib/fitnessApi.js'
@@ -25,7 +26,8 @@ const EMPTY_FORM = { name: '', kcal: '', protein: '', carbs: '', fat: '' }
 
 export default function Calories({ profile, isPro, onUpgrade, onGoToPlan }) {
   const [foods, setFoods]             = useState([])
-  const [logId, setLogId]             = useState(null)
+  const [saveError, setSaveError]     = useState('')
+  const saveQueue = useRef(Promise.resolve()) // one save at a time, in order
   const [logs, setLogs]               = useState([])
   const [tab, setTab]                 = useState('today')
   const [selectedLog, setSelectedLog] = useState(null)
@@ -53,7 +55,7 @@ export default function Calories({ profile, isPro, onUpgrade, onGoToPlan }) {
 
   useEffect(() => {
     fetchTodayCalorieLog(todayKey())
-      .then(log => { if (log) { setFoods(log.foods || []); setLogId(log.id) } })
+      .then(log => { if (log) setFoods(log.foods || []) })
       .catch(() => {})
     fetchCalorieLogs()
       .then(l => setLogs(l || []))
@@ -65,12 +67,18 @@ export default function Calories({ profile, isPro, onUpgrade, onGoToPlan }) {
     }
   }, [])
 
-  async function saveFoods(f) {
+  function saveFoods(f) {
     setFoods(f)
-    try {
-      const saved = await saveTodayCalorieLog(todayKey(), f, logId)
-      if (!logId && saved?.id) setLogId(saved.id)
-    } catch {}
+    // Quick successive adds would otherwise race and lose foods or create a second log
+    saveQueue.current = saveQueue.current.then(async () => {
+      try {
+        await saveTodayCalorieLog(todayKey(), f)
+        setSaveError('')
+      } catch {
+        setSaveError("Couldn't save your food log. Check your connection and try again.")
+      }
+    })
+    return saveQueue.current
   }
 
   function addManual(meal) {
@@ -93,13 +101,16 @@ export default function Calories({ profile, isPro, onUpgrade, onGoToPlan }) {
       r.readAsDataURL(file)
     })
     try {
+      // The function checks who is calling, so send the user's own token
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('Please sign in again.')
       const resp = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-meal`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'Authorization': `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({ base64, mediaType: file.type || 'image/jpeg' }),
         }
@@ -162,6 +173,10 @@ export default function Calories({ profile, isPro, onUpgrade, onGoToPlan }) {
 
   return (
     <div className="space-y-4 py-4 slide-up">
+
+      {saveError && (
+        <div role="alert" className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">{saveError}</div>
+      )}
 
       {/* Ring + macros */}
       <div className="bg-[#111] border border-[#222] rounded-2xl p-5">

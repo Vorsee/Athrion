@@ -52,19 +52,35 @@ describe('Plan', () => {
 })
 
 describe('Calories', () => {
-  it('adds a food to the right meal and saves today\'s log', async () => {
-    sb.set('calorie_logs', q => q.ops.some(o => o[0] === 'insert') ? { data: { id: 'c1' }, error: null } : { data: q.ops.some(o => o[0] === 'eq') ? null : [], error: null })
-    sb.set('nutrition_targets', { data: null, error: null })
-    render(<P.Calories profile={profile} isPro onUpgrade={() => {}} onGoToPlan={() => {}} />)
-    await userEvent.click((await screen.findAllByText('+ Add'))[0])
-    await userEvent.type(screen.getByPlaceholderText('Food name'), 'Oats')
-    await userEvent.type(screen.getByPlaceholderText('Calories'), '300')
+  async function addFood(name, kcal) {
+    if (!screen.queryByPlaceholderText('Food name')) await userEvent.click((await screen.findAllByText('+ Add'))[0])
+    await userEvent.type(screen.getByPlaceholderText('Food name'), name)
+    await userEvent.type(screen.getByPlaceholderText('Calories'), String(kcal))
     const form = screen.getByPlaceholderText('Fat (g)').parentElement
     await userEvent.click([...form.querySelectorAll('button')].find(b => b.textContent.includes('+ Add')))
-    await waitFor(() => expect(sb.queriesFor('calorie_logs').some(q => q.ops.some(o => o[0] === 'insert'))).toBe(true))
-    const insert = sb.queriesFor('calorie_logs').find(q => q.ops.some(o => o[0] === 'insert'))
-    expect(sb.op(insert, 'insert')[0]).toMatchObject({ date: '2026-10-23', total_calories: 300 })
+  }
+  const upserts = () => sb.queriesFor('calorie_logs').filter(q => sb.op(q, 'upsert')).map(q => sb.op(q, 'upsert'))
+
+  it('adds foods and saves today\'s log as one row per day, in order', async () => {
+    sb.set('nutrition_targets', { data: null, error: null })
+    sb.set('calorie_logs', q => sb.op(q, 'upsert') ? { data: { id: 'c1' }, error: null } : { data: sb.op(q, 'eq') ? null : [], error: null })
+    render(<P.Calories profile={profile} isPro onUpgrade={() => {}} onGoToPlan={() => {}} />)
+    await addFood('Oats', 300)
+    await addFood('Banana', 100)
+    await waitFor(() => expect(upserts()).toHaveLength(2))
+    const [[first, opts], [second]] = upserts()
+    expect(opts).toEqual({ onConflict: 'user_id,date' })
+    expect(first).toMatchObject({ date: '2026-10-23', total_calories: 300 })
+    expect(second).toMatchObject({ date: '2026-10-23', total_calories: 400 })
     expect(screen.getByText('Oats')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+  it('tells the user when saving fails', async () => {
+    sb.set('nutrition_targets', { data: null, error: null })
+    sb.set('calorie_logs', q => sb.op(q, 'upsert') ? { data: null, error: { message: 'offline' } } : { data: sb.op(q, 'eq') ? null : [], error: null })
+    render(<P.Calories profile={profile} isPro onUpgrade={() => {}} onGoToPlan={() => {}} />)
+    await addFood('Oats', 300)
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't save your food log")
   })
   it('shows the upgrade screen to free users', async () => {
     const onUpgrade = vi.fn()
@@ -127,7 +143,7 @@ describe('Library', () => {
 
 describe('Group', () => {
   it('shows host and join options and rejects an unknown room code', async () => {
-    sb.set('group_sessions', { data: [], error: null })
+    sb.supabase.rpc.mockResolvedValue({ data: null, error: { code: 'P0002', message: 'Room not found' } })
     render(<P.Group session={{ name: 'Sam', email: USER.email }} />)
     expect(screen.getByText('Host a Session')).toBeInTheDocument()
     await userEvent.type(screen.getByPlaceholderText('ABC123'), 'ZZZZZZ')
@@ -164,10 +180,10 @@ describe('ProfileModal', () => {
     expect(sb.supabase.auth.signOut).toHaveBeenCalled()
   })
 
-  describe('known bugs (privacy)', () => {
+  describe('regression: fixed in the October 2026 review', () => {
     // Signing out leaves the in-progress workout and the push subscription on the device,
     // so the next person to sign in sees it and the first user's reminders keep arriving.
-    it.fails('BUG: signing out clears the saved in-progress workout', async () => {
+    it('signing out clears the saved in-progress workout', async () => {
       localStorage.setItem('athrion_workout', JSON.stringify({ name: 'Secret', startTime: 1 }))
       render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={profile} isPro={false} theme="dark" onToggleTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
       await userEvent.click(screen.getByText('Sign Out'))
@@ -203,11 +219,11 @@ describe('App shell', () => {
     expect(screen.queryByText('Rest & Recovery')).toBeNull()
   })
 
-  describe('known bugs', () => {
+  describe('regression: fixed in the October 2026 review', () => {
     // onAuthStateChange hands back a new session object on every token refresh (about
     // hourly, and when the tab regains focus). App treats that as a new login: it shows
     // the Loading screen and remounts the page, so any open screen state is lost.
-    it.fails('BUG: a token refresh does not reload the profile or remount the page', async () => {
+    it('a token refresh does not reload the profile or remount the page', async () => {
       signedIn()
       render(<P.App />)
       await screen.findByText('Rest & Recovery')

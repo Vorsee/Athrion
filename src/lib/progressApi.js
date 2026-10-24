@@ -1,4 +1,5 @@
 import { supabase } from './supabase.js'
+import { localDateKey } from './data.js'
 
 async function userId() {
   const { data: { user } } = await supabase.auth.getUser()
@@ -36,7 +37,7 @@ export async function deleteMeasurement(id) {
 // ── Daily health (manual, HealthKit, Health Connect) ──────────────────────────
 
 export async function fetchDailyHealth(days = 30) {
-  const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10)
+  const since = localDateKey(Date.now() - days * 86400000)
   const { data, error } = await supabase
     .from('daily_health')
     .select('*')
@@ -149,5 +150,5 @@ export async function fetchCheckinWeights() {
     .order('created_at', { ascending: false })
     .limit(30)
   if (error) throw error
-  return data.map(c => ({ date: c.created_at.slice(0, 10), weight_lb: c.weight_lb }))
+  return data.map(c => ({ date: localDateKey(c.created_at), weight_lb: c.weight_lb }))
 }

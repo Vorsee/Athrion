@@ -34,11 +34,10 @@ export default async function handler(req, res) {
       cancel_at_period_end: true,
     })
 
-    res.json({
-      success: true,
-      cancel_at: new Date(updated.cancel_at * 1000).toISOString(),
-      period_end: new Date(updated.current_period_end * 1000).toISOString(),
-    })
+    // Newer Stripe API versions report the period end on the subscription items
+    const periodEnd = updated.current_period_end ?? updated.items?.data?.[0]?.current_period_end ?? updated.cancel_at
+    const iso = secs => (secs ? new Date(secs * 1000).toISOString() : null)
+    res.json({ success: true, cancel_at: iso(updated.cancel_at ?? periodEnd), period_end: iso(periodEnd) })
   } catch (err) {
     console.error('Cancel subscription error:', err.message)
     res.status(500).json({ error: err.message })

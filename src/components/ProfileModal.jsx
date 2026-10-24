@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { cancelSubscription } from '../lib/stripe.js'
+import { signOut } from '../lib/session.js'
 
 const QUOTES = [
   { text: "The only bad workout is the one that didn't happen.", author: "Unknown" },
@@ -321,7 +322,7 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
                 <span>Edit Body Stats</span>
               </button>
 
-              <button onClick={() => supabase.auth.signOut()}
+              <button onClick={() => signOut()}
                 className="w-full py-3.5 rounded-xl text-sm font-semibold text-red-500 hover:text-red-400 bg-[#1a1a1a] border border-[#262626] hover:border-red-900/40 transition-all">
                 Sign Out
               </button>

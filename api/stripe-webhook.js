@@ -45,22 +45,21 @@ export default async function handler(req, res) {
 
   if (type === 'customer.subscription.updated') {
     const sub = data.object
-    // Mark as free if subscription is no longer active
-    if (sub.status !== 'active' && sub.status !== 'trialing') {
-      const { data: row } = await supabase.from('subscriptions')
-        .select('user_id').eq('stripe_subscription_id', sub.id).single()
-      if (row) {
-        await supabase.from('subscriptions')
-          .update({ status: 'free', updated_at: new Date().toISOString() })
-          .eq('user_id', row.user_id)
-      }
+    // Follow Stripe both ways: lapsed → free, paid again → pro
+    const status = sub.status === 'active' || sub.status === 'trialing' ? 'pro' : 'free'
+    const { data: row } = await supabase.from('subscriptions')
+      .select('user_id').eq('stripe_subscription_id', sub.id).maybeSingle()
+    if (row) {
+      await supabase.from('subscriptions')
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq('user_id', row.user_id)
     }
   }
 
   if (type === 'customer.subscription.deleted') {
     const sub = data.object
     const { data: row } = await supabase.from('subscriptions')
-      .select('user_id').eq('stripe_subscription_id', sub.id).single()
+      .select('user_id').eq('stripe_subscription_id', sub.id).maybeSingle()
     if (row) {
       await supabase.from('subscriptions')
         .update({ status: 'free', stripe_subscription_id: null, updated_at: new Date().toISOString() })

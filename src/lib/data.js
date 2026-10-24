@@ -22,8 +22,13 @@ export function userKey(suffix) {
   const s = getSession()
   return `athrion_${s?.email}_${suffix}`
 }
+// YYYY-MM-DD in the user's own timezone (toISOString would give the UTC date)
+export function localDateKey(d = new Date()) {
+  const date = new Date(d)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
 export function todayKey() {
-  return new Date().toISOString().split('T')[0]
+  return localDateKey()
 }
 export function getStored(key, fallback = null) {
   try { return JSON.parse(localStorage.getItem(key)) ?? fallback } catch { return fallback }

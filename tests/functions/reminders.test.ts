@@ -46,14 +46,14 @@ describe('chooseMessage', () => {
     expect(chooseMessage(plan, ['2026-10-14T10:00:00Z'], { streak_warnings: false }, sunday, sun)).toBeNull()
   })
 
-  describe('known bugs', () => {
+  describe('regression: fixed in the October 2026 review', () => {
     // "Trained today" means "in the last 16 hours", so last night's late workout
     // silences this morning's reminder.
-    it.fails('BUG: a workout late yesterday does not cancel today\'s reminder', () => {
+    it('a workout late yesterday does not cancel today\'s reminder', () => {
       const morning = { date: '2026-10-23', hour: 8, weekday: 'Friday' }
       const at8am = new Date('2026-10-23T12:00:00Z') // 8am New York
       const lastNight = '2026-10-23T02:00:00Z'       // 10pm New York, Thursday
-      expect(chooseMessage(plan, [lastNight], {}, morning, at8am)).not.toBeNull()
+      expect(chooseMessage(plan, [lastNight], { timezone: 'America/New_York' }, morning, at8am)).not.toBeNull()
     })
   })
 })

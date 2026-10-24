@@ -421,7 +421,7 @@ export function makeFallbackPlan(fp: any, nt: any): any {
     const idx = trainingDays.indexOf(day)
     if (idx !== -1) {
       const session = sessions[idx % sessions.length]
-      const exercises = session.exercises
+      const all = session.exercises
         .map(e => ({
           name: useGym ? e.gym : e.home,
           sets: beginner ? Math.max(e.sets - 1, 1) : e.sets,
@@ -433,7 +433,9 @@ export function makeFallbackPlan(fp: any, nt: any): any {
           harderVersion: e.harder,
           equipment: useGym ? 'Gym' : 'Bodyweight / home',
         }))
-        .filter(e => !avoid.some((a: string) => e.name.toLowerCase().includes(a)))
+      const liked = all.filter(e => !avoid.some((a: string) => e.name.toLowerCase().includes(a)))
+      // If the dislikes would empty the session, keep it rather than leave a workout day with nothing in it
+      const exercises = liked.length ? liked : all
       return {
         day, type: 'workout', title: session.title,
         sessionMode: fp.sessionPreference === 'group' ? 'group' : 'solo_or_group',

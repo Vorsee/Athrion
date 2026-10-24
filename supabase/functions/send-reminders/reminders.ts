@@ -28,7 +28,10 @@ export function streakBeforeThisWeek(dates: string[], now = new Date()) {
 
 // The reminder to send today, or null when there's no reason to send one
 export function chooseMessage(planData: any, dates: string[], settings: any, local: ReturnType<typeof localParts>, now = new Date()) {
-  const trainedToday = dates.some(d => now.getTime() - new Date(d).getTime() < 16 * 3600000)
+  // Trained on today's date in the user's own timezone (a late workout last night doesn't count)
+  const tz = settings.timezone || 'UTC'
+  const localDate = (d: string) => { try { return localParts(tz, new Date(d)).date } catch { return localParts('UTC', new Date(d)).date } }
+  const trainedToday = dates.some(d => localDate(d) === local.date)
 
   const today = planData?.weeklySchedule?.find((d: any) => d.day === local.weekday)
   if (today?.type === 'workout' && !trainedToday) {

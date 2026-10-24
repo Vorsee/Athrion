@@ -68,10 +68,10 @@ describe('makeFallbackPlan', () => {
     expect(plan.safety.warnings[0]).toContain('left knee')
   })
 
-  describe('known bugs', () => {
+  describe('regression: fixed in the October 2026 review', () => {
     // A broad dislike can filter a whole session away, leaving a workout day with no
     // exercises, which isValidPlan itself rejects.
-    it.fails('BUG: disliking common words still leaves exercises on every workout day', () => {
+    it('disliking common words still leaves exercises on every workout day', () => {
       const plan = makeFallbackPlan({ ...fp, dislikedExercises: 'press, row, squat, deadlift, curl, raise, pull, push, lunge, fly' }, nt)
       expect(isValidPlan(plan)).toBe(true)
     })

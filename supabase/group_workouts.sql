@@ -59,15 +59,16 @@ CREATE POLICY "users can join"
   ON public.group_participants FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
+-- Membership check that bypasses RLS, so policies on group_participants don't recurse
+CREATE OR REPLACE FUNCTION public.is_group_participant(p_session_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (SELECT 1 FROM public.group_participants WHERE session_id = p_session_id AND user_id = auth.uid());
+$$;
+
 CREATE POLICY "participants can read room members"
   ON public.group_participants FOR SELECT
   USING (
-    user_id = auth.uid() OR
-    EXISTS (
-      SELECT 1 FROM public.group_participants gp
-      WHERE gp.session_id = session_id
-        AND gp.user_id = auth.uid()
-    )
+    user_id = auth.uid() OR public.is_group_participant(session_id)
   );
 
 -- group_sets: log your own; read all sets in sessions you're part of
@@ -77,13 +78,7 @@ CREATE POLICY "users can log own sets"
 
 CREATE POLICY "participants can read all sets"
   ON public.group_sets FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.group_participants gp
-      WHERE gp.session_id = session_id
-        AND gp.user_id = auth.uid()
-    )
-  );
+  USING (public.is_group_participant(session_id));
 
 -- ── Enable Realtime ───────────────────────────────────────────────────────────
 -- In Supabase dashboard: Database → Replication → enable realtime for:

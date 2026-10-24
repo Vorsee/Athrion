@@ -44,12 +44,14 @@ export default function App() {
   }, [session?.email])
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(toProfile(session))
+    // Token refreshes fire auth events with a new session object for the same user;
+    // keep the existing state then, or the whole app reloads and loses the open screen
+    const applySession = s => setSession(prev => {
+      const next = toProfile(s)
+      return prev && next && prev.email === next.email && prev.name === next.name ? prev : next
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(toProfile(session))
-    })
+    supabase.auth.getSession().then(({ data: { session } }) => applySession(session))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => applySession(session))
     // Handle Stripe redirect back after successful checkout
     const params = new URLSearchParams(window.location.search)
     if (params.get('upgraded') === '1') {

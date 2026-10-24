@@ -142,26 +142,15 @@ export async function fetchTodayCalorieLog(date) {
   return data
 }
 
-export async function saveTodayCalorieLog(date, foods, existingId) {
+// One log per user per day (unique user_id, date), so saving is an upsert
+export async function saveTodayCalorieLog(date, foods) {
   const total_calories = foods.reduce((sum, f) => sum + (f.kcal || 0), 0)
-
-  if (existingId) {
-    const { data, error } = await supabase
-      .from('calorie_logs')
-      .update({ foods, total_calories })
-      .eq('id', existingId)
-      .select()
-      .single()
-    if (error) throw error
-    return data
-  } else {
-    const { data: { user } } = await supabase.auth.getUser()
-    const { data, error } = await supabase
-      .from('calorie_logs')
-      .insert({ user_id: user.id, date, foods, total_calories })
-      .select()
-      .single()
-    if (error) throw error
-    return data
-  }
+  const { data: { user } } = await supabase.auth.getUser()
+  const { data, error } = await supabase
+    .from('calorie_logs')
+    .upsert({ user_id: user.id, date, foods, total_calories }, { onConflict: 'user_id,date' })
+    .select()
+    .single()
+  if (error) throw error
+  return data
 }

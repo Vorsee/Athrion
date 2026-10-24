@@ -38,27 +38,14 @@ export async function createGroupSession({ exercises, totalSets, restSecs, displ
   return session
 }
 
+// Rooms are private; the join_group_session function looks the code up and adds the user
 export async function joinGroupSession(code, displayName) {
-  const { data: sessions, error } = await supabase
-    .from('group_sessions')
-    .select('*')
-    .eq('code', code.toUpperCase())
-    .in('status', ['lobby', 'active'])
-
-  if (error) throw error
-  if (!sessions || sessions.length === 0) throw new Error('Room not found — check the code and try again')
-
-  const session = sessions[0]
-  const { data: { user } } = await supabase.auth.getUser()
-
-  const { error: pErr } = await supabase
-    .from('group_participants')
-    .insert({ session_id: session.id, user_id: user.id, display_name: displayName })
-
-  // Ignore if already joined (duplicate key)
-  if (pErr && pErr.code !== '23505') throw pErr
-
-  return session
+  const { data, error } = await supabase.rpc('join_group_session', {
+    p_code: code.trim().toUpperCase(),
+    p_display_name: displayName,
+  })
+  if (error) throw new Error(error.code === 'P0002' ? 'Room not found — check the code and try again' : error.message)
+  return data
 }
 
 export async function updateSessionExercises(sessionId, exercises, totalSets, restSecs) {

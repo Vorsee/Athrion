@@ -4,3 +4,10 @@ dist/
 .env.local
 .DS_Store
 coverage/
+
+# Local tool state and old copies; never commit
+.vercel/
+.claude/
+supabase/.temp/
+bin/
+._*

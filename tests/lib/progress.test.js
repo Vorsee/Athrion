@@ -80,12 +80,12 @@ describe('parseRepRange', () => {
     expect(parseRepRange(undefined)).toEqual({ minReps: 8, maxReps: 12 })
   })
 
-  describe('known bugs', () => {
+  describe('regression: fixed in the October 2026 review', () => {
     // The timed-target check /s|min|sec/ matches any "s", so "6-8 reps" is treated as timed
-    it.fails('BUG: "6-8 reps" should parse as 6-8', () => {
+    it('"6-8 reps" should parse as 6-8', () => {
       expect(parseRepRange('6-8 reps')).toEqual({ minReps: 6, maxReps: 8 })
     })
-    it.fails('BUG: "10 each side" should parse as 10', () => {
+    it('"10 each side" should parse as 10', () => {
       expect(parseRepRange('10 each side')).toEqual({ minReps: 10, maxReps: 10 })
     })
   })
@@ -124,10 +124,10 @@ describe('weeklyStreak', () => {
     expect(weeklyStreak([])).toBe(0)
   })
 
-  describe('known bugs', () => {
+  describe('regression: fixed in the October 2026 review', () => {
     // Week keys are local midnights, but the loop steps back a fixed 7×24h, so it misses
     // the previous Monday whenever a daylight-saving change falls in between.
-    it.fails('BUG: a streak survives the November daylight-saving change', () => {
+    it('a streak survives the November daylight-saving change', () => {
       vi.useFakeTimers({ toFake: ['Date'] })
       vi.setSystemTime(new Date('2026-11-04T12:00:00-05:00')) // week after DST ends (Nov 1)
       const h = [at('2026-11-02T10:00:00-05:00'), at('2026-10-27T10:00:00-04:00'), at('2026-10-20T10:00:00-04:00')]

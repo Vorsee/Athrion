@@ -30,6 +30,7 @@ beforeEach(async () => {
   vi.clearAllMocks()
   process.env.STRIPE_SECRET_KEY = 'sk_test_x'
   process.env.STRIPE_WEBHOOK_SECRET = 'whsec_x'
+  process.env.STRIPE_PRICE_ID = 'price_pro'
   process.env.SUPABASE_URL = 'https://test.supabase.co'
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'service'
   checkout = (await import('../../api/create-checkout.js')).default
@@ -38,37 +39,46 @@ beforeEach(async () => {
 })
 
 describe('POST /api/create-checkout', () => {
-  it('creates a subscription checkout tied to the user', async () => {
+  const auth = { authorization: 'Bearer jwt-token' }
+  it('creates a Pro checkout for the signed-in user, taken from the token', async () => {
     stripe.checkout.sessions.create.mockResolvedValue({ url: 'https://checkout.stripe.com/s' })
     const r = res()
-    await checkout(req({ body: { user_id: 'user-1', price_id: 'price_pro' } }), r)
+    await checkout(req({ body: { user_id: 'someone-else', price_id: 'price_pro' }, headers: auth }), r)
     expect(r.body).toEqual({ url: 'https://checkout.stripe.com/s' })
-    expect(stripe.checkout.sessions.create.mock.calls[0][0]).toMatchObject({ mode: 'subscription', client_reference_id: 'user-1', line_items: [{ price: 'price_pro', quantity: 1 }] })
+    expect(sb.supabase.auth.getUser).toHaveBeenCalledWith('jwt-token')
+    expect(stripe.checkout.sessions.create.mock.calls[0][0]).toMatchObject({
+      mode: 'subscription', client_reference_id: 'user-1', metadata: { user_id: 'user-1' }, customer_email: 'sam@example.com',
+      line_items: [{ price: 'price_pro', quantity: 1 }],
+    })
   })
-  it('rejects other methods, bad JSON and missing fields', async () => {
+  it('uses the configured price when none is sent', async () => {
+    stripe.checkout.sessions.create.mockResolvedValue({ url: 'x' })
+    const r = res(); await checkout(req({ headers: auth }), r)
+    expect(stripe.checkout.sessions.create.mock.calls[0][0].line_items[0].price).toBe('price_pro')
+  })
+  it('rejects other methods and bad JSON', async () => {
     let r = res(); await checkout(req({ method: 'GET' }), r); expect(r.statusCode).toBe(405)
-    r = res(); await checkout(req({ body: '{oops' }), r); expect(r.statusCode).toBe(400)
-    r = res(); await checkout(req({ body: { user_id: 'u' } }), r); expect(r.statusCode).toBe(400)
+    r = res(); await checkout(req({ body: '{oops', headers: auth }), r); expect(r.statusCode).toBe(400)
   })
   it('returns 500 when Stripe fails', async () => {
     stripe.checkout.sessions.create.mockRejectedValue(new Error('Stripe down'))
-    const r = res(); await checkout(req({ body: { user_id: 'u', price_id: 'p' } }), r)
+    const r = res(); await checkout(req({ body: {}, headers: auth }), r)
     expect(r.statusCode).toBe(500)
   })
 
-  describe('known bugs (security)', () => {
-    // Anyone can call this without signing in and name any user and any price in the
-    // Stripe account; the webhook then marks that user Pro.
-    it.fails('BUG: requires the caller to be signed in', async () => {
-      stripe.checkout.sessions.create.mockResolvedValue({ url: 'x' })
-      const r = res(); await checkout(req({ body: { user_id: 'someone-else', price_id: 'price_pro' } }), r)
+  describe('regression: fixed in the October 2026 review', () => {
+    it('requires the caller to be signed in', async () => {
+      let r = res(); await checkout(req({ body: { user_id: 'someone-else', price_id: 'price_pro' } }), r)
       expect(r.statusCode).toBe(401)
+      sb.supabase.auth.getUser.mockResolvedValueOnce({ data: { user: null }, error: { message: 'bad jwt' } })
+      r = res(); await checkout(req({ body: {}, headers: { authorization: 'Bearer forged' } }), r)
+      expect(r.statusCode).toBe(401)
+      expect(stripe.checkout.sessions.create).not.toHaveBeenCalled()
     })
-    it.fails('BUG: only accepts the configured Pro price', async () => {
-      process.env.STRIPE_PRICE_ID = 'price_pro'
-      stripe.checkout.sessions.create.mockResolvedValue({ url: 'x' })
-      const r = res(); await checkout(req({ body: { user_id: 'u', price_id: 'price_cheap' } }), r)
+    it('only accepts the configured Pro price', async () => {
+      const r = res(); await checkout(req({ body: { price_id: 'price_cheap' }, headers: auth }), r)
       expect(r.statusCode).toBe(400)
+      expect(stripe.checkout.sessions.create).not.toHaveBeenCalled()
     })
   })
 })
@@ -93,11 +103,11 @@ describe('POST /api/cancel-subscription', () => {
     expect(r.body).toMatchObject({ success: true, period_end: '2027-01-01T00:00:00.000Z' })
   })
 
-  describe('known bugs', () => {
+  describe('regression: fixed in the October 2026 review', () => {
     // Since Stripe API 2025-03-31 (used by stripe-node 22), current_period_end moved to
     // subscription items. new Date(NaN).toISOString() throws, so the user sees an error
     // even though the cancellation already went through.
-    it.fails('BUG: succeeds with the current Stripe API response shape', async () => {
+    it('succeeds with the current Stripe API response shape', async () => {
       sb.set('subscriptions', { data: { status: 'pro', stripe_subscription_id: 'sub_1' } })
       stripe.subscriptions.update.mockResolvedValue({ cancel_at: 1798761600, items: { data: [{ current_period_end: 1798761600 }] } })
       const r = res(); await cancel(req({ headers: auth }), r)
@@ -140,10 +150,10 @@ describe('POST /api/stripe-webhook', () => {
     expect(sb.op(sb.queriesFor('subscriptions').at(-1), 'update')[0]).toMatchObject({ status: 'free', stripe_subscription_id: null })
   })
 
-  describe('known bugs', () => {
+  describe('regression: fixed in the October 2026 review', () => {
     // Only the downgrade direction is handled: a past_due subscription that is paid
     // again goes back to "active" in Stripe but the user stays "free" in the app.
-    it.fails('BUG: restores Pro when a subscription becomes active again', async () => {
+    it('restores Pro when a subscription becomes active again', async () => {
       sb.set('subscriptions', { data: { user_id: 'user-1' }, error: null })
       event('customer.subscription.updated', { id: 'sub_1', status: 'active' })
       await webhook(req({ body: '{}', headers: sig }), res())

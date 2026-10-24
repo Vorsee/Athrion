@@ -10,10 +10,10 @@ import {
 } from '../lib/progressApi.js'
 import { buildExerciseHistory, getRecords, e1rm, weeklyStreak } from '../lib/progress.js'
 import { BADGES, computeEarnedBadges } from '../lib/badges.js'
-import { getExerciseIcon } from '../lib/data.js'
+import { getExerciseIcon, todayKey } from '../lib/data.js'
 import { healthSyncAvailable, syncHealthData } from '../lib/health.js'
 
-const today = () => new Date().toISOString().slice(0, 10)
+const today = () => todayKey()
 const fmtDate = d => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 
 function Card({ children, className = '' }) {

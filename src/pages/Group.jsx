@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Icon } from '@iconify/react'
-import { EXERCISES, MUSCLES, getExerciseIcon } from '../lib/data.js'
+import { EXERCISES, MUSCLES, getExerciseIcon, todayKey } from '../lib/data.js'
 import {
   createGroupSession,
   joinGroupSession,
@@ -306,7 +306,7 @@ export default function Group({ session }) {
     const formattedSets = mySets.map(s => ({ ex: s.exercise, set: s.set_num, weight: s.weight, reps: s.reps }))
     try {
       await saveWorkoutEntry({
-        date:     new Date().toISOString().split('T')[0],
+        date:     todayKey(),
         name,
         duration: `${duration}min`,
         volume,

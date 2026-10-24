@@ -73,17 +73,20 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 401, headers: cors })
     }
 
-    // Rate limit: allow at most 1 generation per 30 seconds
-    const { data: recent } = await supabase
-      .from('fitness_plans')
-      .select('created_at')
+    // Rate limit: one generation per user per minute. The conditional update is atomic,
+    // so parallel requests can't all pass the check before any of them saves a plan.
+    const cutoff = new Date(Date.now() - 60_000).toISOString()
+    const { data: claimed, error: claimError } = await supabase
+      .from('fitness_profiles')
+      .update({ plan_requested_at: new Date().toISOString() })
       .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    if (recent) {
-      const msSinceLast = Date.now() - new Date(recent.created_at).getTime()
-      if (msSinceLast < 30_000) {
+      .or(`plan_requested_at.is.null,plan_requested_at.lt.${cutoff}`)
+      .select('user_id')
+    if (claimError) throw new Error(`Rate limit check failed: ${claimError.message}`)
+    if (!claimed?.length) {
+      // No row claimed: either generating too often, or there's no profile row yet
+      const { data: profileRow } = await supabase.from('fitness_profiles').select('user_id').eq('user_id', user.id).maybeSingle()
+      if (profileRow) {
         return new Response(JSON.stringify({ error: 'Please wait before generating another plan.' }), { status: 429, headers: cors })
       }
     }

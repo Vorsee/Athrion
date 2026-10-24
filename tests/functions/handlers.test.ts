@@ -23,12 +23,16 @@ beforeEach(() => { sb.reset(); anthropic.result = null; anthropic.calls.length =
 
 describe('generate-fitness-plan', () => {
   const auth = { Authorization: 'Bearer user-jwt' }
-  function db({ recent = null, active = null }: any = {}) {
+  // claimed: whether the per-user rate-limit lock is free
+  function db({ active = null, claimed = true }: any = {}) {
+    sb.set('fitness_profiles', (q: any) => q.ops.some((o: any) => o[0] === 'update')
+      ? { data: claimed ? [{ user_id: 'user-1' }] : [], error: null }
+      : { data: { user_id: 'user-1' }, error: null })
     sb.set('fitness_plans', (q: any) => {
       if (q.ops.some((o: any) => o[0] === 'insert')) return { data: { id: 'new', plan_data: sb.op(q, 'insert')[0].plan_data, ai_model: sb.op(q, 'insert')[0].ai_model }, error: null }
       if (q.ops.some((o: any) => o[0] === 'update')) return { data: null, error: null }
       if (q.ops.some((o: any) => o[0] === 'eq' && o[1] === 'status')) return { data: active, error: null }
-      return { data: recent, error: null }
+      return { data: null, error: null }
     })
   }
 
@@ -44,10 +48,20 @@ describe('generate-fitness-plan', () => {
     sb.supabase.auth.getUser.mockResolvedValueOnce({ data: { user: null }, error: { message: 'bad' } })
     expect((await h(post({ fitnessProfile: fp, nutritionTargets: nt }, auth))).status).toBe(401)
   })
-  it('rate-limits to one plan per 30 seconds', async () => {
-    db({ recent: { created_at: new Date().toISOString() } })
+  it('rate-limits with an atomic per-user lock (one plan a minute)', async () => {
+    db({ claimed: false })
     const h = await load('generate-fitness-plan')
     expect((await h(post({ fitnessProfile: fp, nutritionTargets: nt }, auth))).status).toBe(429)
+    expect(anthropic.calls).toHaveLength(0)
+    const claim = sb.queriesFor('fitness_profiles').find((q: any) => sb.op(q, 'update'))
+    expect(sb.op(claim, 'or')[0]).toMatch(/^plan_requested_at\.is\.null,plan_requested_at\.lt\./)
+  })
+  it('lets a user without a profile row generate their first plan', async () => {
+    db({ claimed: false })
+    sb.set('fitness_profiles', (q: any) => ({ data: q.ops.some((o: any) => o[0] === 'update') ? [] : null, error: null }))
+    anthropic.result = { stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(makeFallbackPlan(fp, nt)) }] }
+    const h = await load('generate-fitness-plan')
+    expect((await h(post({ fitnessProfile: fp, nutritionTargets: nt }, auth))).status).toBe(200)
   })
   it('saves a valid Claude plan with the calculator nutrition, archiving the old one', async () => {
     db()
@@ -111,25 +125,45 @@ describe('send-reminders', () => {
 })
 
 describe('analyze-meal', () => {
-  it('forwards the photo to Claude and returns its answer', async () => {
+  const auth = { Authorization: 'Bearer user-jwt' }
+  const photo = { base64: 'aGk=', mediaType: 'image/png' }
+  function proUser(status = 'pro') { sb.set('subscriptions', { data: { status }, error: null }) }
+
+  it('forwards a Pro user\'s photo to Claude and returns its answer', async () => {
+    proUser()
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ content: [{ type: 'text', text: '{}' }] })))
     vi.stubGlobal('fetch', fetchMock)
     const h = await load('analyze-meal')
-    const res = await h(post({ base64: 'aGk=', mediaType: 'image/png' }, { Authorization: 'Bearer user-jwt' }))
+    const res = await h(post(photo, auth))
+    vi.unstubAllGlobals()
     expect(res.status).toBe(200)
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content[0].source.media_type).toBe('image/png')
+  })
+  it('requires Pro, a supported image type and a size under 5 MB', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const h = await load('analyze-meal')
+    proUser('free')
+    expect((await h(post(photo, auth))).status).toBe(403)
+    proUser()
+    expect((await h(post({ base64: 'aGk=', mediaType: 'application/pdf' }, auth))).status).toBe(400)
+    expect((await h(post({ base64: 'a'.repeat(7_000_001), mediaType: 'image/jpeg' }, auth))).status).toBe(413)
+    expect((await h(post({ mediaType: 'image/jpeg' }, auth))).status).toBe(400)
     vi.unstubAllGlobals()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  describe('known bugs (security)', () => {
-    // No user check, no Pro check, no size limit: the public anon key is enough to spend
-    // the Anthropic budget. Confirmed against the live function.
-    it.fails('BUG: rejects callers who are not signed in', async () => {
-      vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')))
+  describe('regression: fixed in the October 2026 review', () => {
+    it('rejects callers who are not signed in', async () => {
+      const fetchMock = vi.fn()
+      vi.stubGlobal('fetch', fetchMock)
       const h = await load('analyze-meal')
-      const res = await h(post({ base64: 'aGk=', mediaType: 'image/png' }, { Authorization: 'Bearer anon' }))
+      expect((await h(post(photo))).status).toBe(401)
+      // The public anon key is a valid JWT but not a user
+      sb.supabase.auth.getUser.mockResolvedValueOnce({ data: { user: null }, error: { message: 'no user' } })
+      expect((await h(post(photo, { Authorization: 'Bearer anon' }))).status).toBe(401)
       vi.unstubAllGlobals()
-      expect(res.status).toBe(401)
+      expect(fetchMock).not.toHaveBeenCalled()
     })
   })
 })

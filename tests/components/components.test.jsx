@@ -63,9 +63,9 @@ describe('LineChart', () => {
     expect(rows).toHaveLength(3) // header + 2 valid points; null skipped
   })
 
-  describe('known bugs', () => {
+  describe('regression: fixed in the October 2026 review', () => {
     // Date-only strings parse as UTC midnight, so in the Americas every label shows the day before
-    it.fails('BUG: a weigh-in dated 2026-10-23 is labelled Oct 23', async () => {
+    it('a weigh-in dated 2026-10-23 is labelled Oct 23', async () => {
       render(<LineChart data={[{ date: '2026-10-22', value: 181 }, { date: '2026-10-23', value: 180 }]} />)
       await userEvent.click(screen.getByText('Show as table'))
       expect(screen.getByRole('table')).toHaveTextContent('Oct 23')

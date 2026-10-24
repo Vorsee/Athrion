@@ -14,7 +14,9 @@ function niceTicks(min, max, count = 3) {
   return ticks
 }
 
-const fmtDate = d => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+// A bare YYYY-MM-DD is a calendar day: read it as local midnight, not UTC (which shows the day before in the Americas)
+const asDate = d => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(`${d}T00:00:00`) : new Date(d))
+const fmtDate = d => asDate(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 
 /**
  * Single-series line chart. Hover or drag shows a crosshair and tooltip.
@@ -37,7 +39,7 @@ export default function LineChart({ data, unit = '', height = 170, label = 'Valu
 
   const points = [...(data || [])]
     .filter(d => d.value != null && !Number.isNaN(Number(d.value)))
-    .map(d => ({ t: new Date(d.date).getTime(), date: d.date, value: Number(d.value) }))
+    .map(d => ({ t: asDate(d.date).getTime(), date: d.date, value: Number(d.value) }))
     .sort((a, b) => a.t - b.t)
 
   if (points.length < 2) {
