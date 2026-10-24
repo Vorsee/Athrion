@@ -24,7 +24,8 @@ beforeEach(() => { sb.reset(); anthropic.result = null; anthropic.calls.length =
 describe('generate-fitness-plan', () => {
   const auth = { Authorization: 'Bearer user-jwt' }
   // claimed: whether the per-user rate-limit lock is free
-  function db({ active = null, claimed = true }: any = {}) {
+  function db({ active = null, claimed = true, status = 'pro' }: any = {}) {
+    sb.set('subscriptions', { data: { status }, error: null })
     sb.set('fitness_profiles', (q: any) => q.ops.some((o: any) => o[0] === 'update')
       ? { data: claimed ? [{ user_id: 'user-1' }] : [], error: null }
       : { data: { user_id: 'user-1' }, error: null })
@@ -47,6 +48,13 @@ describe('generate-fitness-plan', () => {
     expect((await h(post({ fitnessProfile: fp }, auth))).status).toBe(400)
     sb.supabase.auth.getUser.mockResolvedValueOnce({ data: { user: null }, error: { message: 'bad' } })
     expect((await h(post({ fitnessProfile: fp, nutritionTargets: nt }, auth))).status).toBe(401)
+  })
+  it('refuses free users without calling Claude', async () => {
+    db({ status: 'free' })
+    const h = await load('generate-fitness-plan')
+    const res = await h(post({ fitnessProfile: fp, nutritionTargets: nt }, auth))
+    expect(res.status).toBe(403)
+    expect(anthropic.calls).toHaveLength(0)
   })
   it('rate-limits with an atomic per-user lock (one plan a minute)', async () => {
     db({ claimed: false })

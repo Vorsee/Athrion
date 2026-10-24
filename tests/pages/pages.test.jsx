@@ -29,12 +29,26 @@ beforeEach(() => {
     sb.set(t, { data: [], error: null })
 })
 
+describe('Plan — Pro lock', () => {
+  it('shows free users the real page with a sample plan behind a dark overlay and an upgrade button', async () => {
+    const onUpgrade = vi.fn()
+    render(<P.Plan isPro={false} onUpgrade={onUpgrade} profile={profile} onGoToWorkout={() => {}} onProfileChange={() => {}} />)
+    expect(screen.getByText('PRO FEATURE')).toBeInTheDocument()
+    expect(screen.getByText('Muscle Builder')).toBeInTheDocument() // sample plan rendered underneath
+    expect(screen.getByText('Weekly Schedule')).toBeInTheDocument()
+    expect(screen.getByText('Muscle Builder').closest('[inert]')).toHaveAttribute('aria-hidden', 'true')
+    expect(sb.queriesFor('fitness_plans')).toHaveLength(0) // no data loaded for free users
+    await userEvent.click(screen.getByText('Get Pro →'))
+    expect(onUpgrade).toHaveBeenCalled()
+  })
+})
+
 describe('Plan', () => {
   it('asks to create a plan when there is none', async () => {
     sb.set('fitness_plans', { data: null, error: null })
     sb.set('fitness_profiles', { data: fitnessProfile, error: null })
     sb.set('nutrition_targets', { data: null, error: null })
-    render(<P.Plan profile={profile} onGoToWorkout={() => {}} onProfileChange={() => {}} />)
+    render(<P.Plan isPro profile={profile} onGoToWorkout={() => {}} onProfileChange={() => {}} />)
     expect(await screen.findByText('No Active Plan')).toBeInTheDocument()
   })
   it('shows today as a rest day with Train Anyway, and the weekly schedule', async () => {
@@ -42,7 +56,7 @@ describe('Plan', () => {
     sb.set('fitness_profiles', { data: fitnessProfile, error: null })
     sb.set('nutrition_targets', { data: { calorie_target: 2500, protein_grams: 180, carb_grams: 280, fat_grams: 70 }, error: null })
     const go = vi.fn()
-    render(<P.Plan profile={profile} onGoToWorkout={go} onProfileChange={() => {}} />)
+    render(<P.Plan isPro profile={profile} onGoToWorkout={go} onProfileChange={() => {}} />)
     expect(await screen.findByText('Weekly Schedule')).toBeInTheDocument()
     expect(screen.getByText('Today · Friday')).toBeInTheDocument()
     await userEvent.click(screen.getByText('Train Anyway →'))

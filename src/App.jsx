@@ -135,7 +135,7 @@ export default function App() {
     library: { onStartWorkout: handleStartFromLibrary },
     calories: { profile, isPro, onUpgrade: goUpgrade, onGoToPlan: () => setPage('plan') },
     group: { session },
-    plan: { onGoToWorkout: () => setPage('workout'), profile, onProfileChange: () => { refreshProfile(); refreshFitnessProfile() } },
+    plan: { isPro, onUpgrade: goUpgrade, onGoToWorkout: () => setPage('workout'), profile, onProfileChange: () => { refreshProfile(); refreshFitnessProfile() } },
   }
 
   const pages = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan, progress: Progress }

@@ -10,6 +10,7 @@ import {
 } from '../lib/fitnessApi.js'
 import { saveGoals } from '../lib/api.js'
 import { calculateNutritionTargets, GOAL_LABELS, GOAL_ICONS } from '../lib/nutrition.js'
+import { SAMPLE_PLAN } from '../lib/samplePlan.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -502,9 +503,66 @@ function GoalModal({ currentGoal, onClose, onConfirm }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Pro lock: the real page with a sample plan, dimmed behind an upgrade card
+// ─────────────────────────────────────────────────────────────────────────────
+function LockedPlan({ onUpgrade }) {
+  const plan = SAMPLE_PLAN
+  const planData = plan.plan_data
+  const todayData = planData.weeklySchedule.find(d => d.day === TODAY_NAME) ?? null
+  const noop = () => {}
+
+  return (
+    <div className="relative min-h-[70dvh]">
+      {/* The actual Plan page, non-interactive */}
+      <div aria-hidden="true" inert="" className="pointer-events-none select-none space-y-4 pt-2">
+        <div>
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="text-xl">{GOAL_ICONS[plan.primary_goal]}</span>
+            <div className="font-bebas text-2xl text-white tracking-wide leading-none">{planData.summary.planName}</div>
+          </div>
+          <div className="text-xs text-gray-600">
+            {plan.duration_weeks} weeks · {plan.training_days_per_week} days/week · {GOAL_LABELS[plan.primary_goal]}
+          </div>
+        </div>
+        {todayData && <TodayWorkout dayData={todayData} />}
+        <NutritionCard planNutrition={planData.nutrition} dbNutrition={null} />
+        <WeeklySchedule schedule={planData.weeklySchedule} onSwap={noop} />
+        <AdviceCard advice={planData.advice} />
+      </div>
+
+      {/* Dark overlay, with the card kept in view while scrolling */}
+      <div className="absolute inset-0 bg-black/75 rounded-2xl" />
+      <div className="absolute inset-0 px-4">
+        <div className="sticky top-[calc(var(--header-h)+env(safe-area-inset-top)+4rem)] pt-16">
+          <div className="bg-[#111] border border-[#2a2a2a] rounded-3xl p-7 w-full max-w-sm mx-auto text-center shadow-2xl">
+            <div className="w-14 h-14 rounded-2xl bg-neon/10 border border-neon/25 flex items-center justify-center mx-auto mb-4">
+              <span className="text-2xl">🔒</span>
+            </div>
+            <div className="font-bebas text-3xl tracking-wide mb-2">PRO FEATURE</div>
+            <p className="text-gray-400 text-sm leading-relaxed mb-5">
+              Get an AI training plan built for your goal, with nutrition targets, weekly check-ins and a plan that adapts to your progress.
+            </p>
+            <button onClick={onUpgrade}
+              className="w-full bg-neon text-black font-bold py-3.5 rounded-xl text-sm uppercase tracking-widest hover:shadow-[0_6px_24px_rgba(200,241,53,0.4)] transition-all">
+              Get Pro →
+            </button>
+            <div className="text-[10px] text-gray-600 mt-3">$5.99 / month · Cancel anytime</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Plan Page
 // ─────────────────────────────────────────────────────────────────────────────
-export default function Plan({ onGoToWorkout, profile, onProfileChange }) {
+export default function Plan({ isPro, onUpgrade, ...props }) {
+  if (!isPro) return <LockedPlan onUpgrade={onUpgrade} />
+  return <PlanPage {...props} />
+}
+
+function PlanPage({ onGoToWorkout, profile, onProfileChange }) {
   const [plan, setPlan]             = useState(undefined) // undefined=loading
   const [nutrition, setNutrition]   = useState(null)
   const [checkin, setCheckin]       = useState(null)
