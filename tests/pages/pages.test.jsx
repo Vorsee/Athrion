@@ -14,7 +14,7 @@ vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => false, 
 let P = {}
 beforeAll(async () => {
   vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-23T10:00:00-04:00') })
-  for (const name of ['Plan', 'Calories', 'Auth', 'Upgrade', 'Library', 'Group', 'Progress', 'Onboarding', 'FitnessOnboarding']) {
+  for (const name of ['Plan', 'Calories', 'Auth', 'Library', 'Group', 'Progress', 'Onboarding', 'FitnessOnboarding']) {
     P[name] = (await import(`../../src/pages/${name}.jsx`)).default
   }
   P.App = (await import('../../src/App.jsx')).default
@@ -33,9 +33,9 @@ describe('Plan — Pro lock', () => {
   it('shows free users the real page with a sample plan behind a dark overlay and an upgrade button', async () => {
     const onUpgrade = vi.fn()
     render(<P.Plan isPro={false} onUpgrade={onUpgrade} profile={profile} onGoToWorkout={() => {}} onProfileChange={() => {}} />)
-    expect(screen.getByText('PRO FEATURE')).toBeInTheDocument()
+    expect(screen.getByText('Unlock with Pro')).toBeInTheDocument()
     expect(screen.getByText('Muscle Builder')).toBeInTheDocument() // sample plan rendered underneath
-    expect(screen.getByText('Weekly Schedule')).toBeInTheDocument()
+    expect(screen.getByText('Weekly schedule')).toBeInTheDocument()
     expect(screen.getByText('Muscle Builder').closest('[inert]')).toHaveAttribute('aria-hidden', 'true')
     expect(sb.queriesFor('fitness_plans')).toHaveLength(0) // no data loaded for free users
     await userEvent.click(screen.getByText('Get Pro →'))
@@ -49,7 +49,7 @@ describe('Plan', () => {
     sb.set('fitness_profiles', { data: fitnessProfile, error: null })
     sb.set('nutrition_targets', { data: null, error: null })
     render(<P.Plan isPro profile={profile} onGoToWorkout={() => {}} onProfileChange={() => {}} />)
-    expect(await screen.findByText('No Active Plan')).toBeInTheDocument()
+    expect(await screen.findByText('No active plan')).toBeInTheDocument()
   })
   it('shows today as a rest day with Train Anyway, and the weekly schedule', async () => {
     sb.set('fitness_plans', { data: planRow, error: null })
@@ -57,11 +57,11 @@ describe('Plan', () => {
     sb.set('nutrition_targets', { data: { calorie_target: 2500, protein_grams: 180, carb_grams: 280, fat_grams: 70 }, error: null })
     const go = vi.fn()
     render(<P.Plan isPro profile={profile} onGoToWorkout={go} onProfileChange={() => {}} />)
-    expect(await screen.findByText('Weekly Schedule')).toBeInTheDocument()
+    expect(await screen.findByText('Weekly schedule')).toBeInTheDocument()
     expect(screen.getByText('Today · Friday')).toBeInTheDocument()
-    await userEvent.click(screen.getByText('Train Anyway →'))
+    await userEvent.click(screen.getByText('Train anyway →'))
     expect(go).toHaveBeenCalled()
-    expect(screen.getByText('Daily Nutrition Targets')).toBeInTheDocument()
+    expect(screen.getByText('Daily nutrition targets')).toBeInTheDocument()
   })
 })
 
@@ -99,10 +99,10 @@ describe('Calories', () => {
   it('shows free users the real page with a sample day behind a dark overlay', async () => {
     const onUpgrade = vi.fn()
     render(<P.Calories profile={profile} isPro={false} onUpgrade={onUpgrade} onGoToPlan={() => {}} />)
-    expect(await screen.findByText('PRO FEATURE')).toBeInTheDocument()
+    expect(await screen.findByText('Unlock with Pro')).toBeInTheDocument()
     const sample = screen.getByText('Chicken rice bowl')
     expect(sample.closest('[inert]')).toHaveAttribute('aria-hidden', 'true')
-    expect(screen.getByText("Today's Intake")).toBeInTheDocument()
+    expect(screen.getByText("Today's intake")).toBeInTheDocument()
     expect(sb.queriesFor('calorie_logs')).toHaveLength(0) // nothing loaded or saved
     expect(sb.queriesFor('nutrition_targets')).toHaveLength(0)
     await userEvent.click(screen.getByText('Get Pro →'))
@@ -113,35 +113,68 @@ describe('Calories', () => {
 describe('Auth', () => {
   it('signs in with email and password', async () => {
     render(<P.Auth />)
-    const signIn = screen.queryByText('Sign In') ?? screen.getAllByRole('button')[0]
-    if (!screen.queryByPlaceholderText('Email address')) await userEvent.click(signIn)
     await userEvent.type(screen.getByPlaceholderText('Email address'), 'sam@example.com')
     await userEvent.type(screen.getByPlaceholderText('Password'), 'secret12')
-    await userEvent.click(screen.getAllByText('Sign In').at(-1))
+    await userEvent.click(screen.getAllByText('Sign in').at(-1))
     expect(sb.supabase.auth.signInWithPassword).toHaveBeenCalledWith({ email: 'sam@example.com', password: 'secret12' })
   })
   it('validates registration before calling Supabase', async () => {
     render(<P.Auth />)
     if (!screen.queryByPlaceholderText('Email address')) await userEvent.click(screen.getAllByRole('button')[0])
-    await userEvent.click(screen.getAllByText(/register|sign up/i)[0])
+    await userEvent.click(screen.getAllByText('Create account')[0])
     await userEvent.type(screen.getByPlaceholderText('Full name'), 'Sam')
     await userEvent.type(screen.getByPlaceholderText('Email address'), 'sam@example.com')
     await userEvent.type(screen.getByPlaceholderText('Password'), 'secret12')
     await userEvent.type(screen.getByPlaceholderText('Confirm password'), 'different')
-    await userEvent.click(screen.getByText('Create Account'))
+    await userEvent.click(screen.getAllByText('Create account').at(-1))
     expect(screen.getByText('Passwords do not match.')).toBeInTheDocument()
     expect(sb.supabase.auth.signUp).not.toHaveBeenCalled()
   })
 })
 
-describe('Upgrade', () => {
-  it('starts Stripe checkout', async () => {
+describe('Upgrade in one tap', () => {
+  it('Get Pro on a locked tab goes straight to Stripe checkout', async () => {
+    sb.supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: 't' } } })
+    sb.set('user_profiles', { data: profile, error: null })
+    sb.set('fitness_profiles', { data: fitnessProfile, error: null })
+    sb.set('subscriptions', { data: { status: 'free' }, error: null })
+    sb.set('fitness_plans', { data: null, error: null })
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ url: '#checkout' }) }))
     vi.stubGlobal('fetch', fetchMock)
-    render(<P.Upgrade onBack={() => {}} />)
-    await userEvent.click(screen.getByText('Upgrade to Pro →'))
+    render(<P.App />)
+    await userEvent.click(await screen.findByText('Calories'))
+    await userEvent.click(await screen.findByText('Get Pro →'))
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/create-checkout', expect.anything()))
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer t')
     vi.unstubAllGlobals()
+  })
+  it('shows an error if checkout cannot open', async () => {
+    sb.supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: 't' } } })
+    sb.set('user_profiles', { data: profile, error: null })
+    sb.set('fitness_profiles', { data: fitnessProfile, error: null })
+    sb.set('subscriptions', { data: { status: 'free' }, error: null })
+    sb.set('fitness_plans', { data: null, error: null })
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, json: async () => ({ error: 'Stripe is down' }) })))
+    render(<P.App />)
+    await userEvent.click(await screen.findByText('Plan'))
+    await userEvent.click(await screen.findByText('Get Pro →'))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Stripe is down')
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('Library and Group live inside Workout', () => {
+  it('opens from cards on the Workout tab and has a way back', async () => {
+    sb.supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: 't' } } })
+    sb.set('user_profiles', { data: profile, error: null })
+    sb.set('fitness_profiles', { data: fitnessProfile, error: null })
+    sb.set('subscriptions', { data: { status: 'pro' }, error: null })
+    sb.set('fitness_plans', { data: planRow, error: null })
+    render(<P.App />)
+    await userEvent.click(await screen.findByText('Train together'))
+    expect(await screen.findByText('Host a session')).toBeInTheDocument()
+    await userEvent.click(screen.getByText(/Back to Workout/))
+    expect(await screen.findByText('Exercise library')).toBeInTheDocument()
   })
 })
 
@@ -150,7 +183,7 @@ describe('Library', () => {
     render(<P.Library onStartWorkout={() => {}} />)
     const tabs = screen.queryAllByText('Exercises')
     if (tabs.length) await userEvent.click(tabs[0])
-    const search = screen.queryByPlaceholderText('🔍 Search exercises...')
+    const search = screen.queryByPlaceholderText('Search exercises')
     if (search) {
       await userEvent.type(search, 'zzzz-not-real')
       expect(screen.getByText('No exercises found')).toBeInTheDocument()
@@ -164,9 +197,9 @@ describe('Group', () => {
   it('shows host and join options and rejects an unknown room code', async () => {
     sb.supabase.rpc.mockResolvedValue({ data: null, error: { code: 'P0002', message: 'Room not found' } })
     render(<P.Group session={{ name: 'Sam', email: USER.email }} />)
-    expect(screen.getByText('Host a Session')).toBeInTheDocument()
+    expect(screen.getByText('Host a session')).toBeInTheDocument()
     await userEvent.type(screen.getByPlaceholderText('ABC123'), 'ZZZZZZ')
-    const join = screen.getAllByRole('button').find(b => /join/i.test(b.textContent) && b.textContent !== 'Join a Room')
+    const join = screen.getAllByRole('button').find(b => /join/i.test(b.textContent) && b.textContent !== 'Join a room')
     await userEvent.click(join)
     expect(await screen.findByText(/Room not found/)).toBeInTheDocument()
   })
@@ -184,18 +217,18 @@ describe('Progress', () => {
 describe('Onboarding', () => {
   it('renders the body-stats step', () => {
     render(<P.Onboarding initialValues={null} onComplete={() => {}} />)
-    expect(screen.getAllByText('ATHRION').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Athrion').length).toBeGreaterThan(0)
   })
   it('renders fitness setup', () => {
     render(<P.FitnessOnboarding existingProfile={profile} onComplete={() => {}} />)
-    expect(screen.getByText('Fitness Setup')).toBeInTheDocument()
+    expect(screen.getByText('Fitness setup')).toBeInTheDocument()
   })
 })
 
 describe('ProfileModal', () => {
   it('signs out', async () => {
     render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={profile} isPro={false} theme="dark" onToggleTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
-    await userEvent.click(screen.getByText('Sign Out'))
+    await userEvent.click(screen.getByText('Sign out'))
     expect(sb.supabase.auth.signOut).toHaveBeenCalled()
   })
 
@@ -205,7 +238,7 @@ describe('ProfileModal', () => {
     it('signing out clears the saved in-progress workout', async () => {
       localStorage.setItem('athrion_workout', JSON.stringify({ name: 'Secret', startTime: 1 }))
       render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={profile} isPro={false} theme="dark" onToggleTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
-      await userEvent.click(screen.getByText('Sign Out'))
+      await userEvent.click(screen.getByText('Sign out'))
       expect(localStorage.getItem('athrion_workout')).toBeNull()
     })
   })
@@ -222,7 +255,7 @@ describe('App shell', () => {
   it('shows sign-in when logged out', async () => {
     sb.supabase.auth.getSession.mockResolvedValue({ data: { session: null } })
     render(<P.App />)
-    expect(await screen.findByText(/ATHRION/)).toBeInTheDocument()
+    expect(await screen.findByPlaceholderText('Email address')).toBeInTheDocument()
     expect(sb.supabase.from).not.toHaveBeenCalledWith('user_profiles')
   })
   it('loads the profile and lands on the Workout tab when signed in', async () => {

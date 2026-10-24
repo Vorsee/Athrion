@@ -49,8 +49,8 @@ export default function AdaptiveNutritionCard({ calorieLogs, current, profile, o
     const p = est.progress
     return (
       <div className="bg-[#111] border border-[#222] rounded-2xl p-4">
-        <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-1">Adaptive Targets</div>
-        <p className="text-xs text-gray-500 leading-relaxed">
+        <div className="text-sm font-semibold text-gray-200 mb-1">Adaptive targets</div>
+        <p className="text-xs text-gray-400 leading-relaxed">
           Log food and weigh in regularly and your targets will adjust to how your body actually responds.
         </p>
         <div className="grid grid-cols-2 gap-2 mt-3 text-center">
@@ -59,12 +59,12 @@ export default function AdaptiveNutritionCard({ calorieLogs, current, profile, o
             ['Weigh-ins', p.weighIns, p.neededWeighIns],
           ].map(([label, have, need]) => (
             <div key={label} className="bg-[#161616] rounded-xl py-2">
-              <div className="font-bebas text-xl text-white">{Math.min(have, need)}<span className="text-gray-600 text-sm">/{need}</span></div>
-              <div className="text-[10px] text-gray-600 uppercase">{label}</div>
+              <div className="font-bold text-lg text-white">{Math.min(have, need)}<span className="text-gray-400 text-sm">/{need}</span></div>
+              <div className="text-xs text-gray-400">{label}</div>
             </div>
           ))}
         </div>
-        <p className="text-[10px] text-gray-700 mt-2">Weigh-ins need to span at least {p.neededSpan} days. Add them in the Progress tab.</p>
+        <p className="text-xs text-gray-500 mt-2">Weigh-ins need to span at least {p.neededSpan} days. Add them in the Progress tab.</p>
       </div>
     )
   }
@@ -73,14 +73,14 @@ export default function AdaptiveNutritionCard({ calorieLogs, current, profile, o
 
   return (
     <div className="bg-[#111] border border-neon/20 rounded-2xl p-4">
-      <div className="text-[10px] text-neon uppercase tracking-widest mb-2">Adaptive Targets</div>
+      <div className="text-xs text-neon mb-2">Adaptive targets</div>
       <div className="grid grid-cols-3 gap-2 text-center">
-        <div><div className="font-bebas text-xl text-white">{est.avgIntake}</div><div className="text-[10px] text-gray-600 uppercase">Avg eaten</div></div>
-        <div><div className="font-bebas text-xl text-white">{trend}</div><div className="text-[10px] text-gray-600 uppercase">Weight</div></div>
-        <div><div className="font-bebas text-xl text-neon">{est.estimatedTdee}</div><div className="text-[10px] text-gray-600 uppercase">Real burn</div></div>
+        <div><div className="font-bold text-lg text-white">{est.avgIntake}</div><div className="text-sm font-semibold text-gray-200">Avg eaten</div></div>
+        <div><div className="font-bold text-lg text-white">{trend}</div><div className="text-sm font-semibold text-gray-200">Weight</div></div>
+        <div><div className="font-bold text-lg text-neon">{est.estimatedTdee}</div><div className="text-sm font-semibold text-gray-200">Real burn</div></div>
       </div>
       {est.formulaTdee && (
-        <p className="text-[11px] text-gray-600 mt-2">Your current target assumed {Math.round(est.formulaTdee)} kcal/day; your data says {est.estimatedTdee}.</p>
+        <p className="text-xs text-gray-400 mt-2">Your current target assumed {Math.round(est.formulaTdee)} kcal/day; your data says {est.estimatedTdee}.</p>
       )}
       {est.suggestion ? (
         <>
@@ -90,12 +90,12 @@ export default function AdaptiveNutritionCard({ calorieLogs, current, profile, o
           </p>
           {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
           <button onClick={apply} disabled={saving}
-            className="mt-3 w-full bg-neon text-black font-bold py-2.5 rounded-xl text-xs uppercase tracking-widest disabled:opacity-50">
-            {saving ? 'Updating...' : 'Apply New Targets'}
+            className="mt-3 w-full bg-neon text-black font-bold py-2.5 rounded-xl text-xs disabled:opacity-50">
+            {saving ? 'Updating...' : 'Apply new targets'}
           </button>
         </>
       ) : (
-        <p className="text-xs text-gray-500 mt-3">Your current target already matches your real burn. ✓</p>
+        <p className="text-xs text-gray-400 mt-3">Your current target already matches your real burn. ✓</p>
       )}
     </div>
   )

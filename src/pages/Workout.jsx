@@ -23,7 +23,7 @@ function matchPlanExercises(planExercises) {
 
 const FREE_WORKOUT_LIMIT = 3
 
-export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgrade }) {
+export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgrade, onOpenPage }) {
   const [screen, setScreen]                   = useState('home')
   const [activeExercises, setActiveExercises] = useState([])
   const [activeWorkoutName, setActiveWorkoutName] = useState('')
@@ -151,7 +151,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
 
   function startFreeWorkout() {
     setActiveExercises([])
-    setActiveWorkoutName('Free Workout')
+    setActiveWorkoutName('Free workout')
     setExIdx(0); setSetIdx(0); setLoggedSets([])
     setWeight(''); setReps('')
     setFreeWorkout(true)
@@ -237,6 +237,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       onDelete={handleDeleteWorkout}
       isPro={isPro}
       onUpgrade={onUpgrade}
+      onOpenPage={onOpenPage}
     />
   )
 
@@ -372,7 +373,7 @@ function upcomingWorkoutDays(schedule) {
     .sort((a, b) => ((order.indexOf(a.day) - dayIdx + 7) % 7) - ((order.indexOf(b.day) - dayIdx + 7) % 7))
 }
 
-function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade }) {
+function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade, onOpenPage }) {
   const [selectedSession, setSelectedSession] = useState(null)
   const weekSessions = history.filter(h => (Date.now() - new Date(h.date)) < 7 * 86400000).length
   const totalMins = history.reduce((a, h) => a + (parseInt(h.duration) || 0), 0)
@@ -410,12 +411,12 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
       {/* ── Stats ── */}
       <div className="grid grid-cols-2 gap-3">
         <Card className="p-4">
-          <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-1">This Week</div>
-          <div className="font-bebas text-4xl text-white">{weekSessions} <span className="text-base text-gray-500">sessions</span></div>
+          <div className="text-sm font-semibold text-gray-200 mb-1">This week</div>
+          <div className="font-bold text-3xl text-white">{weekSessions} <span className="text-base text-gray-400">sessions</span></div>
         </Card>
         <Card className="p-4">
-          <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-1">Total Time</div>
-          <div className="font-bebas text-4xl text-white">{(totalMins / 60).toFixed(1)}<span className="text-base text-gray-500">h</span></div>
+          <div className="text-sm font-semibold text-gray-200 mb-1">Total time</div>
+          <div className="font-bold text-3xl text-white">{(totalMins / 60).toFixed(1)}<span className="text-base text-gray-400">h</span></div>
         </Card>
       </div>
 
@@ -428,29 +429,27 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
           <div className="h-12 bg-[#1a1a1a] rounded-xl" />
         </div>
       ) : (
-      <div className="rounded-2xl p-px" style={{ background: 'linear-gradient(135deg, #C8F135 0%, #C8F13560 100%)', boxShadow: '0 0 14px 0 #C8F13530' }}>
-        <div className="bg-[#111] rounded-[15px] p-5">
+      <div className="rounded-2xl border border-neon/30">
+        <div className="bg-[#111] rounded-2xl p-5">
 
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
             <div>
-              <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-0.5">Today's Training</div>
+              <div className="text-sm font-semibold text-gray-200 mb-0.5">Today's training</div>
               <div className="font-bold text-base text-white">{isRestDay ? todayPlan.title : planWorkout ? planName : fallbackName}</div>
               {!isRestDay && planWorkout?.durationMinutes && (
-                <div className="text-xs text-gray-500 mt-0.5">{planWorkout.durationMinutes} min · {planExercises.length} exercises</div>
+                <div className="text-xs text-gray-400 mt-0.5">{planWorkout.durationMinutes} min · {planExercises.length} exercises</div>
               )}
             </div>
-            {isRestDay
-              ? <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-[#222] text-gray-500 capitalize">{todayPlan.type.replace('_', ' ')}</span>
-              : <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-neon/15 text-neon border border-neon/20">Workout</span>}
+            {isRestDay && <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-[#222] text-gray-300 capitalize">{todayPlan.type.replace('_', ' ')}</span>}
           </div>
 
           {isRestDay && (
             <div className="mb-4">
-              <p className="text-xs text-gray-500 leading-relaxed">{todayPlan.recoveryNotes || 'Recovery is part of the plan. Your muscles grow while you rest.'}</p>
+              <p className="text-xs text-gray-400 leading-relaxed">{todayPlan.recoveryNotes || 'Recovery is part of the plan. Your muscles grow while you rest.'}</p>
               {otherDays.length > 0 && (
                 <>
-                  <div className="text-[10px] text-gray-600 uppercase tracking-widest mt-4 mb-2">Want to train anyway?</div>
+                  <div className="text-xs text-gray-400 mt-4 mb-2">Want to train anyway?</div>
                   <div className="flex flex-wrap gap-1.5">
                     {otherDays.map(d => (
                       <button key={d.day} onClick={() => setPickedDay(d)}
@@ -460,7 +459,7 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
                     ))}
                   </div>
                   {shownWorkout?.durationMinutes && (
-                    <div className="text-xs text-gray-500 mt-2">{shownWorkout.durationMinutes} min · {planExercises.length} exercises</div>
+                    <div className="text-xs text-gray-400 mt-2">{shownWorkout.durationMinutes} min · {planExercises.length} exercises</div>
                   )}
                 </>
               )}
@@ -475,7 +474,7 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
                   <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-gray-400 mt-0.5" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-semibold text-white leading-snug break-words">{ex.name}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">
+                    <div className="text-xs text-gray-400 mt-0.5">
                       {[ex.sets > 1 ? `${ex.sets} sets × ${ex.reps}` : ex.reps,
                         ex.restSeconds > 0 && `${ex.restSeconds}s rest`,
                         ex.equipment].filter(Boolean).join(' · ')}
@@ -492,7 +491,7 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
                   <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-gray-400" />
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm truncate">{ex.name}</div>
-                    <div className="text-xs text-gray-500">{ex.muscle}</div>
+                    <div className="text-xs text-gray-400">{ex.muscle}</div>
                   </div>
                   <DemoButton name={ex.name} />
                 </div>
@@ -502,43 +501,60 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
 
           {(!isRestDay || shownWorkout) && (
             <NeonBtn onClick={shownWorkout ? handlePlanStart : () => onStart(fallbackExs, fallbackName)} className="w-full">
-              {isRestDay ? '🚀 Train Anyway' : '🚀 Start Training'}
+              {isRestDay ? 'Train anyway' : 'Start workout'}
             </NeonBtn>
           )}
           <button
             onClick={onFreeStart}
             className="w-full mt-2.5 py-3 rounded-xl border border-[#2a2a2a] bg-[#0d0d0d] text-gray-400 hover:text-white hover:border-[#444] text-sm font-semibold transition-all"
           >
-            + Free Workout
+            + Free workout
           </button>
         </div>
       </div>
       )}
 
+      {/* ── More ways to train (live inside this tab) ── */}
+      {onOpenPage && (
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { id: 'library', icon: 'mdi:book-open-variant', title: 'Exercise library', sub: 'Exercises and ready-made workouts' },
+            { id: 'group', icon: 'mdi:account-group-outline', title: 'Train together', sub: 'Live session with friends' },
+          ].map(l => (
+            <button key={l.id} onClick={() => onOpenPage(l.id)}
+              className="text-left bg-[#111] border border-[#222] hover:border-neon/30 rounded-2xl p-4 transition-colors">
+              <Icon icon={l.icon} width={24} className="text-neon mb-2" />
+              <div className="text-sm font-semibold text-white">{l.title}</div>
+              <div className="text-xs text-gray-400 mt-0.5 leading-snug">{l.sub}</div>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* ── My Workouts ── */}
       <Card className="p-5">
         <div className="flex items-center justify-between mb-4">
-          <div className="text-[10px] text-gray-600 uppercase tracking-widest">My Workouts</div>
+          <div className="text-sm font-semibold text-gray-200">My workouts</div>
           <div className="flex items-center gap-2">
             {!isPro && (
-              <span className="text-[10px] text-gray-600 font-semibold">{customWorkouts.length}/{FREE_WORKOUT_LIMIT}</span>
+              <span className="text-xs text-gray-400 font-semibold">{customWorkouts.length}/{FREE_WORKOUT_LIMIT}</span>
             )}
             <button
               onClick={!isPro && customWorkouts.length >= FREE_WORKOUT_LIMIT ? onUpgrade : onCreateNew}
               className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all ${
                 !isPro && customWorkouts.length >= FREE_WORKOUT_LIMIT
-                  ? 'text-gray-500 border border-[#2a2a2a] bg-[#1a1a1a] hover:border-neon/30 hover:text-neon'
+                  ? 'text-gray-400 border border-[#2a2a2a] bg-[#1a1a1a] hover:border-neon/30 hover:text-neon'
                   : 'text-neon border border-neon/30 bg-neon/10 hover:bg-neon/20'
               }`}
             >
-              {!isPro && customWorkouts.length >= FREE_WORKOUT_LIMIT ? '🔒 Upgrade' : '+ New'}
+              {!isPro && customWorkouts.length >= FREE_WORKOUT_LIMIT ? 'Upgrade' : '+ New'}
             </button>
           </div>
         </div>
 
         {customWorkouts.length === 0 ? (
           <div className="text-center py-6">
-            <div className="text-gray-600 text-sm mb-3">No custom workouts yet</div>
+            <div className="text-gray-400 text-sm mb-3">No custom workouts yet</div>
             <button onClick={onCreateNew} className="text-xs text-neon hover:text-white transition-colors">
               Create your first workout →
             </button>
@@ -551,20 +567,20 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
                 <div key={w.id} className="flex items-center gap-3 bg-[#0d0d0d] rounded-xl px-3 py-2.5">
                   <div className="flex gap-0.5 flex-shrink-0">
                     {exs.slice(0, 4).map((ex, i) => (
-                      <Icon key={i} icon={getExerciseIcon(ex)} width={16} className="text-gray-500" />
+                      <Icon key={i} icon={getExerciseIcon(ex)} width={16} className="text-gray-400" />
                     ))}
-                    {exs.length > 4 && <span className="text-[9px] text-gray-600 self-center ml-0.5">+{exs.length - 4}</span>}
+                    {exs.length > 4 && <span className="text-[11px] text-gray-400 self-center ml-0.5">+{exs.length - 4}</span>}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-xs truncate">{w.name}</div>
-                    <div className="text-[10px] text-gray-600">{exs.length} exercises</div>
+                    <div className="text-xs text-gray-400">{exs.length} exercises</div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <button onClick={() => onEdit(w)} className="text-[10px] text-gray-600 hover:text-white transition-colors">Edit</button>
-                    <button onClick={() => onDelete(w.id)} className="text-[10px] text-red-600 hover:text-red-400 transition-colors">Del</button>
+                    <button onClick={() => onEdit(w)} className="text-xs text-gray-400 hover:text-white transition-colors">Edit</button>
+                    <button onClick={() => onDelete(w.id)} className="text-xs text-red-600 hover:text-red-400 transition-colors">Del</button>
                     <button
                       onClick={() => onStart(exs, w.name)}
-                      className="bg-neon text-black font-bold py-1 px-3 rounded-lg text-[10px] uppercase tracking-widest hover:shadow-[0_4px_12px_rgba(200,241,53,0.35)] transition-all"
+                      className="bg-neon text-black font-bold py-1 px-3 rounded-lg text-xs transition-all"
                     >
                       Start
                     </button>
@@ -579,11 +595,11 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
       {/* ── Recent Sessions ── */}
       {history.length > 0 && (
         <Card className="p-4">
-          <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-2">Recent Sessions</div>
+          <div className="text-sm font-semibold text-gray-200 mb-2">Recent sessions</div>
           <div className="grid grid-cols-[1fr_4rem_4rem] gap-2 px-2 pb-1 border-b border-[#1a1a1a]">
-            <span className="text-[9px] text-gray-700 uppercase tracking-widest">Workout</span>
-            <span className="text-[9px] text-gray-700 uppercase tracking-widest text-right">Volume</span>
-            <span className="text-[9px] text-gray-700 uppercase tracking-widest text-right">Time</span>
+            <span className="text-[11px] text-gray-500">Workout</span>
+            <span className="text-[11px] text-gray-500 text-right">Volume</span>
+            <span className="text-[11px] text-gray-500 text-right">Time</span>
           </div>
           <div>
             {[...history].slice(0, 7).map((h, i) => (
@@ -594,10 +610,10 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
               >
                 <div className="min-w-0">
                   <div className="font-medium text-xs truncate">{h.name}</div>
-                  <div className="text-[10px] text-gray-600">{h.date}</div>
+                  <div className="text-xs text-gray-400">{h.date}</div>
                 </div>
                 <div className="text-right font-bold text-xs text-neon">{h.volume ? `${h.volume}lb` : '—'}</div>
-                <div className="text-right text-[10px] text-gray-500">{h.duration}</div>
+                <div className="text-right text-xs text-gray-400">{h.duration}</div>
               </button>
             ))}
           </div>
@@ -654,9 +670,9 @@ function BuilderScreen({ workout, onSave, onBack }) {
     <div className="space-y-4 py-4 slide-up">
       {/* Header */}
       <div>
-        <button onClick={onBack} className="text-gray-500 text-sm hover:text-white transition-colors mb-3">← Back</button>
+        <button onClick={onBack} className="text-gray-400 text-sm hover:text-white transition-colors mb-3">← Back</button>
         <input
-          className="w-full bg-transparent border-b border-[#333] focus:border-neon text-white text-3xl font-bebas tracking-widest outline-none pb-1 placeholder-[#333] transition-colors"
+          className="w-full bg-transparent border-b border-[#333] focus:border-neon text-white text-2xl font-bold outline-none pb-1 placeholder-[#333] transition-colors"
           placeholder="WORKOUT NAME"
           value={name}
           onChange={e => setName(e.target.value)}
@@ -666,7 +682,7 @@ function BuilderScreen({ workout, onSave, onBack }) {
       {/* Selected exercises */}
       {selected.length > 0 && (
         <Card className="p-4">
-          <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-3">
+          <div className="text-xs text-gray-400 mb-3">
             Your Workout · {selected.length} exercise{selected.length !== 1 ? 's' : ''}
           </div>
           <div className="space-y-2">
@@ -677,16 +693,16 @@ function BuilderScreen({ workout, onSave, onBack }) {
                   <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-gray-400" />
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm truncate">{exName}</div>
-                    <div className="text-xs text-gray-500">{ex?.muscle}</div>
+                    <div className="text-xs text-gray-400">{ex?.muscle}</div>
                   </div>
                   <div className="flex items-center gap-0.5 flex-shrink-0">
                     <button
                       onClick={() => moveUp(i)} disabled={i === 0}
-                      className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-white disabled:opacity-20 transition-colors text-sm"
+                      className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-white disabled:opacity-20 transition-colors text-sm"
                     >↑</button>
                     <button
                       onClick={() => moveDown(i)} disabled={i === selected.length - 1}
-                      className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-white disabled:opacity-20 transition-colors text-sm"
+                      className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-white disabled:opacity-20 transition-colors text-sm"
                     >↓</button>
                     <button
                       onClick={() => remove(i)}
@@ -703,15 +719,15 @@ function BuilderScreen({ workout, onSave, onBack }) {
       {/* Save button */}
       {selected.length > 0 && name.trim() && (
         <NeonBtn onClick={handleSave} disabled={saving} className="w-full">
-          {saving ? 'Saving...' : workout.id ? 'Save Changes' : 'Create Workout'}
+          {saving ? 'Saving...' : workout.id ? 'Save changes' : 'Create workout'}
         </NeonBtn>
       )}
 
       {/* Exercise library */}
       <Card className="p-4">
-        <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-3">Exercise Library</div>
+        <div className="text-sm font-semibold text-gray-200 mb-3">Exercise library</div>
         <input
-          className="w-full bg-[#0d0d0d] border border-[#222] focus:border-neon text-white placeholder-[#444] rounded-xl px-3 py-2.5 text-sm outline-none transition-colors mb-3"
+          className="w-full bg-[#0d0d0d] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-3 py-2.5 text-sm outline-none transition-colors mb-3"
           placeholder="Search by name or muscle..."
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -723,7 +739,7 @@ function BuilderScreen({ workout, onSave, onBack }) {
               key={m}
               onClick={() => setFilter(m)}
               className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
-                filter === m ? 'bg-neon text-black' : 'bg-[#1a1a1a] text-gray-500 border border-[#2a2a2a]'
+                filter === m ? 'bg-neon text-black' : 'bg-[#1a1a1a] text-gray-400 border border-[#2a2a2a]'
               }`}
             >
               {m}
@@ -739,15 +755,15 @@ function BuilderScreen({ workout, onSave, onBack }) {
                 <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-gray-400" />
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm truncate">{ex.name}</div>
-                  <div className="text-xs text-gray-500">{ex.muscle} · {ex.equipment}</div>
+                  <div className="text-xs text-gray-400">{ex.muscle} · {ex.equipment}</div>
                 </div>
                 <button
                   onClick={() => add(ex.name)}
                   disabled={added}
                   className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                     added
-                      ? 'bg-[#1a1a1a] text-gray-600 border border-[#2a2a2a] cursor-default'
-                      : 'bg-neon text-black hover:shadow-[0_4px_12px_rgba(200,241,53,0.3)]'
+                      ? 'bg-[#1a1a1a] text-gray-400 border border-[#2a2a2a] cursor-default'
+                      : 'bg-neon text-black'
                   }`}
                 >
                   {added ? '✓' : '+ Add'}
@@ -768,17 +784,17 @@ function ConfigScreen({ exercises, free, totalSets, setTotalSets, restDuration, 
   return (
     <div className="space-y-4 py-4 slide-up">
       <div>
-        <button onClick={onBack} className="text-gray-500 text-sm hover:text-white transition-colors mb-3">← Back</button>
-        <div className="font-bebas text-4xl tracking-wide">{free ? 'Free Workout' : 'Configure Workout'}</div>
-        {free && <div className="text-sm text-gray-500 mt-1">Pick exercises as you go</div>}
+        <button onClick={onBack} className="text-gray-400 text-sm hover:text-white transition-colors mb-3">← Back</button>
+        <div className="font-bold text-3xl">{free ? 'Free workout' : 'Configure workout'}</div>
+        {free && <div className="text-sm text-gray-400 mt-1">Pick exercises as you go</div>}
       </div>
 
       <Card className="p-5">
-        <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-4">Sets per Exercise</div>
+        <div className="text-sm font-semibold text-gray-200 mb-4">Sets per Exercise</div>
         <div className="flex gap-2">
           {[2, 3, 4, 5].map(n => (
             <button key={n} onClick={() => setTotalSets(n)}
-              className={`flex-1 py-3 rounded-xl font-bebas text-xl transition-all ${totalSets === n ? 'bg-neon text-black' : 'bg-[#1a1a1a] text-white border border-[#2a2a2a]'}`}>
+              className={`flex-1 py-3 rounded-xl font-bold text-lg transition-all ${totalSets === n ? 'bg-neon text-black' : 'bg-[#1a1a1a] text-white border border-[#2a2a2a]'}`}>
               {n}
             </button>
           ))}
@@ -786,7 +802,7 @@ function ConfigScreen({ exercises, free, totalSets, setTotalSets, restDuration, 
       </Card>
 
       <Card className="p-5">
-        <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-4">Rest Duration</div>
+        <div className="text-sm font-semibold text-gray-200 mb-4">Rest duration</div>
         <div className="flex gap-2">
           {[30, 60, 90, 120].map(s => (
             <button key={s} onClick={() => setRestDuration(s)}
@@ -799,14 +815,14 @@ function ConfigScreen({ exercises, free, totalSets, setTotalSets, restDuration, 
 
       {!free && exercises.length > 0 && (
         <Card className="p-5">
-          <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-3">Exercises</div>
+          <div className="text-sm font-semibold text-gray-200 mb-3">Exercises</div>
           <div className="space-y-2">
             {exercises.map((ex, i) => (
               <div key={i} className="flex items-center gap-3 bg-[#0d0d0d] rounded-xl p-3">
                 <Icon icon={getExerciseIcon(ex)} width={24} className="flex-shrink-0 text-gray-400" />
                 <div>
                   <div className="font-medium text-sm">{ex.name}</div>
-                  <div className="text-xs text-gray-500">{ex.muscle} · {totalSets} sets</div>
+                  <div className="text-xs text-gray-400">{ex.muscle} · {totalSets} sets</div>
                 </div>
               </div>
             ))}
@@ -814,7 +830,7 @@ function ConfigScreen({ exercises, free, totalSets, setTotalSets, restDuration, 
         </Card>
       )}
 
-      <NeonBtn onClick={onBegin} className="w-full">{free ? 'Pick First Exercise →' : 'Begin Training →'}</NeonBtn>
+      <NeonBtn onClick={onBegin} className="w-full">{free ? 'Pick first exercise →' : 'Begin training →'}</NeonBtn>
     </div>
   )
 }
@@ -840,13 +856,13 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, totalSets, 
   return (
     <div className="space-y-4 py-4 slide-in">
       {freeWorkout ? (
-        <div className="flex justify-between text-[10px] text-gray-600 uppercase tracking-widest">
-          <span>Free Workout</span>
+        <div className="flex justify-between text-xs text-gray-400">
+          <span>Free workout</span>
           <span>{setsDone} sets logged</span>
         </div>
       ) : (
         <div>
-          <div className="flex justify-between text-[10px] text-gray-600 uppercase tracking-widest mb-2">
+          <div className="flex justify-between text-xs text-gray-400 mb-2">
             <span>Exercise {exIdx + 1}/{exercises.length}</span>
             <span>{Math.round(progress)}% done</span>
           </div>
@@ -860,9 +876,9 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, totalSets, 
         <div className="flex justify-center mb-3">
           <Icon icon={getExerciseIcon(ex)} width={56} className="text-neon/80" />
         </div>
-        <div className="font-bebas text-4xl tracking-wide mb-1">{ex.name}</div>
+        <div className="font-bold text-3xl mb-1">{ex.name}</div>
         <div className="text-gray-400 text-sm mb-1">{ex.muscle}</div>
-        <div className="text-xs text-gray-600 italic">{ex.tips}</div>
+        <div className="text-xs text-gray-400 italic">{ex.tips}</div>
         <button onClick={() => setShowDemo(true)}
           className="mt-3 inline-flex items-center gap-1.5 text-xs text-neon border border-neon/30 px-3 py-1.5 rounded-lg hover:bg-neon/10">
           <Icon icon="mdi:play-circle-outline" width={16} /> How to
@@ -871,7 +887,7 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, totalSets, 
       </div>
 
       <Card className="p-4">
-        <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-3">Set {setIdx + 1} of {totalSets}</div>
+        <div className="text-xs text-gray-400 mb-3">Set {setIdx + 1} of {totalSets}</div>
         <div className="flex gap-2">
           {Array.from({ length: totalSets }, (_, i) => (
             <div key={i} className={`flex-1 h-2 rounded-full transition-all duration-300 ${i < setIdx ? 'bg-neon' : i === setIdx ? 'bg-neon ring-pulse' : 'bg-[#222]'}`} />
@@ -880,14 +896,14 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, totalSets, 
       </Card>
 
       <Card className="p-5">
-        <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-3">Log Set {setIdx + 1}</div>
-        {prev && <div className="text-xs text-gray-600 mb-3">Previous set: {prev.weight}lb × {prev.reps} reps</div>}
+        <div className="text-xs text-gray-400 mb-3">Log Set {setIdx + 1}</div>
+        {prev && <div className="text-xs text-gray-400 mb-3">Previous set: {prev.weight}lb × {prev.reps} reps</div>}
         {!prev && suggestion && (
           <div className="mb-4 bg-neon/5 border border-neon/20 rounded-xl p-3">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <div className="text-[10px] text-gray-500 uppercase tracking-widest">Try today</div>
-                <div className="font-bebas text-2xl text-neon leading-tight">
+                <div className="text-sm font-semibold text-gray-200">Try today</div>
+                <div className="font-bold text-xl text-neon leading-tight">
                   {suggestion.weight > 0 ? `${suggestion.weight} lb × ${suggestion.reps}` : `${suggestion.reps} reps`}
                 </div>
               </div>
@@ -896,8 +912,8 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, totalSets, 
                 Use
               </button>
             </div>
-            <div className="text-[11px] text-gray-500 mt-1">{suggestion.reason}</div>
-            <div className="text-[11px] text-gray-600 mt-1.5 flex flex-wrap gap-x-3">
+            <div className="text-xs text-gray-400 mt-1">{suggestion.reason}</div>
+            <div className="text-xs text-gray-400 mt-1.5 flex flex-wrap gap-x-3">
               {lastSession && <span>Last: {lastSession.sets.map(st => `${st.weight}×${st.reps}`).join(', ')}</span>}
               {records?.maxWeight > 0 && <span>PR: {records.maxWeight} lb × {records.maxWeightReps}</span>}
             </div>
@@ -905,49 +921,49 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, totalSets, 
         )}
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
-            <label className="text-xs text-gray-500 block mb-1">Weight (lb)</label>
+            <label className="text-xs text-gray-400 block mb-1">Weight (lb)</label>
             <input type="number" placeholder="0" value={weight} onChange={e => setWeight(e.target.value)} min="0" step="0.5"
-              className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-[#444] rounded-xl px-4 py-3 text-sm outline-none transition-colors" />
+              className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-4 py-3 text-sm outline-none transition-colors" />
           </div>
           <div>
-            <label className="text-xs text-gray-500 block mb-1">Reps</label>
+            <label className="text-xs text-gray-400 block mb-1">Reps</label>
             <input type="number" placeholder="0" value={reps} onChange={e => setReps(e.target.value)} min="1"
-              className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-[#444] rounded-xl px-4 py-3 text-sm outline-none transition-colors" />
+              className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-4 py-3 text-sm outline-none transition-colors" />
           </div>
         </div>
-        <NeonBtn onClick={onLog} className="w-full">✓ Done — Start Rest Timer</NeonBtn>
+        <NeonBtn onClick={onLog} className="w-full">Log set</NeonBtn>
       </Card>
 
       {confirmEnd ? (
         <div className="flex gap-3">
           <button onClick={() => setConfirmEnd(false)}
             className="flex-1 py-3 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] text-gray-300 font-semibold text-sm transition-all hover:border-[#444]">
-            Keep Going
+            Keep going
           </button>
           <button onClick={onEnd}
             className="flex-1 py-3 rounded-xl bg-red-500/20 border border-red-500/40 text-red-400 font-semibold text-sm transition-all hover:bg-red-500/30">
-            End Workout
+            End workout
           </button>
         </div>
       ) : (
         <button onClick={() => setConfirmEnd(true)}
-          className="w-full text-center text-xs text-gray-600 hover:text-gray-400 py-2 transition-colors">
+          className="w-full text-center text-xs text-gray-400 hover:text-gray-400 py-2 transition-colors">
           End workout early
         </button>
       )}
 
       {!freeWorkout && (
         <Card className="p-4">
-          <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-3">Queue</div>
+          <div className="text-sm font-semibold text-gray-200 mb-3">Queue</div>
           <div className="space-y-2">
             {exercises.map((e, i) => (
               <div key={i} className={`flex items-center gap-2 ${i < exIdx ? 'opacity-30' : ''}`}>
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
-                  i < exIdx ? 'bg-neon text-black' : i === exIdx ? 'border-2 border-neon text-neon' : 'border border-[#333] text-gray-600'
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                  i < exIdx ? 'bg-neon text-black' : i === exIdx ? 'border-2 border-neon text-neon' : 'border border-[#333] text-gray-400'
                 }`}>
                   {i < exIdx ? '✓' : i + 1}
                 </div>
-                <span className={`text-sm ${i === exIdx ? 'text-white font-medium' : 'text-gray-500'}`}>{e.name}</span>
+                <span className={`text-sm ${i === exIdx ? 'text-white font-medium' : 'text-gray-400'}`}>{e.name}</span>
               </div>
             ))}
           </div>
@@ -976,19 +992,19 @@ function ExercisePickerScreen({ activeExercises, loggedSets, onPick, onEnd }) {
   return (
     <div className="space-y-4 py-4 slide-up">
       <div>
-        <div className="font-bebas text-4xl tracking-wide">Choose Exercise</div>
-        <div className="text-sm text-gray-500 mt-1">
+        <div className="font-bold text-3xl">Choose exercise</div>
+        <div className="text-sm text-gray-400 mt-1">
           {activeExercises.length === 0 ? 'Pick your first exercise' : `${loggedSets.length} sets logged · pick what's next`}
         </div>
       </div>
 
       {loggedSets.length > 0 && (
-        <NeonBtn onClick={onEnd} className="w-full">Finish Workout →</NeonBtn>
+        <NeonBtn onClick={onEnd} className="w-full">Finish workout →</NeonBtn>
       )}
 
       <Card className="p-4">
         <input
-          className="w-full bg-[#0d0d0d] border border-[#222] focus:border-neon text-white placeholder-[#444] rounded-xl px-3 py-2.5 text-sm outline-none transition-colors mb-3"
+          className="w-full bg-[#0d0d0d] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-3 py-2.5 text-sm outline-none transition-colors mb-3"
           placeholder="Search exercises..."
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -999,7 +1015,7 @@ function ExercisePickerScreen({ activeExercises, loggedSets, onPick, onEnd }) {
           {muscles.map(m => (
             <button key={m} onClick={() => setFilter(m)}
               className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
-                filter === m ? 'bg-neon text-black' : 'bg-[#1a1a1a] text-gray-500 border border-[#2a2a2a]'
+                filter === m ? 'bg-neon text-black' : 'bg-[#1a1a1a] text-gray-400 border border-[#2a2a2a]'
               }`}>
               {m}
             </button>
@@ -1014,14 +1030,14 @@ function ExercisePickerScreen({ activeExercises, loggedSets, onPick, onEnd }) {
                 <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-gray-400" />
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm truncate">{ex.name}</div>
-                  <div className="text-xs text-gray-500">{ex.muscle} · {ex.equipment}</div>
+                  <div className="text-xs text-gray-400">{ex.muscle} · {ex.equipment}</div>
                 </div>
                 {already && (
-                  <span className="text-[10px] text-neon/50 flex-shrink-0">done</span>
+                  <span className="text-xs text-neon/50 flex-shrink-0">done</span>
                 )}
                 <button
                   onClick={() => onPick(ex)}
-                  className="flex-shrink-0 bg-neon text-black font-bold px-3 py-1.5 rounded-lg text-xs hover:shadow-[0_4px_12px_rgba(200,241,53,0.3)] transition-all">
+                  className="flex-shrink-0 bg-neon text-black font-bold px-3 py-1.5 rounded-lg text-xs transition-all">
                   Go →
                 </button>
               </div>
@@ -1064,9 +1080,9 @@ function RestScreen({ exercises, restDuration, exIdx, setIdx, totalSets, onAdvan
   const isLastSet = nextSetIdx >= totalSets
   const isLastEx  = exIdx >= exercises.length - 1
   const nextLabel = freeWorkout
-    ? (isLastSet ? 'Pick Next Exercise' : `Set ${nextSetIdx + 1} of ${totalSets}`)
+    ? (isLastSet ? 'Pick next exercise' : `Set ${nextSetIdx + 1} of ${totalSets}`)
     : isLastSet
-      ? (isLastEx ? 'Finish Workout 🏆' : `Next: ${exercises[exIdx + 1]?.name}`)
+      ? (isLastEx ? 'Finish workout' : `Next: ${exercises[exIdx + 1]?.name}`)
       : `Set ${nextSetIdx + 1} of ${totalSets}`
   const pct = Math.min(1, restLeft / restDuration) * 100
   const r = 68; const circ = 2 * Math.PI * r
@@ -1074,7 +1090,7 @@ function RestScreen({ exercises, restDuration, exIdx, setIdx, totalSets, onAdvan
   return (
     <div className="flex flex-col items-center justify-center min-h-[70vh] space-y-8 fade-in">
       <div className="text-center">
-        <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-1">Rest</div>
+        <div className="text-sm font-semibold text-gray-200 mb-1">Rest</div>
         <div className="text-white font-medium">{exercises[exIdx].name} — Set {setIdx + 1} done ✓</div>
       </div>
 
@@ -1086,35 +1102,35 @@ function RestScreen({ exercises, restDuration, exIdx, setIdx, totalSets, onAdvan
             style={{ transition: 'stroke-dasharray 0.5s linear' }}/>
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <div className="font-bebas text-5xl text-neon leading-none">{fmtTime(restLeft)}</div>
-          <div className="text-[10px] text-gray-600 uppercase tracking-widest">rest</div>
+          <div className="font-bold text-4xl text-neon leading-none">{fmtTime(restLeft)}</div>
+          <div className="text-sm font-semibold text-gray-200">rest</div>
         </div>
       </div>
 
       <div className="text-center">
-        <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-1">Up Next</div>
+        <div className="text-sm font-semibold text-gray-200 mb-1">Up next</div>
         <div className="font-bold text-lg">{nextLabel}</div>
       </div>
 
       <button onClick={onAdvance}
         className="bg-[#1a1a1a] border border-[#2a2a2a] text-gray-400 hover:text-white hover:border-[#444] transition-all px-6 py-2.5 rounded-xl text-sm font-medium">
-        Skip Rest →
+        Skip rest →
       </button>
 
       {confirmEnd ? (
         <div className="flex gap-3 w-full max-w-xs">
           <button onClick={() => setConfirmEnd(false)}
             className="flex-1 py-3 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] text-gray-300 font-semibold text-sm transition-all hover:border-[#444]">
-            Keep Going
+            Keep going
           </button>
           <button onClick={onEnd}
             className="flex-1 py-3 rounded-xl bg-red-500/20 border border-red-500/40 text-red-400 font-semibold text-sm transition-all hover:bg-red-500/30">
-            End Workout
+            End workout
           </button>
         </div>
       ) : (
         <button onClick={() => setConfirmEnd(true)}
-          className="text-xs text-gray-600 hover:text-gray-400 transition-colors">
+          className="text-xs text-gray-400 hover:text-gray-400 transition-colors">
           End workout early
         </button>
       )}
@@ -1136,7 +1152,7 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
     if (!seen.has(s.ex)) { seen.add(s.ex); uniqueExNames.push(s.ex) }
   }
 
-  const [workoutName, setWorkoutName] = useState('My Free Workout')
+  const [workoutName, setWorkoutName] = useState('My free workout')
   const [saveState, setSaveState]     = useState('idle') // idle | saving | saved
 
   async function handleSave() {
@@ -1152,31 +1168,31 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
 
   return (
     <div className="flex flex-col items-center text-center space-y-5 py-6 slide-up">
-      <div className="text-6xl">🏆</div>
+      <Icon icon="mdi:trophy-outline" width={56} className="mx-auto text-neon" />
       <div>
-        <div className="font-bebas text-5xl text-neon tracking-wide">WORKOUT COMPLETE</div>
+        <div className="font-bold text-3xl text-neon">Workout complete</div>
         <div className="text-gray-400 mt-1">Great session, keep it up!</div>
       </div>
 
       <div className="grid grid-cols-3 gap-3 w-full">
         {[['Duration', `${duration}m`], ['Volume', `${volume}lb`], ['Sets', loggedSets.length]].map(([l, v]) => (
           <Card key={l} className="p-4">
-            <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-1">{l}</div>
-            <div className="font-bebas text-2xl">{v}</div>
+            <div className="text-xs text-gray-400 mb-1">{l}</div>
+            <div className="font-bold text-xl">{v}</div>
           </Card>
         ))}
       </div>
 
       {badges.length > 0 && (
         <Card className="p-5 w-full text-left border-neon/30">
-          <div className="text-[10px] text-neon uppercase tracking-widest mb-3">Badge Unlocked</div>
+          <div className="text-xs text-neon mb-3">Badge unlocked</div>
           <div className="space-y-3">
             {badges.map(b => (
               <div key={b.id} className="flex items-center gap-3">
                 <Icon icon={b.icon} width={32} className="text-neon flex-shrink-0" />
                 <div>
                   <div className="text-sm font-semibold text-white">{b.name}</div>
-                  <div className="text-[11px] text-gray-500">{b.desc}</div>
+                  <div className="text-xs text-gray-400">{b.desc}</div>
                 </div>
               </div>
             ))}
@@ -1186,15 +1202,15 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
 
       {prs.length > 0 && (
         <Card className="p-5 w-full text-left border-neon/30">
-          <div className="text-[10px] text-neon uppercase tracking-widest mb-3">🏅 New Personal Records</div>
+          <div className="text-xs text-neon mb-3">New personal records</div>
           <div className="space-y-2">
             {prs.map((pr, i) => (
               <div key={i} className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-white break-words">{pr.name}</div>
-                  <div className="text-[11px] text-gray-500">{pr.type}</div>
+                  <div className="text-xs text-gray-400">{pr.type}</div>
                 </div>
-                <div className="font-bebas text-xl text-neon flex-shrink-0">{pr.value}</div>
+                <div className="font-bold text-lg text-neon flex-shrink-0">{pr.value}</div>
               </div>
             ))}
           </div>
@@ -1204,7 +1220,7 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
       {/* Save as custom workout — only for free workouts with exercises */}
       {freeWorkout && uniqueExNames.length > 0 && (
         <Card className="p-5 w-full text-left">
-          <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-3">Save as Workout</div>
+          <div className="text-sm font-semibold text-gray-200 mb-3">Save as Workout</div>
 
           {saveState === 'saved' ? (
             <div className="flex items-center gap-2 py-2 text-neon text-sm font-semibold">
@@ -1214,7 +1230,7 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
           ) : (
             <>
               <input
-                className="w-full bg-transparent border-b border-[#333] focus:border-neon text-white font-bebas text-2xl tracking-widest outline-none pb-1 placeholder-[#333] transition-colors mb-4"
+                className="w-full bg-transparent border-b border-[#333] focus:border-neon text-white font-bold text-xl outline-none pb-1 placeholder-[#333] transition-colors mb-4"
                 placeholder="WORKOUT NAME"
                 value={workoutName}
                 onChange={e => setWorkoutName(e.target.value)}
@@ -1224,10 +1240,10 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
                   const ex = EXERCISES.find(e => e.name === name)
                   return (
                     <div key={i} className="flex items-center gap-2.5 py-1 border-b border-[#1a1a1a] last:border-0">
-                      <span className="text-[10px] text-gray-600 w-4 flex-shrink-0">{i + 1}</span>
-                      <Icon icon={getExerciseIcon(ex)} width={18} className="flex-shrink-0 text-gray-500" />
+                      <span className="text-xs text-gray-400 w-4 flex-shrink-0">{i + 1}</span>
+                      <Icon icon={getExerciseIcon(ex)} width={18} className="flex-shrink-0 text-gray-400" />
                       <span className="text-sm text-gray-300">{name}</span>
-                      <span className="text-[10px] text-gray-600 ml-auto">{ex?.muscle}</span>
+                      <span className="text-xs text-gray-400 ml-auto">{ex?.muscle}</span>
                     </div>
                   )
                 })}
@@ -1244,13 +1260,13 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
       )}
 
       <Card className="p-5 w-full text-left">
-        <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-3">Set Log</div>
+        <div className="text-sm font-semibold text-gray-200 mb-3">Set log</div>
         <div className="space-y-1">
           {loggedSets.map((s, i) => (
             <div key={i} className="flex justify-between items-center py-1.5 border-b border-[#1a1a1a] last:border-0">
               <div>
                 <span className="font-medium text-sm">{s.ex}</span>
-                <span className="text-gray-600 text-xs ml-2">Set {s.set}</span>
+                <span className="text-gray-400 text-xs ml-2">Set {s.set}</span>
               </div>
               <div className="text-sm font-bold text-neon">{s.weight}lb × {s.reps}</div>
             </div>
@@ -1258,7 +1274,7 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
         </div>
       </Card>
 
-      <NeonBtn onClick={onHome} className="w-full">Back to Home</NeonBtn>
+      <NeonBtn onClick={onHome} className="w-full">Back to home</NeonBtn>
     </div>
   )
 }
@@ -1358,11 +1374,11 @@ function SessionModal({ session, onClose, history }) {
         <div className="flex items-start justify-between mb-1">
           <div>
             <div className="font-bold text-lg">{session.name}</div>
-            <div className="text-xs text-gray-500 mt-0.5">{session.date} · {session.duration}</div>
+            <div className="text-xs text-gray-400 mt-0.5">{session.date} · {session.duration}</div>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-600 hover:text-white transition-colors text-xl leading-none mt-0.5"
+            className="text-gray-400 hover:text-white transition-colors text-xl leading-none mt-0.5"
           >×</button>
         </div>
 
@@ -1374,8 +1390,8 @@ function SessionModal({ session, onClose, history }) {
             ['Exercises', Object.keys(byExercise).length],
           ].map(([label, val]) => (
             <div key={label} className="flex-1 bg-[#0d0d0d] rounded-xl p-3 text-center">
-              <div className="font-bebas text-2xl text-neon">{val}</div>
-              <div className="text-[10px] text-gray-600 uppercase tracking-widest">{label}</div>
+              <div className="font-bold text-xl text-neon">{val}</div>
+              <div className="text-xs text-gray-400">{label}</div>
             </div>
           ))}
         </div>
@@ -1383,7 +1399,7 @@ function SessionModal({ session, onClose, history }) {
         {/* Progress vs previous session */}
         {prevSession ? (
           <div className="mb-6">
-            <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-3">
+            <div className="text-xs text-gray-400 mb-3">
               vs {prevSession.date}
             </div>
             <div className="space-y-3">
@@ -1397,14 +1413,14 @@ function SessionModal({ session, onClose, history }) {
                   <div key={c.name} className="bg-[#0d0d0d] rounded-xl overflow-hidden">
                     {/* Exercise header + bar */}
                     <div className="flex items-center gap-2 px-3 pt-2.5 pb-1.5">
-                      <Icon icon={getExerciseIcon(ex)} width={15} className="flex-shrink-0 text-gray-600" />
+                      <Icon icon={getExerciseIcon(ex)} width={15} className="flex-shrink-0 text-gray-400" />
                       <div className="font-semibold text-xs flex-1 truncate">{c.name}</div>
                       {c.pct !== null ? (
-                        <div className={`text-[10px] font-bold flex-shrink-0 ${c.pct > 0 ? 'text-neon' : c.pct < 0 ? 'text-red-400' : 'text-gray-500'}`}>
+                        <div className={`text-xs font-bold flex-shrink-0 ${c.pct > 0 ? 'text-neon' : c.pct < 0 ? 'text-red-400' : 'text-gray-400'}`}>
                           {c.pct > 0 ? '+' : ''}{c.pct}%
                         </div>
                       ) : (
-                        <div className="text-[9px] text-gray-600 flex-shrink-0">new</div>
+                        <div className="text-[11px] text-gray-400 flex-shrink-0">new</div>
                       )}
                     </div>
                     <div className="h-1 bg-[#1a1a1a] mx-3 rounded-full overflow-hidden relative mb-1.5">
@@ -1415,20 +1431,20 @@ function SessionModal({ session, onClose, history }) {
                     </div>
                     {/* Per-set rows */}
                     <div className="grid grid-cols-[1.8rem_1fr_3rem] gap-1 px-3 pb-1 border-t border-[#1a1a1a]">
-                      <span className="text-[8px] text-gray-700 uppercase pt-1.5">#</span>
-                      <span className="text-[8px] text-gray-700 uppercase pt-1.5">Prev → Now</span>
-                      <span className="text-[8px] text-gray-700 uppercase pt-1.5 text-right">Δ</span>
+                      <span className="text-[11px] text-gray-500 pt-1.5">#</span>
+                      <span className="text-[11px] text-gray-500 pt-1.5">Prev → Now</span>
+                      <span className="text-[11px] text-gray-500 pt-1.5 text-right">Δ</span>
                     </div>
                     {c.setRows.map(row => (
                       <div key={row.set} className="grid grid-cols-[1.8rem_1fr_3rem] gap-1 items-center px-3 py-1 border-t border-[#141414] last:pb-2">
-                        <span className="text-[9px] text-gray-600">{row.set}</span>
+                        <span className="text-[11px] text-gray-400">{row.set}</span>
                         <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-gray-500">{row.prevWeight != null ? `${row.prevWeight}` : '—'}</span>
-                          <span className="text-[9px] text-gray-700">→</span>
-                          <span className="text-[10px] font-bold text-white">{row.curWeight}lb</span>
-                          <span className="text-[9px] text-gray-600">×{row.curReps}</span>
+                          <span className="text-xs text-gray-400">{row.prevWeight != null ? `${row.prevWeight}` : '—'}</span>
+                          <span className="text-[11px] text-gray-500">→</span>
+                          <span className="text-xs font-bold text-white">{row.curWeight}lb</span>
+                          <span className="text-[11px] text-gray-400">×{row.curReps}</span>
                         </div>
-                        <div className={`text-[10px] font-bold text-right ${row.delta > 0 ? 'text-neon' : row.delta < 0 ? 'text-red-400' : 'text-gray-600'}`}>
+                        <div className={`text-xs font-bold text-right ${row.delta > 0 ? 'text-neon' : row.delta < 0 ? 'text-red-400' : 'text-gray-400'}`}>
                           {row.delta == null ? '' : row.delta === 0 ? '=' : `${row.delta > 0 ? '+' : ''}${row.delta}`}
                         </div>
                       </div>
@@ -1440,34 +1456,34 @@ function SessionModal({ session, onClose, history }) {
 
             {advice && (
               <div className="mt-3 p-3 bg-[#0a0a0a] border border-neon/20 rounded-xl">
-                <div className="text-[10px] text-neon uppercase tracking-widest mb-1.5">💡 Coach's Tip</div>
+                <div className="text-xs text-neon mb-1.5">Coach's tip</div>
                 <div className="text-xs text-gray-300 leading-relaxed">{advice}</div>
               </div>
             )}
           </div>
         ) : (
           <div className="mb-5 p-3 bg-[#0d0d0d] rounded-xl text-center">
-            <div className="text-xs text-gray-600">No previous session to compare — complete this workout again to see progress.</div>
+            <div className="text-xs text-gray-400">No previous session to compare — complete this workout again to see progress.</div>
           </div>
         )}
 
         {/* Set Details */}
-        <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-2">Set Log</div>
+        <div className="text-sm font-semibold text-gray-200 mb-2">Set log</div>
         <div className="bg-[#0d0d0d] rounded-xl overflow-hidden">
           {/* Header */}
           <div className="grid grid-cols-[1fr_3.5rem_3rem_3rem] gap-1 px-3 py-1.5 border-b border-[#1a1a1a]">
-            <span className="text-[9px] text-gray-700 uppercase tracking-widest">Exercise</span>
-            <span className="text-[9px] text-gray-700 uppercase tracking-widest text-center">Set</span>
-            <span className="text-[9px] text-gray-700 uppercase tracking-widest text-right">lbs</span>
-            <span className="text-[9px] text-gray-700 uppercase tracking-widest text-right">Reps</span>
+            <span className="text-[11px] text-gray-500">Exercise</span>
+            <span className="text-[11px] text-gray-500 text-center">Set</span>
+            <span className="text-[11px] text-gray-500 text-right">lbs</span>
+            <span className="text-[11px] text-gray-500 text-right">Reps</span>
           </div>
           {Object.entries(byExercise).map(([exName, exSets]) => (
             exSets.map((s, i) => (
               <div key={`${exName}-${i}`} className="grid grid-cols-[1fr_3.5rem_3rem_3rem] gap-1 items-center px-3 py-1.5 border-b border-[#1a1a1a] last:border-0">
-                <span className="text-[10px] text-gray-400 truncate">{i === 0 ? exName : ''}</span>
-                <span className="text-[10px] text-gray-600 text-center">{i + 1}</span>
-                <span className="text-[10px] font-bold text-right">{s.weight}</span>
-                <span className="text-[10px] font-bold text-neon text-right">{s.reps}</span>
+                <span className="text-xs text-gray-400 truncate">{i === 0 ? exName : ''}</span>
+                <span className="text-xs text-gray-400 text-center">{i + 1}</span>
+                <span className="text-xs font-bold text-right">{s.weight}</span>
+                <span className="text-xs font-bold text-neon text-right">{s.reps}</span>
               </div>
             ))
           ))}
@@ -1486,7 +1502,7 @@ function Card({ children, className = '' }) {
 function NeonBtn({ children, onClick, disabled = false, className = '' }) {
   return (
     <button onClick={onClick} disabled={disabled}
-      className={`bg-neon text-black font-bold py-3 rounded-xl text-sm uppercase tracking-widest hover:shadow-[0_6px_24px_rgba(200,241,53,0.4)] hover:-translate-y-px transition-all disabled:opacity-50 disabled:cursor-not-allowed ${className}`}>
+      className={`bg-neon text-black font-bold py-3 rounded-xl text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed ${className}`}>
       {children}
     </button>
   )

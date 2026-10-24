@@ -21,16 +21,16 @@ function Card({ children, className = '' }) {
 }
 
 function SectionLabel({ children }) {
-  return <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-2">{children}</div>
+  return <div className="text-sm font-semibold text-gray-200 mb-2">{children}</div>
 }
 
 function NumField({ label, value, onChange, step = '0.1', placeholder = '' }) {
   return (
     <label className="block">
-      <span className="text-[10px] text-gray-500 uppercase tracking-widest">{label}</span>
+      <span className="text-xs text-gray-400">{label}</span>
       <input type="number" inputMode="decimal" step={step} value={value} placeholder={placeholder}
         onChange={e => onChange(e.target.value)}
-        className="mt-1 w-full bg-[#1a1a1a] border border-[#262626] rounded-xl px-3 py-2 text-sm text-white placeholder-gray-700 focus:outline-none focus:border-neon/40" />
+        className="mt-1 w-full bg-[#1a1a1a] border border-[#262626] rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon/40" />
     </label>
   )
 }
@@ -55,8 +55,8 @@ function Overview({ history, badges }) {
         ].map(([label, val, icon]) => (
           <Card key={label} className="text-center p-3">
             <Icon icon={icon} width={20} className="mx-auto text-neon mb-1" />
-            <div className="font-bebas text-3xl text-white leading-none">{val}</div>
-            <div className="text-[10px] text-gray-600 uppercase mt-1">{label}</div>
+            <div className="font-bold text-2xl text-white leading-none">{val}</div>
+            <div className="text-xs text-gray-400 mt-1">{label}</div>
           </Card>
         ))}
       </div>
@@ -70,9 +70,9 @@ function Overview({ history, badges }) {
             const earned = earnedIds.has(b.id)
             return (
               <div key={b.id} className={`rounded-xl p-2.5 text-center border ${earned ? 'border-neon/30 bg-neon/5' : 'border-[#1e1e1e] opacity-40'}`}>
-                <Icon icon={b.icon} width={26} className={`mx-auto ${earned ? 'text-neon' : 'text-gray-600'}`} />
-                <div className="text-[11px] font-semibold text-white mt-1 leading-tight">{b.name}</div>
-                <div className="text-[9px] text-gray-500 mt-0.5 leading-tight">{b.desc}</div>
+                <Icon icon={b.icon} width={26} className={`mx-auto ${earned ? 'text-neon' : 'text-gray-400'}`} />
+                <div className="text-xs font-semibold text-white mt-1 leading-tight">{b.name}</div>
+                <div className="text-[11px] text-gray-400 mt-0.5 leading-tight">{b.desc}</div>
               </div>
             )
           })}
@@ -129,7 +129,7 @@ function Body({ measurements, checkinWeights, onSaved }) {
       <Card>
         <div className="flex items-baseline justify-between">
           <SectionLabel>Body weight</SectionLabel>
-          {change !== null && <span className="text-xs text-gray-500">{change > 0 ? '+' : ''}{change} lb since {fmtDate(sorted[0].date)}</span>}
+          {change !== null && <span className="text-xs text-gray-400">{change > 0 ? '+' : ''}{change} lb since {fmtDate(sorted[0].date)}</span>}
         </div>
         <LineChart data={weightSeries} unit="lb" label="Weight" />
       </Card>
@@ -138,7 +138,7 @@ function Body({ measurements, checkinWeights, onSaved }) {
         <SectionLabel>Log a weigh-in</SectionLabel>
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="text-[10px] text-gray-500 uppercase tracking-widest">Date</span>
+            <span className="text-xs text-gray-400">Date</span>
             <input type="date" value={form.date} max={today()} onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
               className="mt-1 w-full bg-[#1a1a1a] border border-[#262626] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-neon/40" />
           </label>
@@ -155,7 +155,7 @@ function Body({ measurements, checkinWeights, onSaved }) {
         )}
         {err && <p className="text-xs text-red-400 mt-2">{err}</p>}
         <button onClick={save} disabled={saving}
-          className="mt-3 w-full bg-neon text-black font-bold py-2.5 rounded-xl text-xs uppercase tracking-widest disabled:opacity-50">
+          className="mt-3 w-full bg-neon text-black font-bold py-2.5 rounded-xl text-xs disabled:opacity-50">
           {saving ? 'Saving...' : 'Save'}
         </button>
       </Card>
@@ -166,7 +166,7 @@ function Body({ measurements, checkinWeights, onSaved }) {
           <div className="overflow-x-auto -mx-1">
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-gray-600 text-left">
+                <tr className="text-gray-400 text-left">
                   <th className="font-normal py-1 px-1">Date</th>
                   {MEASURE_FIELDS.map(([k, l]) => <th key={k} className="font-normal py-1 px-1 text-right whitespace-nowrap">{l.split(' ')[0]}</th>)}
                   <th />
@@ -178,7 +178,7 @@ function Body({ measurements, checkinWeights, onSaved }) {
                     <td className="py-1.5 px-1 text-gray-400 whitespace-nowrap">{fmtDate(m.date)}</td>
                     {MEASURE_FIELDS.map(([k]) => <td key={k} className="py-1.5 px-1 text-right text-white">{m[k] ?? '–'}</td>)}
                     <td className="py-1.5 px-1 text-right">
-                      <button onClick={() => deleteMeasurement(m.id).then(onSaved)} aria-label="Delete entry" className="text-gray-700 hover:text-red-400">✕</button>
+                      <button onClick={() => deleteMeasurement(m.id).then(onSaved)} aria-label="Delete entry" className="text-gray-500 hover:text-red-400">✕</button>
                     </td>
                   </tr>
                 ))}
@@ -228,18 +228,18 @@ function Photos({ photos, onChanged }) {
         <div className="flex gap-2 mb-3">
           {POSES.map(p => (
             <button key={p} onClick={() => setPose(p)}
-              className={`flex-1 py-2 rounded-xl text-xs font-semibold capitalize border ${pose === p ? 'border-neon bg-neon/10 text-white' : 'border-[#222] text-gray-500'}`}>
+              className={`flex-1 py-2 rounded-xl text-xs font-semibold capitalize border ${pose === p ? 'border-neon bg-neon/10 text-white' : 'border-[#222] text-gray-400'}`}>
               {p}
             </button>
           ))}
         </div>
         <input ref={fileRef} type="file" accept="image/*" capture="user" className="hidden" onChange={onFile} />
         <button onClick={() => fileRef.current?.click()} disabled={busy}
-          className="w-full bg-neon text-black font-bold py-2.5 rounded-xl text-xs uppercase tracking-widest disabled:opacity-50 flex items-center justify-center gap-2">
+          className="w-full bg-neon text-black font-bold py-2.5 rounded-xl text-xs disabled:opacity-50 flex items-center justify-center gap-2">
           <Icon icon="mdi:camera" width={16} />{busy ? 'Uploading...' : `Take ${pose} photo`}
         </button>
         {err && <p className="text-xs text-red-400 mt-2">{err}</p>}
-        <p className="text-[10px] text-gray-700 mt-2">Photos are private to your account.</p>
+        <p className="text-xs text-gray-500 mt-2">Photos are private to your account.</p>
       </Card>
 
       {photos.length > 0 && (
@@ -249,7 +249,7 @@ function Photos({ photos, onChanged }) {
             <div className="flex gap-1">
               {POSES.map(p => (
                 <button key={p} onClick={() => setComparePose(p)}
-                  className={`px-2 py-0.5 rounded-md text-[10px] capitalize ${comparePose === p ? 'bg-neon/15 text-neon' : 'text-gray-600'}`}>{p}</button>
+                  className={`px-2 py-0.5 rounded-md text-xs capitalize ${comparePose === p ? 'bg-neon/15 text-neon' : 'text-gray-400'}`}>{p}</button>
               ))}
             </div>
           </div>
@@ -258,12 +258,12 @@ function Photos({ photos, onChanged }) {
               {[first, latest].map((p, i) => (
                 <div key={p.id}>
                   <img src={p.url} alt={`${p.pose} photo ${fmtDate(p.date)}`} className="w-full aspect-[3/4] object-cover rounded-xl bg-[#1a1a1a]" />
-                  <div className="text-[10px] text-gray-500 mt-1 text-center">{i ? 'Latest' : 'First'} · {fmtDate(p.date)}</div>
+                  <div className="text-xs text-gray-400 mt-1 text-center">{i ? 'Latest' : 'First'} · {fmtDate(p.date)}</div>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-xs text-gray-600">Add a second {comparePose} photo to compare.</p>
+            <p className="text-xs text-gray-400">Add a second {comparePose} photo to compare.</p>
           )}
         </Card>
       )}
@@ -275,7 +275,7 @@ function Photos({ photos, onChanged }) {
             {photos.map(p => (
               <div key={p.id} className="relative">
                 <img src={p.url} alt={`${p.pose} photo ${fmtDate(p.date)}`} className="w-full aspect-[3/4] object-cover rounded-lg bg-[#1a1a1a]" />
-                <div className="text-[9px] text-gray-500 mt-0.5 capitalize">{p.pose} · {fmtDate(p.date)}</div>
+                <div className="text-[11px] text-gray-400 mt-0.5 capitalize">{p.pose} · {fmtDate(p.date)}</div>
                 <button onClick={() => deleteProgressPhoto(p).then(onChanged)} aria-label="Delete photo"
                   className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/70 text-gray-300 text-xs">✕</button>
               </div>
@@ -338,15 +338,15 @@ function Health({ health, onChanged }) {
         {[['Avg steps', avg('steps'), 'mdi:shoe-print'], ['Avg sleep', avg('sleep_hours'), 'mdi:sleep'], ['Resting HR', avg('resting_hr'), 'mdi:heart-pulse']].map(([l, v, icon]) => (
           <Card key={l} className="text-center p-3">
             <Icon icon={icon} width={20} className="mx-auto text-neon mb-1" />
-            <div className="font-bebas text-2xl text-white leading-none">{v}</div>
-            <div className="text-[10px] text-gray-600 uppercase mt-1">{l} · 7d</div>
+            <div className="font-bold text-xl text-white leading-none">{v}</div>
+            <div className="text-xs text-gray-400 mt-1">{l} · 7d</div>
           </Card>
         ))}
       </div>
 
       {canSync && (
         <button onClick={sync} disabled={syncing}
-          className="w-full border border-neon/30 text-neon font-semibold py-3 rounded-xl text-xs uppercase tracking-widest disabled:opacity-50 flex items-center justify-center gap-2">
+          className="w-full border border-neon/30 text-neon font-semibold py-3 rounded-xl text-xs disabled:opacity-50 flex items-center justify-center gap-2">
           <Icon icon="mdi:heart-plus" width={16} />{syncing ? 'Syncing...' : 'Sync from Health'}
         </button>
       )}
@@ -359,11 +359,11 @@ function Health({ health, onChanged }) {
           <NumField label="Rest HR" step="1" value={form.resting_hr} onChange={v => setForm(f => ({ ...f, resting_hr: v }))} />
         </div>
         <button onClick={save} disabled={saving}
-          className="mt-3 w-full bg-neon text-black font-bold py-2.5 rounded-xl text-xs uppercase tracking-widest disabled:opacity-50">
-          {saving ? 'Saving...' : 'Save Today'}
+          className="mt-3 w-full bg-neon text-black font-bold py-2.5 rounded-xl text-xs disabled:opacity-50">
+          {saving ? 'Saving...' : 'Save today'}
         </button>
-        {msg && <p className="text-xs text-gray-500 mt-2">{msg}</p>}
-        <p className="text-[10px] text-gray-700 mt-2">Your coach uses sleep and recovery data when it adapts next week's plan.</p>
+        {msg && <p className="text-xs text-gray-400 mt-2">{msg}</p>}
+        <p className="text-xs text-gray-500 mt-2">Your coach uses sleep and recovery data when it adapts next week's plan.</p>
       </Card>
 
       {health.length > 1 && (
@@ -386,7 +386,7 @@ function Lifts({ history }) {
   const [query, setQuery] = useState('')
 
   if (!names.length) {
-    return <Card><p className="text-xs text-gray-500">Log a workout to start tracking your lifts.</p></Card>
+    return <Card><p className="text-xs text-gray-400">Log a workout to start tracking your lifts.</p></Card>
   }
 
   if (selected) {
@@ -399,10 +399,10 @@ function Lifts({ history }) {
     }))
     return (
       <div className="space-y-4">
-        <button onClick={() => setSelected(null)} className="text-xs text-gray-500">← All exercises</button>
+        <button onClick={() => setSelected(null)} className="text-xs text-gray-400">← All exercises</button>
         <div className="flex items-center gap-3">
           <Icon icon={getExerciseIcon({ name: selected })} width={28} className="text-neon flex-shrink-0" />
-          <div className="font-bebas text-2xl text-white tracking-wide leading-tight break-words">{selected}</div>
+          <div className="font-bold text-xl text-white leading-tight break-words">{selected}</div>
         </div>
         <div className="grid grid-cols-3 gap-3">
           {(weighted
@@ -410,8 +410,8 @@ function Lifts({ history }) {
             : [['Most reps', rec.maxReps], ['Sessions', sessions.length], ['Best volume', '–']]
           ).map(([l, v]) => (
             <Card key={l} className="text-center p-3">
-              <div className="font-bebas text-2xl text-white leading-none">{v}</div>
-              <div className="text-[10px] text-gray-600 uppercase mt-1">{l}</div>
+              <div className="font-bold text-xl text-white leading-none">{v}</div>
+              <div className="text-xs text-gray-400 mt-1">{l}</div>
             </Card>
           ))}
         </div>
@@ -424,7 +424,7 @@ function Lifts({ history }) {
           <div className="space-y-1.5">
             {[...sessions].reverse().slice(0, 15).map((s, i) => (
               <div key={i} className="flex items-start justify-between gap-3 py-1 border-b border-[#1e1e1e] last:border-0">
-                <span className="text-xs text-gray-500 flex-shrink-0">{fmtDate(s.createdAt)}</span>
+                <span className="text-xs text-gray-400 flex-shrink-0">{fmtDate(s.createdAt)}</span>
                 <span className="text-xs text-white text-right break-words">{s.sets.map(x => `${x.weight}×${x.reps}`).join(', ')}</span>
               </div>
             ))}
@@ -438,7 +438,7 @@ function Lifts({ history }) {
   return (
     <div className="space-y-3">
       <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search exercises"
-        className="w-full bg-[#141414] border border-[#1e1e1e] rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-700 focus:outline-none focus:border-neon/40" />
+        className="w-full bg-[#141414] border border-[#1e1e1e] rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon/40" />
       {filtered.map(name => {
         const rec = getRecords(byEx[name])
         return (
@@ -447,11 +447,11 @@ function Lifts({ history }) {
             <Icon icon={getExerciseIcon({ name })} width={22} className="text-gray-400 flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold text-white break-words">{name}</div>
-              <div className="text-[11px] text-gray-500">{byEx[name].length} sessions</div>
+              <div className="text-xs text-gray-400">{byEx[name].length} sessions</div>
             </div>
             <div className="text-right flex-shrink-0">
-              <div className="font-bebas text-lg text-neon leading-none">{rec.maxWeight > 0 ? `${rec.maxWeight} lb` : `${rec.maxReps} reps`}</div>
-              <div className="text-[10px] text-gray-600">best</div>
+              <div className="font-bold text-lg text-neon leading-none">{rec.maxWeight > 0 ? `${rec.maxWeight} lb` : `${rec.maxReps} reps`}</div>
+              <div className="text-sm font-semibold text-gray-200">best</div>
             </div>
           </button>
         )
@@ -505,18 +505,18 @@ export default function Progress() {
 
   return (
     <div className="space-y-4 pt-2 pb-4">
-      <div className="font-bebas text-3xl text-white tracking-wide">Progress</div>
+      <div className="font-bold text-2xl text-white">Progress</div>
       <div className="flex bg-[#111] border border-[#222] rounded-2xl p-1 overflow-x-auto">
         {TABS.map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
-            className={`flex-1 min-w-[64px] py-2 rounded-xl text-[11px] font-bold uppercase tracking-widest transition-all ${
-              tab === id ? 'bg-neon text-black' : 'text-gray-500'
+            className={`flex-1 min-w-[64px] py-2 rounded-xl text-xs font-bold transition-all ${
+              tab === id ? 'bg-neon text-black' : 'text-gray-400'
             }`}>{label}</button>
         ))}
       </div>
 
       {loading ? (
-        <div className="text-gray-700 text-sm animate-pulse text-center py-16">Loading your progress...</div>
+        <div className="text-gray-500 text-sm animate-pulse text-center py-16">Loading your progress...</div>
       ) : (
         <>
           {tab === 'overview' && <Overview history={history} badges={badges} />}

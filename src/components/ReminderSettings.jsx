@@ -76,15 +76,15 @@ export default function ReminderSettings() {
           <Icon icon="mdi:bell-ring-outline" width={20} className="text-neon flex-shrink-0" />
           <div>
             <div className="text-sm font-semibold text-white">Workout reminders</div>
-            <div className="text-[11px] text-gray-500">Training-day nudges and streak warnings</div>
+            <div className="text-xs text-gray-400">Training-day nudges and streak warnings</div>
           </div>
         </div>
         <Toggle on={active} onChange={toggle} label="Workout reminders" />
       </div>
 
-      {!pushSupported() && <p className="text-[11px] text-gray-500">This browser doesn't support notifications.</p>}
+      {!pushSupported() && <p className="text-xs text-gray-400">This browser doesn't support notifications.</p>}
       {pushSupported() && needsHomeScreenInstall() && (
-        <p className="text-[11px] text-gray-500">On iPhone, add ATHRION to your Home Screen first (Share → Add to Home Screen), then turn reminders on from there.</p>
+        <p className="text-xs text-gray-400">On iPhone, add ATHRION to your Home Screen first (Share → Add to Home Screen), then turn reminders on from there.</p>
       )}
 
       {active && (
@@ -106,8 +106,8 @@ export default function ReminderSettings() {
           </button>
         </div>
       )}
-      {busy && <p className="text-[11px] text-gray-500">Working...</p>}
-      {msg && <p className="text-[11px] text-gray-500">{msg}</p>}
+      {busy && <p className="text-xs text-gray-400">Working...</p>}
+      {msg && <p className="text-xs text-gray-400">{msg}</p>}
     </div>
   )
 }

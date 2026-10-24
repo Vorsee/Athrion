@@ -302,7 +302,7 @@ export default function Group({ session }) {
     const duration = startTime ? Math.round((Date.now() - startTime) / 60000) : 0
     const name     = exercises.length > 0
       ? `Group: ${exercises.slice(0, 2).map(e => e.name).join(', ')}${exercises.length > 2 ? '…' : ''}`
-      : 'Group Workout'
+      : 'Group workout'
     const formattedSets = mySets.map(s => ({ ex: s.exercise, set: s.set_num, weight: s.weight, reps: s.reps }))
     try {
       await saveWorkoutEntry({
@@ -417,28 +417,28 @@ function HomeScreen({ joinCode, setJoinCode, joinError, loading, onCreate, onJoi
   return (
     <div className="space-y-6 py-4 slide-up">
       <div className="text-center pt-4">
-        <div className="font-bebas text-5xl tracking-widest text-white mb-2">GROUP WORKOUT</div>
+        <div className="font-bold text-2xl text-white mb-1">Group workout</div>
         <div className="text-gray-400 text-sm">Train together. Compete in real time.</div>
       </div>
 
       <Card className="p-6 space-y-4">
-        <div className="text-[10px] text-gray-600 uppercase tracking-widest">Host a Session</div>
+        <div className="text-sm font-semibold text-gray-200">Host a session</div>
         <p className="text-sm text-gray-400">Create a room, pick exercises, and invite friends with a code.</p>
         <NeonBtn onClick={onCreate} disabled={loading} className="w-full">
-          {loading ? 'Creating...' : '+ Create a Room'}
+          {loading ? 'Creating...' : '+ Create a room'}
         </NeonBtn>
       </Card>
 
       <div className="flex items-center gap-3">
         <div className="flex-1 h-px bg-[#222]" />
-        <span className="text-xs text-gray-600 uppercase tracking-widest">or join with a code</span>
+        <span className="text-xs text-gray-400">or join with a code</span>
         <div className="flex-1 h-px bg-[#222]" />
       </div>
 
       <Card className="p-6 space-y-4">
-        <div className="text-[10px] text-gray-600 uppercase tracking-widest">Join a Room</div>
+        <div className="text-sm font-semibold text-gray-200">Join a room</div>
         <input
-          className="w-full bg-[#0d0d0d] border border-[#222] focus:border-neon text-white placeholder-[#444] rounded-xl px-4 py-3 text-sm outline-none transition-colors font-bebas text-xl tracking-widest text-center uppercase"
+          className="w-full bg-[#0d0d0d] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-4 py-3 text-sm outline-none transition-colors font-bold text-lg text-center"
           placeholder="ABC123"
           maxLength={6}
           value={joinCode}
@@ -483,34 +483,34 @@ function LobbyScreen({ groupSession, participants, isHost, exercises, onAddExerc
 
   return (
     <div className="space-y-4 py-4 slide-up">
-      <button onClick={onBack} className="text-gray-500 text-sm hover:text-white transition-colors">← Back</button>
+      <button onClick={onBack} className="text-gray-400 text-sm hover:text-white transition-colors">← Back</button>
 
       {/* Room code */}
       <Card className="p-6 text-center">
-        <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-2">Room Code</div>
-        <div className="font-bebas text-6xl tracking-[0.2em] text-neon mb-3">{groupSession?.code}</div>
+        <div className="text-sm font-semibold text-gray-200 mb-2">Room code</div>
+        <div className="font-bold text-5xl text-neon mb-3">{groupSession?.code}</div>
         <button onClick={copyCode}
-          className="text-xs text-gray-500 hover:text-white border border-[#333] hover:border-neon/40 px-4 py-1.5 rounded-lg transition-all">
-          {copied ? '✓ Copied!' : 'Copy Code'}
+          className="text-xs text-gray-400 hover:text-white border border-[#333] hover:border-neon/40 px-4 py-1.5 rounded-lg transition-all">
+          {copied ? '✓ Copied!' : 'Copy code'}
         </button>
-        <div className="text-[10px] text-gray-600 mt-2">Share this code with friends to join</div>
+        <div className="text-xs text-gray-400 mt-2">Share this code with friends to join</div>
       </Card>
 
       {/* Participants */}
       <Card className="p-4">
-        <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-3">Participants · {participants.length}</div>
+        <div className="text-xs text-gray-400 mb-3">Participants · {participants.length}</div>
         <div className="space-y-2">
           {participants.map((p, i) => (
             <div key={i} className="flex items-center gap-3 bg-[#0d0d0d] rounded-xl px-3 py-2.5">
               <div className="w-7 h-7 rounded-lg bg-neon/15 border border-neon/20 flex items-center justify-center flex-shrink-0">
-                <span className="font-bebas text-xs text-neon leading-none">{(p.display_name || '?')[0].toUpperCase()}</span>
+                <span className="font-bold text-xs text-neon leading-none">{(p.display_name || '?')[0].toUpperCase()}</span>
               </div>
               <span className="text-sm font-medium flex-1">{p.display_name}</span>
-              {p.user_id === groupSession?.host_id && <span className="text-xs">👑</span>}
+              {p.user_id === groupSession?.host_id && <span className="text-xs text-neon">Host</span>}
             </div>
           ))}
           {participants.length === 0 && (
-            <div className="text-xs text-gray-600 text-center py-2">Waiting for participants...</div>
+            <div className="text-xs text-gray-400 text-center py-2">Waiting for participants...</div>
           )}
         </div>
       </Card>
@@ -518,16 +518,16 @@ function LobbyScreen({ groupSession, participants, isHost, exercises, onAddExerc
       {/* Host-only config */}
       {isHost && (
         <Card className="p-4">
-          <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-3">Sets per Exercise</div>
+          <div className="text-sm font-semibold text-gray-200 mb-3">Sets per Exercise</div>
           <div className="flex gap-2 mb-4">
             {[1,2,3,4,5].map(n => (
               <button key={n} onClick={() => setTotalSets(n)}
-                className={`flex-1 py-2.5 rounded-xl font-bebas text-xl transition-all ${totalSets === n ? 'bg-neon text-black' : 'bg-[#1a1a1a] text-white border border-[#2a2a2a]'}`}>
+                className={`flex-1 py-2.5 rounded-xl font-bold text-lg transition-all ${totalSets === n ? 'bg-neon text-black' : 'bg-[#1a1a1a] text-white border border-[#2a2a2a]'}`}>
                 {n}
               </button>
             ))}
           </div>
-          <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-3">Rest Duration</div>
+          <div className="text-sm font-semibold text-gray-200 mb-3">Rest duration</div>
           <div className="flex gap-2">
             {[30,45,60,90,120].map(s => (
               <button key={s} onClick={() => setRestSecs(s)}
@@ -542,14 +542,14 @@ function LobbyScreen({ groupSession, participants, isHost, exercises, onAddExerc
       {/* Exercise list — all participants can edit */}
       {exercises.length > 0 && (
         <Card className="p-4">
-          <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-3">Selected · {exercises.length}</div>
+          <div className="text-xs text-gray-400 mb-3">Selected · {exercises.length}</div>
           <div className="space-y-2">
             {exercises.map((ex, i) => (
               <div key={i} className="flex items-center gap-3 bg-[#0d0d0d] rounded-xl p-3">
                 <Icon icon={getExerciseIcon(ex)} width={20} className="flex-shrink-0 text-gray-400" />
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm truncate">{ex.name}</div>
-                  <div className="text-xs text-gray-500">{ex.muscle}</div>
+                  <div className="text-xs text-gray-400">{ex.muscle}</div>
                 </div>
                 <button onClick={() => onRemoveExercise(i)} className="text-red-400 hover:text-red-300 text-lg leading-none transition-colors">×</button>
               </div>
@@ -560,9 +560,9 @@ function LobbyScreen({ groupSession, participants, isHost, exercises, onAddExerc
 
       {/* Exercise picker — open to everyone */}
       <Card className="p-4">
-        <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-3">Add Exercises</div>
+        <div className="text-sm font-semibold text-gray-200 mb-3">Add exercises</div>
         <input
-          className="w-full bg-[#0d0d0d] border border-[#222] focus:border-neon text-white placeholder-[#444] rounded-xl px-3 py-2.5 text-sm outline-none transition-colors mb-3"
+          className="w-full bg-[#0d0d0d] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-3 py-2.5 text-sm outline-none transition-colors mb-3"
           placeholder="Search exercises..."
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -570,7 +570,7 @@ function LobbyScreen({ groupSession, participants, isHost, exercises, onAddExerc
         <div className="flex gap-1.5 overflow-x-auto pb-2 mb-3" style={{ scrollbarWidth: 'none' }}>
           {['All', ...MUSCLES.filter(m => m !== 'All')].map(m => (
             <button key={m} onClick={() => setFilter(m)}
-              className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-all ${filter === m ? 'bg-neon text-black' : 'bg-[#1a1a1a] text-gray-500 border border-[#2a2a2a]'}`}>
+              className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-all ${filter === m ? 'bg-neon text-black' : 'bg-[#1a1a1a] text-gray-400 border border-[#2a2a2a]'}`}>
               {m}
             </button>
           ))}
@@ -583,10 +583,10 @@ function LobbyScreen({ groupSession, participants, isHost, exercises, onAddExerc
                 <Icon icon={getExerciseIcon(ex)} width={20} className="flex-shrink-0 text-gray-400" />
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm truncate">{ex.name}</div>
-                  <div className="text-xs text-gray-500">{ex.muscle}</div>
+                  <div className="text-xs text-gray-400">{ex.muscle}</div>
                 </div>
                 <button onClick={() => onAddExercise(ex)} disabled={added}
-                  className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${added ? 'bg-[#1a1a1a] text-gray-600 border border-[#2a2a2a] cursor-default' : 'bg-neon text-black hover:shadow-[0_4px_12px_rgba(200,241,53,0.3)]'}`}>
+                  className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${added ? 'bg-[#1a1a1a] text-gray-400 border border-[#2a2a2a] cursor-default' : 'bg-neon text-black'}`}>
                   {added ? '✓' : '+ Add'}
                 </button>
               </div>
@@ -599,10 +599,10 @@ function LobbyScreen({ groupSession, participants, isHost, exercises, onAddExerc
       {isHost ? (
         <>
           {participants.length < 2 && (
-            <div className="text-xs text-gray-600 text-center">Invite friends — or test solo</div>
+            <div className="text-xs text-gray-400 text-center">Invite friends — or test solo</div>
           )}
           <NeonBtn onClick={onStart} disabled={exercises.length === 0} className="w-full">
-            Start Workout →
+            Start workout →
           </NeonBtn>
         </>
       ) : (
@@ -630,7 +630,7 @@ function TrainingScreen({ exercises, exIdx, setIdx, totalSets, participants, all
     <div className="space-y-4 py-4 slide-in">
       {/* Progress header */}
       <div>
-        <div className="flex justify-between text-[10px] text-gray-600 uppercase tracking-widest mb-2">
+        <div className="flex justify-between text-xs text-gray-400 mb-2">
           <span>Exercise {exIdx + 1}/{exercises.length} · {ex.name}</span>
           <span>Set {setIdx + 1} of {totalSets}</span>
         </div>
@@ -645,7 +645,7 @@ function TrainingScreen({ exercises, exIdx, setIdx, totalSets, participants, all
       {/* Participants strip */}
       {participants.length > 0 && (
         <Card className="p-3">
-          <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-2">Participants</div>
+          <div className="text-sm font-semibold text-gray-200 mb-2">Participants</div>
           <div className="flex flex-wrap gap-3">
             {participants.map((p, i) => {
               const done = setsForThisExByPerson(p.display_name)
@@ -671,13 +671,13 @@ function TrainingScreen({ exercises, exIdx, setIdx, totalSets, participants, all
         <div className="flex justify-center mb-3">
           <Icon icon={getExerciseIcon(ex)} width={56} className="text-neon/80" />
         </div>
-        <div className="font-bebas text-4xl tracking-wide mb-1">{ex.name}</div>
+        <div className="font-bold text-3xl mb-1">{ex.name}</div>
         <div className="text-gray-400 text-sm">{ex.muscle}</div>
       </div>
 
       {/* Set log */}
       <Card className="p-5">
-        <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-3">Set {setIdx + 1} of {totalSets}</div>
+        <div className="text-xs text-gray-400 mb-3">Set {setIdx + 1} of {totalSets}</div>
         <div className="flex gap-2 mb-4">
           {Array.from({ length: totalSets }, (_, i) => (
             <div key={i} className={`flex-1 h-2 rounded-full transition-all duration-300 ${i < setIdx ? 'bg-neon' : i === setIdx ? 'bg-neon ring-pulse' : 'bg-[#222]'}`} />
@@ -685,39 +685,39 @@ function TrainingScreen({ exercises, exIdx, setIdx, totalSets, participants, all
         </div>
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
-            <label className="text-xs text-gray-500 block mb-1">Weight (lb)</label>
+            <label className="text-xs text-gray-400 block mb-1">Weight (lb)</label>
             <input
               type="number" placeholder="0" value={weight}
               onChange={e => setWeight(e.target.value)} min="0" step="0.5"
-              className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-[#444] rounded-xl px-4 py-3 text-sm outline-none transition-colors"
+              className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-4 py-3 text-sm outline-none transition-colors"
             />
           </div>
           <div>
-            <label className="text-xs text-gray-500 block mb-1">Reps</label>
+            <label className="text-xs text-gray-400 block mb-1">Reps</label>
             <input
               type="number" placeholder="0" value={reps}
               onChange={e => setReps(e.target.value)} min="1"
-              className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-[#444] rounded-xl px-4 py-3 text-sm outline-none transition-colors"
+              className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-4 py-3 text-sm outline-none transition-colors"
             />
           </div>
         </div>
-        <NeonBtn onClick={onLog} className="w-full">Log Set →</NeonBtn>
+        <NeonBtn onClick={onLog} className="w-full">Log set →</NeonBtn>
       </Card>
 
       {confirmEnd ? (
         <div className="flex gap-3">
           <button onClick={() => setConfirmEnd(false)}
             className="flex-1 py-3 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] text-gray-300 font-semibold text-sm transition-all hover:border-[#444]">
-            Keep Going
+            Keep going
           </button>
           <button onClick={onEnd}
             className="flex-1 py-3 rounded-xl bg-red-500/20 border border-red-500/40 text-red-400 font-semibold text-sm transition-all hover:bg-red-500/30">
-            End Workout
+            End workout
           </button>
         </div>
       ) : (
         <button onClick={() => setConfirmEnd(true)}
-          className="w-full text-center text-xs text-gray-600 hover:text-gray-400 py-2 transition-colors">
+          className="w-full text-center text-xs text-gray-400 hover:text-gray-400 py-2 transition-colors">
           End workout early
         </button>
       )}
@@ -750,7 +750,7 @@ function RestScreen({ exercises, exIdx, setIdx, totalSets, restLeft, restSecs, a
     <div className="space-y-6 py-4 fade-in">
       {/* Timer */}
       <div className="flex flex-col items-center">
-        <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-1">
+        <div className="text-xs text-gray-400 mb-1">
           {ex?.name} — Set {setIdx + 1} complete ✓
         </div>
         <div className="relative w-44 h-44 my-2">
@@ -764,8 +764,8 @@ function RestScreen({ exercises, exIdx, setIdx, totalSets, restLeft, restSecs, a
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className="font-bebas text-5xl text-neon leading-none">{fmtTime(restLeft)}</div>
-            <div className="text-[10px] text-gray-600 uppercase tracking-widest">rest</div>
+            <div className="font-bold text-4xl text-neon leading-none">{fmtTime(restLeft)}</div>
+            <div className="text-sm font-semibold text-gray-200">rest</div>
           </div>
         </div>
         <button
@@ -779,13 +779,13 @@ function RestScreen({ exercises, exIdx, setIdx, totalSets, restLeft, restSecs, a
       {/* Live Leaderboard */}
       <Card className="p-5">
         <div className="flex items-center gap-2 mb-4">
-          <span className="text-neon text-sm font-bold tracking-widest uppercase">⚡ Live Standings</span>
+          <span className="text-neon text-sm font-bold">Live standings</span>
           <div className="flex-1 h-px bg-neon/20" />
-          <span className="text-[10px] text-gray-600 uppercase">{ex?.name}</span>
+          <span className="text-xs text-gray-400">{ex?.name}</span>
         </div>
 
         {leaderboard.length === 0 ? (
-          <div className="text-center py-4 text-gray-600 text-sm">No sets logged yet — be the first!</div>
+          <div className="text-center py-4 text-gray-400 text-sm">No sets logged yet — be the first!</div>
         ) : (
           <div className="space-y-3">
             {leaderboard.map((entry, i) => {
@@ -804,7 +804,7 @@ function RestScreen({ exercises, exIdx, setIdx, totalSets, restLeft, restSecs, a
                       <div className={`text-xs font-bold ${textColor}`}>
                         {entry.latestSet ? `${entry.latestSet.weight}lb × ${entry.latestSet.reps}` : ''}
                       </div>
-                      <div className="text-[10px] text-gray-600">{entry.volume}lb vol</div>
+                      <div className="text-xs text-gray-400">{entry.volume}lb vol</div>
                     </div>
                   </div>
                   <div className="h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden">
@@ -820,7 +820,7 @@ function RestScreen({ exercises, exIdx, setIdx, totalSets, restLeft, restSecs, a
         )}
 
         {!myEntry && leaderboard.length > 0 && (
-          <div className="mt-3 text-xs text-gray-600 text-center">You haven't logged this exercise yet</div>
+          <div className="mt-3 text-xs text-gray-400 text-center">You haven't logged this exercise yet</div>
         )}
       </Card>
 
@@ -828,16 +828,16 @@ function RestScreen({ exercises, exIdx, setIdx, totalSets, restLeft, restSecs, a
         <div className="flex gap-3">
           <button onClick={() => setConfirmEnd(false)}
             className="flex-1 py-3 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] text-gray-300 font-semibold text-sm transition-all hover:border-[#444]">
-            Keep Going
+            Keep going
           </button>
           <button onClick={onEnd}
             className="flex-1 py-3 rounded-xl bg-red-500/20 border border-red-500/40 text-red-400 font-semibold text-sm transition-all hover:bg-red-500/30">
-            End Workout
+            End workout
           </button>
         </div>
       ) : (
         <button onClick={() => setConfirmEnd(true)}
-          className="w-full text-center text-xs text-gray-600 hover:text-gray-400 py-2 transition-colors">
+          className="w-full text-center text-xs text-gray-400 hover:text-gray-400 py-2 transition-colors">
           End workout early
         </button>
       )}
@@ -858,19 +858,19 @@ function DoneScreen({ allSets, exercises, participants, displayName, startTime, 
   return (
     <div className="space-y-5 py-4 slide-up">
       <div className="text-center">
-        <div className="text-5xl mb-3">🏆</div>
-        <div className="font-bebas text-4xl text-neon tracking-wide">GROUP WORKOUT COMPLETE!</div>
+        <Icon icon="mdi:trophy-outline" width={48} className="mx-auto mb-3 text-neon" />
+        <div className="font-bold text-3xl text-neon">GROUP WORKOUT COMPLETE!</div>
         {duration > 0 && <div className="text-gray-400 mt-1 text-sm">Duration: {duration}min</div>}
       </div>
 
       {/* Champion */}
       {champion && (
         <Card className="p-5 text-center border-neon/30">
-          <div className="text-2xl mb-1">👑</div>
-          <div className="font-bebas text-3xl text-neon">{champion.name}</div>
+          <Icon icon="mdi:crown-outline" width={28} className="mx-auto mb-1 text-neon" />
+          <div className="font-bold text-2xl text-neon">{champion.name}</div>
           <div className="text-gray-400 text-sm">{champion.volume}lb total volume</div>
           {champion.name === displayName && (
-            <div className="mt-2 text-xs text-neon/70 uppercase tracking-widest">That's you!</div>
+            <div className="mt-2 text-xs text-neon/70">That's you!</div>
           )}
         </Card>
       )}
@@ -878,7 +878,7 @@ function DoneScreen({ allSets, exercises, participants, displayName, startTime, 
       {/* Final rankings */}
       {overall.length > 1 && (
         <Card className="p-4">
-          <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-3">Final Rankings</div>
+          <div className="text-sm font-semibold text-gray-200 mb-3">Final rankings</div>
           <div className="space-y-2">
             {overall.map((entry, i) => (
               <div key={i} className="flex items-center gap-3 bg-[#0d0d0d] rounded-xl px-3 py-2.5">
@@ -887,7 +887,7 @@ function DoneScreen({ allSets, exercises, participants, displayName, startTime, 
                   {entry.name}
                 </span>
                 <span className="text-sm font-bold text-neon">{entry.volume}lb</span>
-                <span className="text-xs text-gray-600">{entry.setCount} sets</span>
+                <span className="text-xs text-gray-400">{entry.setCount} sets</span>
               </div>
             ))}
           </div>
@@ -897,7 +897,7 @@ function DoneScreen({ allSets, exercises, participants, displayName, startTime, 
       {/* Per-exercise breakdown */}
       {exercises.length > 0 && (
         <Card className="p-4">
-          <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-3">Exercise Breakdown</div>
+          <div className="text-sm font-semibold text-gray-200 mb-3">Exercise breakdown</div>
           <div className="space-y-3">
             {exercises.map((ex, ei) => {
               const lb = buildExerciseLeaderboard(allSets, ex.name)
@@ -905,13 +905,13 @@ function DoneScreen({ allSets, exercises, participants, displayName, startTime, 
               return (
                 <div key={ei} className="bg-[#0d0d0d] rounded-xl p-3">
                   <div className="flex items-center gap-2 mb-2">
-                    <Icon icon={getExerciseIcon(ex)} width={16} className="text-gray-500 flex-shrink-0" />
+                    <Icon icon={getExerciseIcon(ex)} width={16} className="text-gray-400 flex-shrink-0" />
                     <span className="text-xs font-semibold text-gray-300">{ex.name}</span>
                   </div>
                   <div className="space-y-1.5">
                     {lb.map((entry, i) => (
                       <div key={i} className="flex items-center gap-2">
-                        <span className="text-[10px] w-4">{medals[i] || `${i + 1}.`}</span>
+                        <span className="text-xs w-4">{medals[i] || `${i + 1}.`}</span>
                         <span className={`text-xs flex-1 ${entry.name === displayName ? 'font-bold text-white' : 'text-gray-400'}`}>
                           {entry.name}
                         </span>
@@ -926,7 +926,7 @@ function DoneScreen({ allSets, exercises, participants, displayName, startTime, 
         </Card>
       )}
 
-      <NeonBtn onClick={onHome} className="w-full">Back to Home</NeonBtn>
+      <NeonBtn onClick={onHome} className="w-full">Back to home</NeonBtn>
     </div>
   )
 }
@@ -944,7 +944,7 @@ function NeonBtn({ children, onClick, disabled = false, className = '' }) {
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`bg-neon text-black font-bold py-3 rounded-xl text-sm uppercase tracking-widest hover:shadow-[0_6px_24px_rgba(200,241,53,0.4)] hover:-translate-y-px transition-all disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+      className={`bg-neon text-black font-bold py-3 rounded-xl text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
     >
       {children}
     </button>

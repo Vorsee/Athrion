@@ -29,7 +29,7 @@ describe('Workout tab — rest days match the plan', () => {
     expect(await screen.findByText('Rest & Recovery')).toBeInTheDocument()
     expect(screen.getByText('Light walk and stretching.')).toBeInTheDocument()
     expect(screen.getByText('rest')).toBeInTheDocument()
-    expect(screen.queryByText('🚀 Start Training')).toBeNull()
+    expect(screen.queryByText('Start workout')).toBeNull()
   })
 
   it('offers the plan workouts, next one first, and starts the picked one', async () => {
@@ -41,8 +41,8 @@ describe('Workout tab — rest days match the plan', () => {
     expect(screen.getByText('Barbell Bench Press')).toBeInTheDocument() // Monday preselected
     await userEvent.click(chips[1])
     expect(screen.getByText('Romanian Deadlift')).toBeInTheDocument()
-    await userEvent.click(screen.getByText('🚀 Train Anyway'))
-    expect(await screen.findByText('✓ Done — Start Rest Timer')).toBeInTheDocument()
+    await userEvent.click(screen.getByText('Train anyway'))
+    expect(await screen.findByText('Log set')).toBeInTheDocument()
     expect(screen.getAllByText('Squat').length).toBeGreaterThan(0)
   })
 
@@ -51,7 +51,7 @@ describe('Workout tab — rest days match the plan', () => {
     show()
     expect(await screen.findByText('Full Body')).toBeInTheDocument()
     expect(screen.getByText('Goblet Squat')).toBeInTheDocument()
-    expect(screen.getByText('🚀 Start Training')).toBeInTheDocument()
+    expect(screen.getByText('Start workout')).toBeInTheDocument()
     expect(screen.queryByText('Want to train anyway?')).toBeNull()
   })
 
@@ -59,7 +59,7 @@ describe('Workout tab — rest days match the plan', () => {
     sb.set('fitness_plans', { data: null, error: null })
     show()
     expect(await screen.findByText('Fri Workout')).toBeInTheDocument()
-    expect(screen.getByText('🚀 Start Training')).toBeInTheDocument()
+    expect(screen.getByText('Start workout')).toBeInTheDocument()
   })
 })
 
@@ -67,11 +67,11 @@ describe('Workout tab — logging', () => {
   it('logs a set, starts the rest timer and remembers the workout across reloads', async () => {
     sb.set('fitness_plans', { data: withWorkoutOn('Friday'), error: null })
     show()
-    await userEvent.click(await screen.findByText('🚀 Start Training'))
+    await userEvent.click(await screen.findByText('Start workout'))
     const [weight, reps] = screen.getAllByPlaceholderText('0')
     await userEvent.type(weight, '50')
     await userEvent.type(reps, '10')
-    await userEvent.click(screen.getByText('✓ Done — Start Rest Timer'))
+    await userEvent.click(screen.getByText('Log set'))
     await waitFor(() => expect(localStorage.getItem('athrion_rest_end')).toBeTruthy())
     const saved = JSON.parse(localStorage.getItem('athrion_workout'))
     expect(saved.loggedSets[0]).toMatchObject({ ex: 'Goblet Squat', weight: 50, reps: 10 })
@@ -80,7 +80,7 @@ describe('Workout tab — logging', () => {
   it('starts a free workout', async () => {
     sb.set('fitness_plans', { data: null, error: null })
     show()
-    await userEvent.click(await screen.findByText('+ Free Workout'))
+    await userEvent.click(await screen.findByText('+ Free workout'))
     expect(await screen.findByText('Pick exercises as you go')).toBeInTheDocument()
   })
 })

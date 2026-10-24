@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Icon } from '@iconify/react'
 
 const STORAGE_KEY = 'athrion_pwa_dismissed'
 
@@ -39,18 +40,18 @@ export default function HomeScreenPrompt() {
     >
       <button
         onClick={dismiss}
-        className="absolute top-2.5 right-2.5 text-gray-600 hover:text-white text-sm leading-none transition-colors"
+        className="absolute top-2.5 right-2.5 text-gray-400 hover:text-white text-sm leading-none transition-colors"
       >
         ✕
       </button>
 
       <div className="flex items-center gap-2.5 mb-3">
         <div className="w-9 h-9 rounded-xl bg-neon/10 border border-neon/20 flex items-center justify-center flex-shrink-0">
-          <span className="text-base">⚡</span>
+          <Icon icon="mdi:cellphone-arrow-down" width={18} className="text-neon" />
         </div>
         <div>
           <div className="text-xs font-bold text-white leading-tight">Add to Home Screen</div>
-          <div className="text-[10px] text-gray-600">Quick access anytime</div>
+          <div className="text-xs text-gray-400">Quick access anytime</div>
         </div>
       </div>
 
@@ -72,7 +73,7 @@ export default function HomeScreenPrompt() {
 
       <button
         onClick={dismiss}
-        className="mt-3 w-full text-[10px] text-gray-700 hover:text-gray-500 transition-colors"
+        className="mt-3 w-full text-xs text-gray-500 hover:text-gray-400 transition-colors"
       >
         Don't show again
       </button>
@@ -83,10 +84,10 @@ export default function HomeScreenPrompt() {
 function Step({ n, text }) {
   return (
     <div className="flex items-start gap-2">
-      <div className="w-4 h-4 rounded-full bg-neon/20 text-neon text-[9px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+      <div className="w-4 h-4 rounded-full bg-neon/20 text-neon text-[11px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
         {n}
       </div>
-      <div className="text-[11px] text-gray-400 leading-tight">{text}</div>
+      <div className="text-xs text-gray-400 leading-tight">{text}</div>
     </div>
   )
 }

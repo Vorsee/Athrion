@@ -4,7 +4,9 @@ import { fetchUserProfile, fetchSubscriptionStatus } from './lib/api.js'
 import { fetchFitnessProfile } from './lib/fitnessApi.js'
 import Workout from './pages/Workout.jsx'
 import { healthSyncAvailable, syncHealthData } from './lib/health.js'
-import Nav from './components/Nav.jsx'
+import { Icon } from '@iconify/react'
+import Nav, { PARENT_TAB } from './components/Nav.jsx'
+import { createCheckoutSession } from './lib/stripe.js'
 import HomeScreenPrompt from './components/HomeScreenPrompt.jsx'
 
 // Workout is the landing tab; everything else loads the first time it's opened
@@ -16,15 +18,14 @@ const Library           = lazy(() => import('./pages/Library.jsx'))
 const Group             = lazy(() => import('./pages/Group.jsx'))
 const Plan              = lazy(() => import('./pages/Plan.jsx'))
 const Progress          = lazy(() => import('./pages/Progress.jsx'))
-const Upgrade           = lazy(() => import('./pages/Upgrade.jsx'))
 const ProfileModal      = lazy(() => import('./components/ProfileModal.jsx'))
 
 const Loading = () => (
   <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center">
-    <div className="text-gray-600 text-sm tracking-widest uppercase">Loading...</div>
+    <div className="text-gray-400 text-sm">Loading...</div>
   </div>
 )
-const PageLoading = () => <div className="py-20 text-center text-gray-700 text-sm animate-pulse">Loading...</div>
+const PageLoading = () => <div className="py-20 text-center text-gray-500 text-sm animate-pulse">Loading...</div>
 
 export default function App() {
   // undefined = auth not yet resolved; null = logged out; object = logged in
@@ -37,6 +38,7 @@ export default function App() {
   const [pendingWorkout, setPendingWorkout] = useState(null)
   const [showProfile, setShowProfile]   = useState(false)
   const [editingProfile, setEditingProfile] = useState(false)
+  const [checkout, setCheckout] = useState({ busy: false, error: '' })
 
   function handleStartFromLibrary(exercises, name) {
     setPendingWorkout({ exercises, name })
@@ -101,7 +103,16 @@ export default function App() {
       .catch(() => setFitnessProfile(null))
   }
 
-  function goUpgrade() { setShowProfile(false); setPage('upgrade') }
+  // One tap from any "Get Pro" button straight to Stripe checkout
+  async function goUpgrade() {
+    setShowProfile(false)
+    setCheckout({ busy: true, error: '' })
+    try {
+      await createCheckoutSession() // redirects to Stripe
+    } catch (e) {
+      setCheckout({ busy: false, error: e.message || 'Could not open checkout. Please try again.' })
+    }
+  }
 
   function toggleTheme() {
     const next = theme === 'dark' ? 'light' : 'dark'
@@ -134,15 +145,8 @@ export default function App() {
     </Suspense>
   )
 
-  // Upgrade page has its own full-screen layout — no nav wrapper
-  if (page === 'upgrade') return (
-    <Suspense fallback={<Loading />}>
-      <Upgrade onBack={() => setPage('workout')} />
-    </Suspense>
-  )
-
   const pageProps = {
-    workout: { pendingWorkout, onClearPending: () => setPendingWorkout(null), isPro, onUpgrade: goUpgrade },
+    workout: { pendingWorkout, onClearPending: () => setPendingWorkout(null), isPro, onUpgrade: goUpgrade, onOpenPage: setPage },
     library: { onStartWorkout: handleStartFromLibrary },
     calories: { profile, isPro, onUpgrade: goUpgrade, onGoToPlan: () => setPage('plan') },
     group: { session },
@@ -156,24 +160,31 @@ export default function App() {
 
   return (
     <div className={`min-h-dvh bg-[#0A0A0A] text-white font-dm${isLight ? ' light' : ''}`}>
-      <div
-        className="fixed inset-0 z-0 pointer-events-none"
-        style={{
-          backgroundImage: isLight
-            ? 'linear-gradient(rgba(100,80,50,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(100,80,50,0.04) 1px,transparent 1px)'
-            : 'linear-gradient(rgba(200,241,53,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(200,241,53,0.03) 1px,transparent 1px)',
-          backgroundSize: '60px 60px',
-        }}
-      />
       <Nav page={page} setPage={setPage} session={session} isPro={isPro} onProfileClick={() => setShowProfile(true)} />
       <main className="relative z-10 max-w-lg mx-auto px-3 xs:px-4 pb-[82px] xs:pb-[90px]"
         style={{ paddingTop: 'calc(var(--header-h) + env(safe-area-inset-top))' }}>
+        {PARENT_TAB[page] && (
+          <button onClick={() => setPage(PARENT_TAB[page])}
+            className="flex items-center gap-1 pt-3 -mb-1 text-sm text-gray-300 hover:text-white">
+            <Icon icon="mdi:chevron-left" width={20} /> Back to {PARENT_TAB[page][0].toUpperCase() + PARENT_TAB[page].slice(1)}
+          </button>
+        )}
         <Suspense fallback={<PageLoading />}>
           <PageComponent key={page} {...pageProps[page]} />
         </Suspense>
       </main>
 
       <HomeScreenPrompt />
+
+      {(checkout.busy || checkout.error) && (
+        <div role={checkout.error ? 'alert' : 'status'}
+          className="fixed left-4 right-4 z-[70] max-w-sm mx-auto rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] px-4 py-3 text-sm text-gray-200 shadow-xl flex items-center gap-3"
+          style={{ bottom: 'calc(96px + env(safe-area-inset-bottom))' }}>
+          {checkout.busy
+            ? <><span className="w-4 h-4 border-2 border-neon/30 border-t-neon rounded-full animate-spin flex-shrink-0" /> Opening secure checkout…</>
+            : <><span className="flex-1">{checkout.error}</span><button onClick={() => setCheckout({ busy: false, error: '' })} className="text-gray-400">Dismiss</button></>}
+        </div>
+      )}
 
       {showProfile && (
         <Suspense fallback={null}>

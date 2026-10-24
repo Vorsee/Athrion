@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase.js'
+import { Icon } from '@iconify/react'
 
 export default function Auth() {
   const [tab, setTab] = useState('login')
@@ -38,33 +39,27 @@ export default function Auth() {
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] flex flex-col items-center justify-center px-4 relative overflow-hidden">
-      <div className="fixed w-[500px] h-[500px] rounded-full bg-neon opacity-10 blur-[120px] -top-32 -right-32 pointer-events-none" />
-      <div className="fixed w-[400px] h-[400px] rounded-full bg-blue-500 opacity-10 blur-[100px] -bottom-20 -left-20 pointer-events-none" />
-      <div className="fixed inset-0 pointer-events-none" style={{
-        backgroundImage: 'linear-gradient(rgba(200,241,53,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(200,241,53,0.04) 1px,transparent 1px)',
-        backgroundSize: '60px 60px',
-      }} />
 
       <div className="relative z-10 w-full max-w-sm slide-up">
         <div className="text-center mb-10">
-          <div className="font-bebas text-7xl text-white tracking-widest">ATHRION</div>
-          <div className="text-xs text-gray-600 tracking-[0.3em] uppercase mt-1">Train · Track · Transform</div>
+          <div className="font-bold text-4xl tracking-tight text-white">Athrion</div>
+          <div className="text-sm text-gray-400 mt-2">Your training, food and progress in one place</div>
         </div>
 
         <div className="bg-[#111] border border-[#222] rounded-2xl p-8">
           {screen === 'check-email' ? (
             <div className="text-center space-y-4">
-              <div className="text-4xl">📬</div>
+              <Icon icon="mdi:email-check-outline" width={44} className="mx-auto text-neon" />
               <div className="text-white font-semibold">Check your email</div>
-              <div className="text-sm text-gray-500">
+              <div className="text-sm text-gray-400">
                 We sent a confirmation link to <span className="text-gray-300">{form.email}</span>.
                 Click it to activate your account, then come back and sign in.
               </div>
               <button
                 onClick={() => { setScreen('form'); setTab('login') }}
-                className="w-full bg-neon text-black font-bold py-3 rounded-xl text-sm uppercase tracking-widest hover:shadow-[0_6px_24px_rgba(200,241,53,0.4)] transition-all"
+                className="w-full bg-neon text-black font-bold py-3 rounded-xl text-sm transition-all"
               >
-                Go to Sign In
+                Go to sign in
               </button>
             </div>
           ) : (
@@ -74,9 +69,9 @@ export default function Auth() {
                   <button
                     key={t}
                     onClick={() => { setTab(t); setError('') }}
-                    className={`flex-1 py-2 rounded-lg text-sm font-semibold uppercase tracking-widest transition-all ${tab === t ? 'bg-neon text-black' : 'text-[#555]'}`}
+                    className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${tab === t ? 'bg-neon text-black' : 'text-gray-400'}`}
                   >
-                    {t}
+                    {t === 'login' ? 'Sign in' : 'Create account'}
                   </button>
                 ))}
               </div>
@@ -84,14 +79,14 @@ export default function Auth() {
               <div className="space-y-3">
                 {tab === 'register' && (
                   <input
-                    className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-[#444] rounded-xl px-4 py-3 text-sm outline-none transition-colors"
+                    className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-4 py-3 text-sm outline-none transition-colors"
                     placeholder="Full name"
                     value={form.name}
                     onChange={e => set('name', e.target.value)}
                   />
                 )}
                 <input
-                  className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-[#444] rounded-xl px-4 py-3 text-sm outline-none transition-colors"
+                  className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-4 py-3 text-sm outline-none transition-colors"
                   type="email"
                   placeholder="Email address"
                   value={form.email}
@@ -99,7 +94,7 @@ export default function Auth() {
                   onKeyDown={e => e.key === 'Enter' && tab === 'login' && handleLogin()}
                 />
                 <input
-                  className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-[#444] rounded-xl px-4 py-3 text-sm outline-none transition-colors"
+                  className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-4 py-3 text-sm outline-none transition-colors"
                   type="password"
                   placeholder="Password"
                   value={form.password}
@@ -108,7 +103,7 @@ export default function Auth() {
                 />
                 {tab === 'register' && (
                   <input
-                    className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-[#444] rounded-xl px-4 py-3 text-sm outline-none transition-colors"
+                    className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-4 py-3 text-sm outline-none transition-colors"
                     type="password"
                     placeholder="Confirm password"
                     value={form.confirm}
@@ -122,16 +117,16 @@ export default function Auth() {
                 <button
                   onClick={tab === 'login' ? handleLogin : handleRegister}
                   disabled={loading}
-                  className="w-full bg-neon text-black font-bold py-3 rounded-xl text-sm uppercase tracking-widest hover:shadow-[0_6px_24px_rgba(200,241,53,0.4)] hover:-translate-y-px transition-all mt-1 disabled:opacity-50"
+                  className="w-full bg-neon text-black font-bold py-3 rounded-xl text-sm transition-all mt-1 disabled:opacity-50"
                 >
-                  {loading ? '...' : tab === 'login' ? 'Sign In' : 'Create Account'}
+                  {loading ? '...' : tab === 'login' ? 'Sign in' : 'Create account'}
                 </button>
               </div>
             </>
           )}
         </div>
 
-        <p className="text-center text-[#333] text-xs mt-6">
+        <p className="text-center text-gray-500 text-xs mt-6">
           Powered by Supabase · Your data is yours
         </p>
       </div>

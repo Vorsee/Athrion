@@ -58,7 +58,7 @@ function ScrollPicker({ items, value, onChange, fmt = v => String(v) }) {
         {items.map((item, i) => (
           <div key={i} style={{ height: ITEM_H, scrollSnapAlign: 'center' }}
             className="flex items-center justify-center select-none">
-            <span className={`text-lg font-semibold transition-colors duration-100 ${item === value ? 'text-white' : 'text-gray-600'}`}>
+            <span className={`text-lg font-semibold transition-colors duration-100 ${item === value ? 'text-white' : 'text-gray-400'}`}>
               {fmt(item)}
             </span>
           </div>
@@ -81,10 +81,10 @@ function SexStep({ sex, setSex, onNext, isEditing }) {
   return (
     <div className="space-y-5">
       <div>
-        <div className="font-bebas text-4xl text-white tracking-wide leading-tight">
+        <div className="font-bold text-3xl text-white leading-tight">
           {isEditing ? 'Update your\nprofile' : 'Tell us about\nyourself'}
         </div>
-        <div className="text-sm text-gray-500 mt-1">Step 1 of 4 · Biological sex</div>
+        <div className="text-sm text-gray-400 mt-1">Step 1 of 4 · Biological sex</div>
       </div>
 
       <div className="space-y-2.5">
@@ -103,14 +103,14 @@ function SexStep({ sex, setSex, onNext, isEditing }) {
             </div>
             <div className="flex-1 min-w-0">
               <div className={`font-semibold text-sm ${sex === o.id ? 'text-white' : 'text-gray-300'}`}>{o.label}</div>
-              <div className="text-xs text-gray-600">{o.sub}</div>
+              <div className="text-xs text-gray-400">{o.sub}</div>
             </div>
           </button>
         ))}
       </div>
 
       <button onClick={onNext} disabled={!sex}
-        className="w-full bg-neon text-black font-bold py-3.5 rounded-xl text-sm uppercase tracking-widest disabled:opacity-25 transition-all hover:shadow-[0_6px_24px_rgba(200,241,53,0.35)]">
+        className="w-full bg-neon text-black font-bold py-3.5 rounded-xl text-sm disabled:opacity-25 transition-all">
         Continue →
       </button>
     </div>
@@ -124,9 +124,9 @@ function AgeStep({ age, setAge, onNext, onBack }) {
   return (
     <div className="space-y-5">
       <div>
-        <button onClick={onBack} className="text-gray-600 text-sm hover:text-white transition-colors mb-3 block">← Back</button>
-        <div className="font-bebas text-4xl text-white tracking-wide">Your Age</div>
-        <div className="text-sm text-gray-500 mt-1">Step 2 of 4 · Needed for calorie calculation</div>
+        <button onClick={onBack} className="text-gray-400 text-sm hover:text-white transition-colors mb-3 block">← Back</button>
+        <div className="font-bold text-3xl text-white">Your age</div>
+        <div className="text-sm text-gray-400 mt-1">Step 2 of 4 · Needed for calorie calculation</div>
       </div>
 
       <div className="bg-[#161616] border border-[#262626] rounded-2xl overflow-hidden">
@@ -134,11 +134,11 @@ function AgeStep({ age, setAge, onNext, onBack }) {
       </div>
 
       <div className="text-center -mt-1">
-        <div className="font-bebas text-3xl text-neon tracking-widest">{age} years old</div>
+        <div className="font-bold text-2xl text-neon">{age} years old</div>
       </div>
 
       <button onClick={onNext}
-        className="w-full bg-neon text-black font-bold py-3.5 rounded-xl text-sm uppercase tracking-widest transition-all hover:shadow-[0_6px_24px_rgba(200,241,53,0.35)]">
+        className="w-full bg-neon text-black font-bold py-3.5 rounded-xl text-sm transition-all">
         Continue →
       </button>
     </div>
@@ -154,16 +154,16 @@ function HeightStep({ unit, setUnit, ft, setFt, inches, setInches, cm, setCm, on
   return (
     <div className="space-y-5">
       <div>
-        <button onClick={onBack} className="text-gray-600 text-sm hover:text-white transition-colors mb-3 block">← Back</button>
-        <div className="font-bebas text-4xl text-white tracking-wide">Your Height</div>
-        <div className="text-sm text-gray-500 mt-1">Step 3 of 4</div>
+        <button onClick={onBack} className="text-gray-400 text-sm hover:text-white transition-colors mb-3 block">← Back</button>
+        <div className="font-bold text-3xl text-white">Your height</div>
+        <div className="text-sm text-gray-400 mt-1">Step 3 of 4</div>
       </div>
 
       <div className="flex gap-1 bg-[#1a1a1a] p-1 rounded-xl">
         {[['ft', 'ft / in'], ['cm', 'cm']].map(([u, label]) => (
           <button key={u} onClick={() => setUnit(u)}
-            className={`flex-1 py-2 rounded-lg text-sm font-semibold uppercase tracking-widest transition-all ${
-              unit === u ? 'bg-neon text-black' : 'text-[#555]'
+            className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
+              unit === u ? 'bg-neon text-black' : 'text-gray-400'
             }`}>
             {label}
           </button>
@@ -183,11 +183,11 @@ function HeightStep({ unit, setUnit, ft, setFt, inches, setInches, cm, setCm, on
       </div>
 
       <div className="text-center -mt-1">
-        <div className="font-bebas text-3xl text-neon tracking-widest">{display}</div>
+        <div className="font-bold text-2xl text-neon">{display}</div>
       </div>
 
       <button onClick={onNext}
-        className="w-full bg-neon text-black font-bold py-3.5 rounded-xl text-sm uppercase tracking-widest transition-all hover:shadow-[0_6px_24px_rgba(200,241,53,0.35)]">
+        className="w-full bg-neon text-black font-bold py-3.5 rounded-xl text-sm transition-all">
         Continue →
       </button>
     </div>
@@ -203,16 +203,16 @@ function WeightStep({ unit, setUnit, lb, setLb, kg, setKg, onComplete, saving, o
   return (
     <div className="space-y-5">
       <div>
-        <button onClick={onBack} className="text-gray-600 text-sm hover:text-white transition-colors mb-3 block">← Back</button>
-        <div className="font-bebas text-4xl text-white tracking-wide">Your Weight</div>
-        <div className="text-sm text-gray-500 mt-1">Step 4 of 4 · Almost done!</div>
+        <button onClick={onBack} className="text-gray-400 text-sm hover:text-white transition-colors mb-3 block">← Back</button>
+        <div className="font-bold text-3xl text-white">Your weight</div>
+        <div className="text-sm text-gray-400 mt-1">Step 4 of 4 · Almost done!</div>
       </div>
 
       <div className="flex gap-1 bg-[#1a1a1a] p-1 rounded-xl">
         {['lb', 'kg'].map(u => (
           <button key={u} onClick={() => setUnit(u)}
-            className={`flex-1 py-2 rounded-lg text-sm font-semibold uppercase tracking-widest transition-all ${
-              unit === u ? 'bg-neon text-black' : 'text-[#555]'
+            className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
+              unit === u ? 'bg-neon text-black' : 'text-gray-400'
             }`}>
             {u}
           </button>
@@ -228,12 +228,12 @@ function WeightStep({ unit, setUnit, lb, setLb, kg, setKg, onComplete, saving, o
       </div>
 
       <div className="text-center -mt-1">
-        <div className="font-bebas text-3xl text-neon tracking-widest">{display}</div>
+        <div className="font-bold text-2xl text-neon">{display}</div>
       </div>
 
       <button onClick={onComplete} disabled={saving}
-        className="w-full bg-neon text-black font-bold py-3.5 rounded-xl text-sm uppercase tracking-widest disabled:opacity-50 transition-all hover:shadow-[0_6px_24px_rgba(200,241,53,0.35)]">
-        {saving ? 'Saving...' : 'Complete Setup →'}
+        className="w-full bg-neon text-black font-bold py-3.5 rounded-xl text-sm disabled:opacity-50 transition-all">
+        {saving ? 'Saving...' : 'Complete setup →'}
       </button>
     </div>
   )
@@ -314,9 +314,9 @@ export default function Onboarding({ onComplete, initialValues = null }) {
       <div className="relative z-10 w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8 slide-up">
-          <div className="font-bebas text-5xl text-white tracking-widest">ATHRION</div>
-          <div className="text-xs text-gray-600 tracking-[0.3em] uppercase mt-1">
-            {initialValues ? 'Update Stats' : 'Profile Setup'}
+          <div className="font-bold text-3xl tracking-tight text-white">Athrion</div>
+          <div className="text-xs text-gray-400 mt-1">
+            {initialValues ? 'Update stats' : 'Profile setup'}
           </div>
         </div>
 

@@ -146,13 +146,17 @@ describe('ReminderSettings', () => {
 })
 
 describe('Nav', () => {
-  it('switches pages', async () => {
+  it('has four tabs and switches pages', async () => {
     const setPage = vi.fn()
     render(<Nav page="workout" setPage={setPage} session={{ name: 'Sam', email: 's@x' }} isPro={false} onProfileClick={() => {}} />)
-    for (const label of ['Calories', 'Plan', 'Progress', 'Library', 'Group']) {
-      await userEvent.click(screen.getAllByText(label)[0])
-    }
-    expect(setPage.mock.calls.map(c => c[0])).toEqual(['calories', 'plan', 'progress', 'library', 'group'])
+    expect(screen.getByRole('navigation').querySelectorAll('button')).toHaveLength(4)
+    for (const label of ['Plan', 'Calories', 'Progress']) await userEvent.click(screen.getByText(label))
+    expect(setPage.mock.calls.map(c => c[0])).toEqual(['plan', 'calories', 'progress'])
+  })
+  it('keeps Workout highlighted on pages opened from it', () => {
+    render(<Nav page="library" setPage={() => {}} session={{ name: 'Sam', email: 's@x' }} isPro onProfileClick={() => {}} />)
+    expect(screen.getByText('Workout').closest('button')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByText('Pro')).toBeInTheDocument()
   })
 })
 

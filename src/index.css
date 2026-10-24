@@ -104,6 +104,7 @@ body {
 .light nav     { background-color: #FDFAF5 !important; border-color: #E2D9CE !important; }
 
 /* Backgrounds */
+.light.bg-\[\#0A0A0A\],
 .light .bg-\[\#0A0A0A\],
 .light .bg-\[\#0a0a0a\],
 .light .bg-\[\#0F0F0F\]  { background-color: #F5EFE6 !important; }
@@ -142,6 +143,8 @@ body {
 
 /* Text */
 .light .text-white   { color: #1C1917 !important; }
+.light .text-gray-100,
+.light .text-gray-200 { color: #292524 !important; }
 .light .text-gray-300 { color: #3A3330 !important; }
 .light .text-gray-400 { color: #57534E !important; }
 .light .text-gray-500 { color: #78716C !important; }

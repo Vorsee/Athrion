@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Icon } from '@iconify/react'
 import { calculateNutritionTargets, GOAL_LABELS, GOAL_ICONS } from '../lib/nutrition.js'
 import { saveFitnessProfile, saveNutritionTarget, generatePlan } from '../lib/fitnessApi.js'
 import { saveGoals } from '../lib/api.js'
@@ -11,9 +12,9 @@ const TOTAL_STEPS = 4
 
 const ACTIVITY_OPTS = [
   { id: 'sedentary',         label: 'Sedentary',          sub: 'Little or no exercise, desk job' },
-  { id: 'lightly_active',    label: 'Lightly Active',     sub: '1–3 days of light exercise/week' },
-  { id: 'moderately_active', label: 'Moderately Active',  sub: '3–5 days of moderate exercise' },
-  { id: 'very_active',       label: 'Very Active',        sub: '6–7 days of hard exercise' },
+  { id: 'lightly_active',    label: 'Lightly active',     sub: '1–3 days of light exercise/week' },
+  { id: 'moderately_active', label: 'Moderately active',  sub: '3–5 days of moderate exercise' },
+  { id: 'very_active',       label: 'Very active',        sub: '6–7 days of hard exercise' },
   { id: 'athlete',           label: 'Athlete',            sub: 'Twice daily or intense sport' },
 ]
 
@@ -24,10 +25,10 @@ const EXPERIENCE_OPTS = [
 ]
 
 const LOCATION_OPTS = [
-  { id: 'gym',     label: 'Gym',      icon: '🏛️' },
-  { id: 'home',    label: 'Home',     icon: '🏠' },
-  { id: 'outdoors',label: 'Outdoors', icon: '🌲' },
-  { id: 'any',     label: 'Flexible', icon: '⚡' },
+  { id: 'gym',     label: 'Gym',      icon: 'mdi:dumbbell' },
+  { id: 'home',    label: 'Home',     icon: 'mdi:home-outline' },
+  { id: 'outdoors',label: 'Outdoors', icon: 'mdi:pine-tree' },
+  { id: 'any',     label: 'Flexible', icon: 'mdi:shuffle-variant' },
 ]
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -53,7 +54,7 @@ function ProgressDots({ step }) {
 function NextBtn({ onClick, disabled, label = 'Continue →' }) {
   return (
     <button onClick={onClick} disabled={disabled}
-      className="w-full bg-neon text-black font-bold py-3.5 rounded-xl text-sm uppercase tracking-widest disabled:opacity-25 transition-all hover:shadow-[0_6px_24px_rgba(200,241,53,0.35)]">
+      className="w-full bg-neon text-black font-bold py-3.5 rounded-xl text-sm disabled:opacity-25 transition-all">
       {label}
     </button>
   )
@@ -61,7 +62,7 @@ function NextBtn({ onClick, disabled, label = 'Continue →' }) {
 
 function BackBtn({ onClick }) {
   return (
-    <button onClick={onClick} className="text-gray-600 text-sm hover:text-white transition-colors mb-3 block">← Back</button>
+    <button onClick={onClick} className="text-gray-400 text-sm hover:text-white transition-colors mb-3 block">← Back</button>
   )
 }
 
@@ -85,7 +86,7 @@ function ToggleChip({ active, onClick, children }) {
   return (
     <button onClick={onClick}
       className={`px-3 py-2 rounded-xl border text-xs font-semibold transition-all ${
-        active ? 'bg-neon/15 border-neon/50 text-neon' : 'bg-[#1a1a1a] border-[#262626] text-gray-500 hover:border-[#333]'
+        active ? 'bg-neon/15 border-neon/50 text-neon' : 'bg-[#1a1a1a] border-[#262626] text-gray-400 hover:border-[#333]'
       }`}>
       {children}
     </button>
@@ -99,13 +100,13 @@ function GoalStep({ goal, setGoal, onNext }) {
   return (
     <div className="space-y-5">
       <div>
-        <div className="font-bebas text-4xl text-white tracking-wide leading-tight">What's your<br/>main goal?</div>
-        <div className="text-sm text-gray-500 mt-1">Step 1 of {TOTAL_STEPS} · This shapes your entire plan</div>
+        <div className="font-bold text-3xl text-white leading-tight">What's your<br/>main goal?</div>
+        <div className="text-sm text-gray-400 mt-1">Step 1 of {TOTAL_STEPS} · This shapes your entire plan</div>
       </div>
       <div className="space-y-2">
         {GOAL_OPTS.map(o => (
           <RadioCard key={o.id} selected={goal === o.id} onClick={() => setGoal(o.id)}>
-            <span className="text-lg">{o.icon}</span>
+            <Icon icon={o.icon} width={20} className="text-neon flex-shrink-0" />
             <div className="font-semibold text-sm text-white">{o.label}</div>
           </RadioCard>
         ))}
@@ -123,18 +124,18 @@ function ActivityStep({ activityLevel, setActivityLevel, experienceLevel, setExp
     <div className="space-y-5">
       <div>
         <BackBtn onClick={onBack} />
-        <div className="font-bebas text-4xl text-white tracking-wide">Activity Level</div>
-        <div className="text-sm text-gray-500 mt-1">Step 2 of {TOTAL_STEPS}</div>
+        <div className="font-bold text-3xl text-white">Activity level</div>
+        <div className="text-sm text-gray-400 mt-1">Step 2 of {TOTAL_STEPS}</div>
       </div>
 
       <div>
-        <div className="text-xs text-gray-500 uppercase tracking-widest mb-2">Current Activity</div>
+        <div className="text-sm font-semibold text-gray-200 mb-2">Current activity</div>
         <div className="space-y-2">
           {ACTIVITY_OPTS.map(o => (
             <RadioCard key={o.id} selected={activityLevel === o.id} onClick={() => setActivityLevel(o.id)}>
               <div className="flex-1">
                 <div className={`font-semibold text-sm ${activityLevel === o.id ? 'text-white' : 'text-gray-300'}`}>{o.label}</div>
-                <div className="text-xs text-gray-600">{o.sub}</div>
+                <div className="text-xs text-gray-400">{o.sub}</div>
               </div>
             </RadioCard>
           ))}
@@ -142,13 +143,13 @@ function ActivityStep({ activityLevel, setActivityLevel, experienceLevel, setExp
       </div>
 
       <div>
-        <div className="text-xs text-gray-500 uppercase tracking-widest mb-2">Training Experience</div>
+        <div className="text-sm font-semibold text-gray-200 mb-2">Training experience</div>
         <div className="space-y-2">
           {EXPERIENCE_OPTS.map(o => (
             <RadioCard key={o.id} selected={experienceLevel === o.id} onClick={() => setExperienceLevel(o.id)}>
               <div className="flex-1">
                 <div className={`font-semibold text-sm ${experienceLevel === o.id ? 'text-white' : 'text-gray-300'}`}>{o.label}</div>
-                <div className="text-xs text-gray-600">{o.sub}</div>
+                <div className="text-xs text-gray-400">{o.sub}</div>
               </div>
             </RadioCard>
           ))}
@@ -176,31 +177,31 @@ function WorkoutSetupStep({ workoutDays, setWorkoutDays, sessionDuration, setSes
     <div className="space-y-5">
       <div>
         <BackBtn onClick={onBack} />
-        <div className="font-bebas text-4xl text-white tracking-wide">Workout Setup</div>
-        <div className="text-sm text-gray-500 mt-1">Step 3 of {TOTAL_STEPS}</div>
+        <div className="font-bold text-3xl text-white">Workout setup</div>
+        <div className="text-sm text-gray-400 mt-1">Step 3 of {TOTAL_STEPS}</div>
       </div>
 
       {/* Days per week */}
       <div>
-        <div className="text-xs text-gray-500 uppercase tracking-widest mb-2">
+        <div className="text-xs text-gray-400 mb-2">
           Days per Week <span className="text-neon">{workoutDays}</span>
         </div>
         <input type="range" min={1} max={7} value={workoutDays}
           onChange={e => setWorkoutDays(Number(e.target.value))}
           className="w-full accent-neon" />
-        <div className="flex justify-between text-[10px] text-gray-700 mt-1">
+        <div className="flex justify-between text-xs text-gray-500 mt-1">
           <span>1 day</span><span>7 days</span>
         </div>
       </div>
 
       {/* Session duration */}
       <div>
-        <div className="text-xs text-gray-500 uppercase tracking-widest mb-2">Session Duration</div>
+        <div className="text-sm font-semibold text-gray-200 mb-2">Session duration</div>
         <div className="flex gap-2 flex-wrap">
           {DURATION_OPTS.map(d => (
             <button key={d} onClick={() => setSessionDuration(d)}
               className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
-                sessionDuration === d ? 'bg-neon/15 border-neon/50 text-neon' : 'bg-[#1a1a1a] border-[#262626] text-gray-500'
+                sessionDuration === d ? 'bg-neon/15 border-neon/50 text-neon' : 'bg-[#1a1a1a] border-[#262626] text-gray-400'
               }`}>
               {d} min
             </button>
@@ -210,14 +211,14 @@ function WorkoutSetupStep({ workoutDays, setWorkoutDays, sessionDuration, setSes
 
       {/* Where you train */}
       <div>
-        <div className="text-xs text-gray-500 uppercase tracking-widest mb-2">Where You Train</div>
+        <div className="text-sm font-semibold text-gray-200 mb-2">Where you train</div>
         <div className="grid grid-cols-2 gap-2">
           {LOCATION_OPTS.map(o => (
             <button key={o.id} onClick={() => setLocation(o.id)}
               className={`flex items-center gap-2 px-3 py-3 rounded-xl border text-sm font-semibold transition-all ${
                 location === o.id ? 'bg-neon/10 border-neon/50 text-white' : 'bg-[#1a1a1a] border-[#262626] text-gray-400'
               }`}>
-              <span>{o.icon}</span>{o.label}
+              <Icon icon={o.icon} width={18} className="text-neon" />{o.label}
             </button>
           ))}
         </div>
@@ -225,7 +226,7 @@ function WorkoutSetupStep({ workoutDays, setWorkoutDays, sessionDuration, setSes
 
       {/* Preferred days */}
       <div>
-        <div className="text-xs text-gray-500 uppercase tracking-widest mb-2">Preferred Days <span className="text-gray-700 normal-case">(optional)</span></div>
+        <div className="text-xs text-gray-400 mb-2">Preferred days <span className="text-gray-500 normal-case">(optional)</span></div>
         <div className="flex flex-wrap gap-2">
           {DAYS_OF_WEEK.map(d => (
             <ToggleChip key={d} active={trainingDays.includes(d)} onClick={() => toggleDay(d)}>{d.slice(0, 3)}</ToggleChip>
@@ -251,15 +252,15 @@ function ReviewStep({ data, nutritionPreview, onGenerate, generating, error, onB
     <div className="space-y-5">
       <div>
         <BackBtn onClick={onBack} />
-        <div className="font-bebas text-4xl text-white tracking-wide">Ready to<br/>Generate</div>
-        <div className="text-sm text-gray-500 mt-1">Step 4 of {TOTAL_STEPS} · Review your plan</div>
+        <div className="font-bold text-3xl text-white">Ready to<br/>Generate</div>
+        <div className="text-sm text-gray-400 mt-1">Step 4 of {TOTAL_STEPS} · Review your plan</div>
       </div>
 
       <div className="bg-[#1a1a1a] border border-[#262626] rounded-2xl p-4 space-y-3">
         <div className="flex items-center gap-2">
-          <span className="text-lg">{GOAL_ICONS[goal]}</span>
+          <Icon icon={GOAL_ICONS[goal]} width={20} className="text-neon" />
           <div>
-            <div className="text-xs text-gray-600">Goal</div>
+            <div className="text-sm font-semibold text-gray-200">Goal</div>
             <div className="text-sm font-semibold text-white">{GOAL_LABELS[goal]}</div>
           </div>
         </div>
@@ -272,7 +273,7 @@ function ReviewStep({ data, nutritionPreview, onGenerate, generating, error, onB
             { label: 'Location', val: locLabel },
           ].map(({ label, val }) => (
             <div key={label}>
-              <div className="text-[10px] text-gray-600">{label}</div>
+              <div className="text-xs text-gray-400">{label}</div>
               <div className="text-xs font-semibold text-white mt-0.5">{val}</div>
             </div>
           ))}
@@ -281,7 +282,7 @@ function ReviewStep({ data, nutritionPreview, onGenerate, generating, error, onB
 
       {nutritionPreview && (
         <div className="bg-neon/5 border border-neon/20 rounded-2xl p-4">
-          <div className="text-xs text-gray-500 uppercase tracking-widest mb-3">Your Daily Targets</div>
+          <div className="text-sm font-semibold text-gray-200 mb-3">Your daily targets</div>
           <div className="grid grid-cols-4 gap-3 text-center">
             {[
               { label: 'Calories', val: nutritionPreview.calorieTarget },
@@ -290,8 +291,8 @@ function ReviewStep({ data, nutritionPreview, onGenerate, generating, error, onB
               { label: 'Fat',      val: `${nutritionPreview.fatGrams}g` },
             ].map(({ label, val }) => (
               <div key={label}>
-                <div className="font-bebas text-xl text-neon">{val}</div>
-                <div className="text-[10px] text-gray-600 uppercase">{label}</div>
+                <div className="font-bold text-lg text-neon">{val}</div>
+                <div className="text-xs text-gray-400">{label}</div>
               </div>
             ))}
           </div>
@@ -303,17 +304,17 @@ function ReviewStep({ data, nutritionPreview, onGenerate, generating, error, onB
       )}
 
       <button onClick={onGenerate} disabled={generating}
-        className="w-full bg-neon text-black font-bold py-4 rounded-xl text-sm uppercase tracking-widest disabled:opacity-50 transition-all hover:shadow-[0_6px_24px_rgba(200,241,53,0.35)] flex items-center justify-center gap-2">
+        className="w-full bg-neon text-black font-bold py-4 rounded-xl text-sm disabled:opacity-50 transition-all flex items-center justify-center gap-2">
         {generating ? (
           <>
             <span className="inline-block w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
             Building your plan...
           </>
-        ) : 'Generate My Plan →'}
+        ) : 'Generate my plan →'}
       </button>
 
       {generating && (
-        <p className="text-center text-xs text-gray-600 -mt-2">
+        <p className="text-center text-xs text-gray-400 -mt-2">
           This takes about 15–30 seconds. Claude AI is crafting your personalized program.
         </p>
       )}
@@ -436,8 +437,8 @@ export default function FitnessOnboarding({ existingProfile, onComplete }) {
 
       <div className="relative z-10 w-full max-w-sm">
         <div className="text-center mb-6 slide-up">
-          <div className="font-bebas text-4xl text-white tracking-widest">ATHRION</div>
-          <div className="text-xs text-gray-600 tracking-[0.3em] uppercase mt-0.5">Fitness Setup</div>
+          <div className="font-bold text-3xl text-white">ATHRION</div>
+          <div className="text-xs text-gray-400 mt-0.5">Fitness setup</div>
         </div>
 
         <ProgressDots step={step} />

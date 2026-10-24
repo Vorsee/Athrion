@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { cancelSubscription } from '../lib/stripe.js'
 import { signOut } from '../lib/session.js'
+import { Icon } from '@iconify/react'
 
 const QUOTES = [
   { text: "The only bad workout is the one that didn't happen.", author: "Unknown" },
@@ -76,17 +77,17 @@ function SubscriptionScreen({ onBack }) {
       <div className="bg-gradient-to-br from-[#0e1500] to-[#0a0a0a] border border-neon/30 rounded-2xl p-5 mb-5">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <div className="font-bebas text-2xl text-neon tracking-widest leading-none">ATHRION PRO</div>
-            <div className="text-xs text-gray-500 mt-0.5">Monthly subscription</div>
+            <div className="font-bold text-xl text-neon leading-none">Athrion Pro</div>
+            <div className="text-xs text-gray-400 mt-0.5">Monthly subscription</div>
           </div>
-          <div className="bg-neon text-black text-xs font-black uppercase tracking-widest px-3 py-1 rounded-full">
+          <div className="bg-neon text-black text-xs font-black px-3 py-1 rounded-full">
             ACTIVE
           </div>
         </div>
 
         <div className="flex items-end gap-1 mb-4">
-          <span className="font-bebas text-4xl text-white leading-none">$5.99</span>
-          <span className="text-gray-500 text-sm mb-0.5">/ month</span>
+          <span className="font-bold text-3xl text-white leading-none">$5.99</span>
+          <span className="text-gray-400 text-sm mb-0.5">/ month</span>
         </div>
 
         <div className="space-y-2 text-sm">
@@ -109,14 +110,14 @@ function SubscriptionScreen({ onBack }) {
         <button
           onClick={() => setStep('confirm')}
           className="w-full py-3.5 rounded-xl text-sm font-semibold text-red-400 bg-red-500/8 border border-red-500/20 hover:bg-red-500/15 hover:border-red-500/40 transition-all">
-          Cancel Subscription
+          Cancel subscription
         </button>
       )}
 
       {step === 'confirm' && (
         <div className="bg-[#1a0000] border border-red-900/40 rounded-2xl p-5">
           <div className="font-bold text-sm text-red-400 mb-1">Are you sure?</div>
-          <p className="text-xs text-gray-500 leading-relaxed mb-4">
+          <p className="text-xs text-gray-400 leading-relaxed mb-4">
             You'll keep Pro access until the end of your current billing period. After that your account moves to Free.
           </p>
           <div className="flex gap-3">
@@ -133,7 +134,7 @@ function SubscriptionScreen({ onBack }) {
       )}
 
       {step === 'loading' && (
-        <div className="w-full py-3.5 rounded-xl text-sm font-semibold text-gray-500 bg-[#1a1a1a] border border-[#262626] flex items-center justify-center gap-2">
+        <div className="w-full py-3.5 rounded-xl text-sm font-semibold text-gray-400 bg-[#1a1a1a] border border-[#262626] flex items-center justify-center gap-2">
           <span className="spin inline-block w-4 h-4 border-2 border-gray-700 border-t-gray-400 rounded-full" />
           Cancelling…
         </div>
@@ -142,8 +143,8 @@ function SubscriptionScreen({ onBack }) {
       {step === 'done' && (
         <div className="bg-[#111] border border-[#222] rounded-2xl p-5 text-center">
           <div className="text-2xl mb-2">✓</div>
-          <div className="font-bold text-sm text-white mb-1">Subscription Cancelled</div>
-          <p className="text-xs text-gray-500 leading-relaxed">
+          <div className="font-bold text-sm text-white mb-1">Subscription cancelled</div>
+          <p className="text-xs text-gray-400 leading-relaxed">
             You'll keep Pro access until{' '}
             <span className="text-gray-300 font-semibold">
               {result?.period_end ? fmtDate(result.period_end) : 'the end of your billing period'}
@@ -155,8 +156,8 @@ function SubscriptionScreen({ onBack }) {
 
       {step === 'error' && (
         <div className="bg-red-950/30 border border-red-900/40 rounded-2xl p-4">
-          <div className="text-sm text-red-400 font-semibold mb-1">Cancellation Failed</div>
-          <p className="text-xs text-gray-500 mb-3">{errMsg}</p>
+          <div className="text-sm text-red-400 font-semibold mb-1">Cancellation failed</div>
+          <p className="text-xs text-gray-400 mb-3">{errMsg}</p>
           <button onClick={() => setStep('idle')}
             className="text-xs text-gray-400 hover:text-white transition-colors underline">
             Try again
@@ -164,7 +165,7 @@ function SubscriptionScreen({ onBack }) {
         </div>
       )}
 
-      <p className="text-center text-[10px] text-gray-700 mt-4">
+      <p className="text-center text-xs text-gray-500 mt-4">
         Need help? Contact support at support@athrion.app
       </p>
     </div>
@@ -211,14 +212,14 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
             {/* ── User header ── */}
             <div className="flex items-center gap-4 mb-7">
               <div className="w-14 h-14 rounded-2xl bg-neon/10 border border-neon/25 flex items-center justify-center flex-shrink-0">
-                <span className="font-bebas text-2xl text-neon">{initial}</span>
+                <span className="font-bold text-xl text-neon">{initial}</span>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="font-bold text-lg leading-tight truncate">{session.name}</div>
-                <div className="text-xs text-gray-500 mt-0.5 truncate">{session.email}</div>
+                <div className="text-xs text-gray-400 mt-0.5 truncate">{session.email}</div>
               </div>
               <button onClick={onClose}
-                className="w-8 h-8 rounded-full bg-[#1e1e1e] flex items-center justify-center text-gray-500 hover:text-white transition-colors flex-shrink-0 text-lg leading-none">
+                className="w-8 h-8 rounded-full bg-[#1e1e1e] flex items-center justify-center text-gray-400 hover:text-white transition-colors flex-shrink-0 text-lg leading-none">
                 ×
               </button>
             </div>
@@ -226,7 +227,7 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
             {/* ── Body stats ── */}
             {profile && (
               <>
-                <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-2">Body Stats</div>
+                <div className="text-sm font-semibold text-gray-200 mb-2">Body stats</div>
                 <div className="grid grid-cols-5 gap-2 mb-5">
                   {[
                     ['Height', fmtHeight(profile.height_cm)],
@@ -237,8 +238,8 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
                       : profile.sex.charAt(0).toUpperCase() + profile.sex.slice(1)],
                   ].map(([label, val]) => (
                     <div key={label} className="bg-[#0d0d0d] rounded-xl p-3 text-center">
-                      <div className="font-bebas text-xl text-white leading-tight">{val}</div>
-                      <div className="text-[9px] text-gray-600 uppercase tracking-widest mt-0.5">{label}</div>
+                      <div className="font-bold text-lg text-white leading-tight">{val}</div>
+                      <div className="text-[11px] text-gray-400 mt-0.5">{label}</div>
                     </div>
                   ))}
                 </div>
@@ -246,7 +247,7 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
                 {/* ── BMI gauge ── */}
                 <div className="bg-[#0d0d0d] rounded-2xl p-4 mb-6">
                   <div className="flex items-center justify-between mb-3">
-                    <div className="text-[10px] text-gray-600 uppercase tracking-widest">Body Mass Index</div>
+                    <div className="text-sm font-semibold text-gray-200">Body mass index</div>
                     <div className="text-xs font-bold px-2 py-0.5 rounded-full"
                       style={{ background: `${cat.color}18`, color: cat.color }}>
                       {cat.label}
@@ -260,7 +261,7 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
                       style={{ left: `${100 - bmiPct}%`, background: cat.color }} />
                   </div>
 
-                  <div className="grid grid-cols-4 text-[8px] text-gray-700 uppercase tracking-wider">
+                  <div className="grid grid-cols-4 text-[11px] text-gray-500">
                     <span>Obese</span>
                     <span className="text-center">Over</span>
                     <span className="text-center">Normal</span>
@@ -272,11 +273,11 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
 
             {/* ── Daily quote ── */}
             <div className="bg-[#0a0a0a] border border-[#1e1e1e] rounded-2xl p-5 mb-6 relative overflow-hidden">
-              <div className="absolute -top-2 right-4 font-bebas text-7xl text-neon/8 leading-none select-none pointer-events-none">"</div>
-              <div className="text-[9px] text-neon uppercase tracking-widest mb-2.5">Daily Motivation</div>
+              <div className="absolute -top-2 right-4 font-bold text-7xl text-neon/8 leading-none select-none pointer-events-none">"</div>
+              <div className="text-[11px] text-neon mb-2.5">Daily motivation</div>
               <div className="text-sm text-gray-300 leading-relaxed italic">"{quote.text}"</div>
               {quote.author !== 'Anonymous' && quote.author !== 'Unknown' && (
-                <div className="text-[10px] text-gray-600 mt-2">— {quote.author}</div>
+                <div className="text-xs text-gray-400 mt-2">— {quote.author}</div>
               )}
             </div>
 
@@ -289,8 +290,8 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
               ) : (
                 <button onClick={handleChangePassword} disabled={pwState === 'loading'}
                   className="w-full py-3.5 rounded-xl text-sm font-semibold text-gray-300 bg-[#1a1a1a] border border-[#262626] hover:border-[#3a3a3a] hover:text-white transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                  <span>🔑</span>
-                  <span>{pwState === 'loading' ? 'Sending...' : 'Change Password'}</span>
+                  <Icon icon="mdi:key-outline" width={16} />
+                  <span>{pwState === 'loading' ? 'Sending...' : 'Change password'}</span>
                 </button>
               )}
               {pwState === 'error' && (
@@ -300,8 +301,8 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
               {!isPro && (
                 <button onClick={onUpgrade}
                   className="w-full py-3.5 rounded-xl text-sm font-bold bg-neon/10 border border-neon/30 text-neon hover:bg-neon/15 hover:border-neon/50 transition-all flex items-center justify-center gap-2">
-                  <span>⚡</span>
-                  <span>Upgrade to Pro — $5.99/mo</span>
+                  <Icon icon="mdi:star-four-points-outline" width={16} />
+                  <span>Upgrade to Pro · $5.99/mo</span>
                 </button>
               )}
 
@@ -310,21 +311,21 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
                   className="w-full py-3.5 rounded-xl text-sm font-semibold bg-neon/8 border border-neon/20 hover:bg-neon/12 hover:border-neon/35 transition-all flex items-center justify-between px-5">
                   <div className="flex items-center gap-2 text-neon">
                     <span>✓</span>
-                    <span>Athrion Pro — Active</span>
+                    <span>Athrion Pro — active</span>
                   </div>
-                  <span className="text-gray-600 text-xs">Manage →</span>
+                  <span className="text-gray-400 text-xs">Manage →</span>
                 </button>
               )}
 
               <button onClick={onEdit}
                 className="w-full py-3.5 rounded-xl text-sm font-semibold text-gray-300 bg-[#1a1a1a] border border-[#262626] hover:border-[#3a3a3a] hover:text-white transition-all flex items-center justify-center gap-2">
-                <span>📐</span>
-                <span>Edit Body Stats</span>
+                <Icon icon="mdi:ruler" width={16} />
+                <span>Edit body stats</span>
               </button>
 
               <button onClick={() => signOut()}
                 className="w-full py-3.5 rounded-xl text-sm font-semibold text-red-500 hover:text-red-400 bg-[#1a1a1a] border border-[#262626] hover:border-red-900/40 transition-all">
-                Sign Out
+                Sign out
               </button>
             </div>
           </div>

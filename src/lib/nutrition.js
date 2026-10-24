@@ -164,12 +164,12 @@ export const GOAL_LABELS = {
 }
 
 export const GOAL_ICONS = {
-  lose_weight:          '🔥',
-  build_muscle:         '💪',
-  improve_strength:     '🏋️',
-  improve_endurance:    '🏃',
-  athletic_performance: '⚡',
-  maintain_weight:      '⚖️',
-  general_fitness:      '🌟',
-  mobility_flexibility: '🧘',
+  lose_weight:          'mdi:fire',
+  build_muscle:         'mdi:arm-flex-outline',
+  improve_strength:     'mdi:weight-lifter',
+  improve_endurance:    'mdi:run',
+  athletic_performance: 'mdi:lightning-bolt-outline',
+  maintain_weight:      'mdi:scale-balance',
+  general_fitness:      'mdi:heart-pulse',
+  mobility_flexibility: 'mdi:yoga',
 }

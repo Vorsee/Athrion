@@ -43,7 +43,7 @@ export default function LineChart({ data, unit = '', height = 170, label = 'Valu
     .sort((a, b) => a.t - b.t)
 
   if (points.length < 2) {
-    return <div className="text-xs text-gray-600 py-6 text-center">Add at least two entries to see a trend.</div>
+    return <div className="text-xs text-gray-400 py-6 text-center">Add at least two entries to see a trend.</div>
   }
 
   const fmt = v => `${Math.round(v * 10) / 10}${unit ? ` ${unit}` : ''}`
@@ -88,26 +88,26 @@ export default function LineChart({ data, unit = '', height = 170, label = 'Valu
 
         {hover && (
           <g>
-            <line x1={x(hover.t)} x2={x(hover.t)} y1={PAD.top} y2={PAD.top + ih} stroke="currentColor" className="text-gray-600" strokeDasharray="3 3" />
+            <line x1={x(hover.t)} x2={x(hover.t)} y1={PAD.top} y2={PAD.top + ih} stroke="currentColor" className="text-gray-400" strokeDasharray="3 3" />
             <circle cx={x(hover.t)} cy={y(hover.value)} r="5" className="text-neon" fill="currentColor" stroke="#111" strokeWidth="2" />
           </g>
         )}
       </svg>
 
       {hover && (
-        <div className="absolute top-0 pointer-events-none bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-2 py-1 text-[11px] whitespace-nowrap"
+        <div className="absolute top-0 pointer-events-none bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-2 py-1 text-xs whitespace-nowrap"
           style={{ left: Math.min(Math.max(x(hover.t) - 50, 0), width - 110) }}>
-          <div className="text-gray-500">{fmtDate(hover.date)}</div>
+          <div className="text-gray-400">{fmtDate(hover.date)}</div>
           <div className="text-white font-semibold">{fmt(hover.value)}</div>
         </div>
       )}
 
-      <button onClick={() => setShowTable(s => !s)} className="text-[10px] text-gray-600 hover:text-gray-400 mt-1">
+      <button onClick={() => setShowTable(s => !s)} className="text-xs text-gray-400 hover:text-gray-400 mt-1">
         {showTable ? 'Hide table' : 'Show as table'}
       </button>
       {showTable && (
         <table className="w-full text-xs mt-2">
-          <thead><tr className="text-gray-600 text-left"><th className="font-normal py-1">Date</th><th className="font-normal py-1 text-right">{label}</th></tr></thead>
+          <thead><tr className="text-gray-400 text-left"><th className="font-normal py-1">Date</th><th className="font-normal py-1 text-right">{label}</th></tr></thead>
           <tbody>
             {[...points].reverse().map(p => (
               <tr key={p.t} className="border-t border-[#1e1e1e]">
