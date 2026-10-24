@@ -18,7 +18,7 @@ async function lookupBarcode(code) {
   }
   return {
     code,
-    name: [p.brands?.split(',')[0], p.product_name].filter(Boolean).join(' ') || `Product ${code}`,
+    name: productName(p.brands?.split(',')[0]?.trim(), p.product_name?.trim()) || `Product ${code}`,
     per100,
     servingGrams: Number(p.serving_quantity) || null,
     servingLabel: p.serving_size || null,
@@ -152,7 +152,7 @@ export default function BarcodeScanner({ defaultMeal, meals, onAdd, onClose }) {
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="text-xs text-muted">Amount (g)</span>
-              <input type="number" inputMode="decimal" value={grams} onChange={e => setGrams(e.target.value)}
+              <input type="number" inputMode="decimal" aria-label="Amount in grams" value={grams} onChange={e => setGrams(e.target.value)}
                 className="mt-1 w-full bg-raised border border-line rounded-xl px-3 py-2 text-sm text-ink focus:outline-none focus:border-neon-stroke/40" />
               {product.servingLabel && <span className="text-xs text-muted">1 serving = {product.servingLabel}</span>}
             </label>
@@ -176,4 +176,11 @@ export default function BarcodeScanner({ defaultMeal, meals, onAdd, onClose }) {
       )}
     </Sheet>
   )
+}
+
+// "Nutella" + "Nutella" -> "Nutella"; skip the brand when the product name already has it
+function productName(brand, product) {
+  if (!product) return brand
+  if (!brand || product.toLowerCase().includes(brand.toLowerCase())) return product
+  return `${brand} ${product}`
 }

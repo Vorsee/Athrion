@@ -157,13 +157,34 @@ describe('Nav', () => {
     const setPage = vi.fn()
     render(<Nav page="workout" setPage={setPage} session={{ name: 'Sam', email: 's@x' }} isPro={false} onProfileClick={() => {}} />)
     expect(screen.getByRole('navigation').querySelectorAll('button')).toHaveLength(4)
-    for (const label of ['Plan', 'Calories', 'Progress']) await userEvent.click(screen.getByText(label))
+    for (const label of ['Plan', 'Food', 'Progress']) await userEvent.click(screen.getByText(label))
     expect(setPage.mock.calls.map(c => c[0])).toEqual(['plan', 'calories', 'progress'])
+    // Only Plan is a Pro wall, and free users see that on the tab
+    expect(screen.getByText('Plan').closest('button')).toHaveTextContent('Pro')
+    expect(screen.getByText('Food').closest('button')).not.toHaveTextContent('Pro')
   })
-  it('keeps Workout highlighted on pages opened from it', () => {
-    render(<Nav page="library" setPage={() => {}} session={{ name: 'Sam', email: 's@x' }} isPro onProfileClick={() => {}} />)
-    expect(screen.getByText('Workout').closest('button')).toHaveAttribute('aria-current', 'page')
+  it('keeps Train highlighted on pages opened from it, with a way back to it', async () => {
+    const setPage = vi.fn()
+    render(<Nav page="library" setPage={setPage} session={{ name: 'Sam', email: 's@x' }} isPro onProfileClick={() => {}} />)
+    expect(within(screen.getByRole('navigation')).getByText('Train').closest('button')).toHaveAttribute('aria-current', 'page')
+    await userEvent.click(screen.getByLabelText('Back to Train'))
+    expect(setPage).toHaveBeenCalledWith('workout')
+  })
+  it('shows the wordmark and Pro mark only on the landing tab', () => {
+    const { rerender } = render(<Nav page="workout" setPage={() => {}} session={{ name: 'Sam', email: 's@x' }} isPro onProfileClick={() => {}} />)
+    expect(screen.getByText('ATHRION')).toBeInTheDocument()
     expect(screen.getByText('Pro')).toBeInTheDocument()
+    rerender(<Nav page="calories" setPage={() => {}} session={{ name: 'Sam', email: 's@x' }} isPro onProfileClick={() => {}} />)
+    expect(screen.queryByText('ATHRION')).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Food' })).toBeInTheDocument()
+  })
+  it('shows the session bar for a minimised workout and returns to it', async () => {
+    const onResume = vi.fn()
+    const s = { screen: 'training', exerciseNames: ['Squat'], exIdx: 0, setIdx: 1, totalSets: 4, startTime: 1, minimised: true }
+    render(<Nav page="plan" setPage={() => {}} session={{ name: 'Sam', email: 's@x' }} isPro onProfileClick={() => {}} minimised={s} onResume={onResume} />)
+    expect(screen.getByText('Set 2 of 4')).toBeInTheDocument()
+    await userEvent.click(screen.getByText('Squat'))
+    expect(onResume).toHaveBeenCalled()
   })
 })
 

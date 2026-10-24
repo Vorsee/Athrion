@@ -22,7 +22,7 @@ export default function UpgradeSheet({ onClose, onCheckout, busy = false, error 
 
   return (
     <Sheet title="ATHRION Pro" onClose={onClose}>
-      <p className="text-ink-2 text-sm -mt-2">
+      <p className="text-ink-2 text-sm">
         {trial ? `Try everything free for ${TRIAL_DAYS} days.` : 'Everything in ATHRION, built around your goal.'}
       </p>
 

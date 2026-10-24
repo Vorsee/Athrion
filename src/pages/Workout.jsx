@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Icon } from '@iconify/react'
-import { Button, BackLink, Card, SectionTitle, Skeleton, Chip, Sheet, Segmented, InlineError } from '../components/ui/index.js'
+import { Button, Card, SectionTitle, Skeleton, Chip, Sheet, Segmented, InlineError } from '../components/ui/index.js'
 import { EXERCISES, getTodaysExercises, todayKey, fmtTime, getExerciseIcon } from '../lib/data.js'
 import { fetchWorkoutHistory, saveWorkoutEntry, fetchCustomWorkouts, saveCustomWorkout, deleteCustomWorkout } from '../lib/api.js'
 import { fetchActivePlan } from '../lib/fitnessApi.js'
@@ -11,6 +11,9 @@ import { fetchBadges, awardBadges } from '../lib/progressApi.js'
 import { tok } from '../lib/tokens.js'
 import { loadPending, queueWorkout, flushPending } from '../lib/pendingWorkouts.js'
 import { useUnit } from '../lib/units.js'
+import TrainingCalendar from '../components/TrainingCalendar.jsx'
+import { useBackHandler, useFocusMode, notifySession, readSession, setSessionMinimised } from '../lib/shell.js'
+import { HeaderBar } from '../components/Nav.jsx'
 
 const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 const dayIdx = new Date().getDay()
@@ -27,7 +30,9 @@ function matchPlanExercises(planExercises) {
 
 const FREE_WORKOUT_LIMIT = 3
 
-export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgrade, onOpenPage }) {
+const SESSION_SCREENS = ['training', 'rest', 'exercise-picker']
+
+export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgrade, onOpenPage, resumeTick = 0 }) {
   const { unit, toLb } = useUnit()
   const [screen, setScreen]                   = useState('home')
   const [activeExercises, setActiveExercises] = useState([])
@@ -54,6 +59,20 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
   const [sessionBadges, setSessionBadges]     = useState([])
   const [lastSave, setLastSave]               = useState('saving') // saving | saved | queued, for the done screen
   const [pendingCount, setPendingCount]       = useState(() => loadPending().length)
+  const [confirmEnd, setConfirmEnd]           = useState(false)
+
+  // Training, rest and the free-workout picker are the session: focus mode hides the
+  // tabs, and back (gesture or Minimise) drops to the Train tab with the session bar
+  const inSession = SESSION_SCREENS.includes(screen)
+  useFocusMode(inSession)
+  useBackHandler(inSession, minimise)
+  useBackHandler(screen === 'builder' || screen === 'config', () => setScreen('home'), 'Train')
+
+  function minimise() {
+    setConfirmEnd(false)
+    setSessionMinimised(true)
+    setScreen('home')
+  }
 
   const exerciseHistory = useMemo(() => buildExerciseHistory(history), [history])
 
@@ -63,6 +82,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       screen: overrides.screen ?? screen,
       name: activeWorkoutName,
       exerciseNames: overrides.exerciseNames ?? activeExercises.map(e => e.name),
+      exercises: overrides.exercises ?? activeExercises, // full objects: plan exercises aren't all in the library
       totalSets,
       restDuration,
       restPerExercise,
@@ -78,6 +98,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
   function clearPersistedWorkout() {
     localStorage.removeItem('athrion_workout')
     localStorage.removeItem('athrion_rest_end')
+    notifySession()
   }
 
   useEffect(() => {
@@ -87,7 +108,8 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
     Promise.allSettled([
       fetchWorkoutHistory().then(h => setHistory([...loadPending().map(asPending), ...h])),
       fetchCustomWorkouts().then(w => setCustomWorkouts(w)),
-      fetchActivePlan().then(plan => {
+      // The plan is Pro; a lapsed member's old plan would contradict the locked Plan tab
+      (isPro ? fetchActivePlan() : Promise.resolve(null)).then(plan => {
         if (!plan?.plan_data?.weeklySchedule) return
         setPlanSchedule(plan.plan_data.weeklySchedule)
         const todayDay = plan.plan_data.weeklySchedule.find(d => d.day === TODAY_FULL)
@@ -103,7 +125,10 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       if (!raw) return
       const s = JSON.parse(raw)
       if (!s.startTime) return
-      const exercises = (s.exerciseNames || []).map(n => EXERCISES.find(e => e.name === n)).filter(Boolean)
+      // Older saves only have names; a name the library doesn't know still comes back
+      const exercises = s.exercises?.length
+        ? s.exercises
+        : (s.exerciseNames || []).map(n => EXERCISES.find(e => e.name === n) ?? { name: n, muscle: '', icon: 'mdi:dumbbell' })
       if (!s.freeWorkout && !exercises.length) return
       setActiveExercises(exercises)
       setActiveWorkoutName(s.name || '')
@@ -116,13 +141,25 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       setSetCounts(s.setCounts || [])
       setStartTime(s.startTime)
       setFreeWorkout(s.freeWorkout || false)
-      const validScreens = ['rest', 'exercise-picker']
-      setScreen(validScreens.includes(s.screen) ? s.screen : 'training')
+      // A minimised session stays minimised: the session bar brings it back
+      if (!s.minimised) setScreen(resumeScreen(s))
     } catch {}
   }, [])
 
+  // Session bar tapped
   useEffect(() => {
-    if (pendingWorkout?.exercises?.length) {
+    if (!resumeTick) return
+    const s = readSession()
+    if (s) setScreen(resumeScreen(s))
+  }, [resumeTick])
+
+  useEffect(() => {
+    if (pendingWorkout?.planExercises?.length) {
+      // From Plan: sets and rest come from the plan, so skip the config screen
+      const pe = pendingWorkout.planExercises
+      startPlanWorkout(matchPlanExercises(pe), pendingWorkout.name, pe[0]?.sets ?? 3, pe.map(e => e.restSeconds ?? 60))
+      onClearPending?.()
+    } else if (pendingWorkout?.exercises?.length) {
       startWorkout(pendingWorkout.exercises, pendingWorkout.name)
       onClearPending?.()
     }
@@ -153,9 +190,11 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
     localStorage.setItem('athrion_workout', JSON.stringify({
       screen: 'training', name,
       exerciseNames: exercises.map(e => e.name),
+      exercises,
       totalSets: sets, restDuration: perExRest[0] ?? 60, restPerExercise: perExRest,
       exIdx: 0, setIdx: 0, loggedSets: [], startTime: t, freeWorkout: false,
     }))
+    notifySession()
     setScreen('training')
   }
 
@@ -232,13 +271,19 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
   }
 
   function handleEndWorkout() {
+    setConfirmEnd(false)
     clearPersistedWorkout()
     const duration = Math.round((Date.now() - startTime) / 60000)
     const volume = loggedSets.reduce((a, s) => a + s.weight * s.reps, 0)
     // Compare against history before this session is added to it
     setSessionPRs(findNewPRs(loggedSets, history, unit))
     setSessionBadges([])
-    if (loggedSets.length > 0 && (duration >= 2 || volume >= 10)) {
+    // Nothing worth saving (no sets, or a few seconds): no "Workout complete", just back home
+    if (!(loggedSets.length > 0 && (duration >= 2 || volume >= 10))) {
+      setScreen('home')
+      return
+    }
+    {
       const entry = { date: todayKey(), name: activeWorkoutName, duration: `${duration}min`, volume, sets: loggedSets }
       saveHistory(entry)
       // Workout-based badges unlocked by this session (body/photo badges are awarded in Progress)
@@ -356,16 +401,36 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
           screen: nextScreen,
           name: activeWorkoutName,
           exerciseNames: activeExercises.map(e => e.name),
+          exercises: activeExercises,
           totalSets, restDuration,
           exIdx: 0, setIdx: 0, loggedSets: [], startTime: t,
           freeWorkout,
         }))
+        notifySession()
         setScreen(nextScreen)
       }}
     />
   )
 
-  if (screen === 'exercise-picker') return (
+  const session = node => (
+    <>
+      <ActiveHeader startTime={startTime} onMinimise={minimise} onEnd={() => setConfirmEnd(true)} />
+      {node}
+      {confirmEnd && (
+        <Sheet title="End workout?" onClose={() => setConfirmEnd(false)}>
+          <p className="text-sm text-ink-2">
+            {loggedSets.length ? `${loggedSets.length} ${loggedSets.length === 1 ? 'set' : 'sets'} logged so far. They'll be saved.` : 'No sets logged yet, so nothing will be saved.'}
+          </p>
+          <div className="flex gap-3">
+            <Button variant="secondary" className="flex-1" onClick={() => setConfirmEnd(false)}>Keep going</Button>
+            <Button variant="danger" className="flex-1" onClick={handleEndWorkout}>End workout</Button>
+          </div>
+        </Sheet>
+      )}
+    </>
+  )
+
+  if (screen === 'exercise-picker') return session(
     <ExercisePickerScreen
       activeExercises={activeExercises}
       loggedSets={loggedSets}
@@ -374,14 +439,14 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
         setActiveExercises(newExercises)
         const nextIdx = newExercises.length - 1
         setExIdx(nextIdx); setSetIdx(0); setWeight(''); setReps('')
-        persistWorkout({ screen: 'training', exIdx: nextIdx, setIdx: 0, exerciseNames: newExercises.map(e => e.name) })
+        persistWorkout({ screen: 'training', exIdx: nextIdx, setIdx: 0, exerciseNames: newExercises.map(e => e.name), exercises: newExercises })
         setScreen('training')
       }}
       onEnd={handleEndWorkout}
     />
   )
 
-  if (screen === 'training') return (
+  if (screen === 'training') return session(
     <TrainingScreen
       exerciseHistory={exerciseHistory}
       exercises={activeExercises}
@@ -391,7 +456,6 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       onEditSet={handleEditSet} onDeleteSet={handleDeleteSet}
       reps={reps} setReps={setReps}
       freeWorkout={freeWorkout}
-      onEnd={handleEndWorkout}
       onLog={() => {
         const w = toLb(parseFloat(weight) || 0) // typed in the person's unit, stored in lb
         const r = parseInt(reps) || 0
@@ -407,12 +471,11 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
 
   const currentRest = restPerExercise[exIdx] ?? restDuration
 
-  if (screen === 'rest') return (
+  if (screen === 'rest') return session(
     <RestScreen
       exercises={activeExercises}
       restDuration={currentRest} exIdx={exIdx} setIdx={setIdx} totalSets={setsFor(exIdx)}
       freeWorkout={freeWorkout}
-      onEnd={handleEndWorkout}
       onAdvance={() => {
         localStorage.removeItem('athrion_rest_end')
         const nextSet = setIdx + 1
@@ -447,6 +510,38 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
 // Home
 // ─────────────────────────────────────────────────────────────────────────────
 // Plan workout days, starting with the next one after today
+function resumeScreen(s) {
+  return ['rest', 'exercise-picker'].includes(s.screen) ? s.screen : 'training'
+}
+
+// Session header: Minimise on the left, elapsed time in the middle, End on the right
+function ActiveHeader({ startTime, onMinimise, onEnd }) {
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  const sec = startTime ? Math.max(0, Math.floor((now - startTime) / 1000)) : 0
+  const h = Math.floor(sec / 3600)
+  const elapsed = h ? `${h}:${String(Math.floor(sec / 60) % 60).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}` : fmtTime(sec)
+  return (
+    <HeaderBar label="Workout">
+      <div className="flex-1 flex">
+        <button onClick={onMinimise}
+          className="press flex items-center gap-1 min-h-[44px] pl-1 pr-3 rounded-xl text-sm font-medium text-ink-2 hover:text-ink transition-colors">
+          <Icon icon="mdi:chevron-down" width={24} aria-hidden="true" />Minimise
+        </button>
+      </div>
+      <div className="text-center">
+        <div className="text-lg leading-none font-semibold text-ink tabular-nums" role="timer" aria-label={`Elapsed ${elapsed}`}>{elapsed}</div>
+      </div>
+      <div className="flex-1 flex justify-end">
+        <Button variant="ghost" onClick={onEnd} className="px-4">End</Button>
+      </div>
+    </HeaderBar>
+  )
+}
+
 function upcomingWorkoutDays(schedule) {
   const order = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
   return (schedule ?? [])
@@ -457,8 +552,6 @@ function upcomingWorkoutDays(schedule) {
 function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade, onOpenPage, pendingCount = 0, onRetryPending }) {
   const { fmtVolume } = useUnit()
   const [selectedSession, setSelectedSession] = useState(null)
-  const weekSessions = history.filter(h => (Date.now() - new Date(h.date)) < 7 * 86400000).length
-  const totalMins = history.reduce((a, h) => a + (parseInt(h.duration) || 0), 0)
 
   // AI plan (full dayData) takes priority; fall back to custom rotation, then default
   const rotation = [...customWorkouts].reverse()
@@ -495,18 +588,6 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
           {pendingCount === 1 ? "1 workout isn't" : `${pendingCount} workouts aren't`} saved to your account yet. They're kept on this phone and will save when you're back online.
         </InlineError>
       )}
-
-      {/* ── Stats ── */}
-      <div className="grid grid-cols-2 gap-3">
-        <Card pad="md">
-          <div className="text-sm font-semibold text-ink-2 mb-1">This week</div>
-          <div className="font-bold text-3xl text-ink">{weekSessions} <span className="text-base text-muted">sessions</span></div>
-        </Card>
-        <Card pad="md">
-          <div className="text-sm font-semibold text-ink-2 mb-1">Total time</div>
-          <div className="font-bold text-3xl text-ink">{(totalMins / 60).toFixed(1)}<span className="text-base text-muted">h</span></div>
-        </Card>
-      </div>
 
       {/* ── Today's Training — neon border, plan data straight from AI ── */}
       {!ready ? (
@@ -563,8 +644,7 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
                     <div className="text-sm font-semibold text-ink leading-snug break-words">{ex.name}</div>
                     <div className="text-xs text-muted mt-0.5">
                       {[ex.sets > 1 ? `${ex.sets} sets × ${ex.reps}` : ex.reps,
-                        ex.restSeconds > 0 && `${ex.restSeconds}s rest`,
-                        ex.equipment].filter(Boolean).join(' · ')}
+                        ex.restSeconds > 0 && `${ex.restSeconds}s rest`].filter(Boolean).join(' · ')}
                     </div>
                   </div>
                   <DemoButton name={ex.name} />
@@ -595,18 +675,19 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
       </Card>
       )}
 
+      <TrainingCalendar history={history} planSchedule={planSchedule} onOpenSession={setSelectedSession} />
+
       {/* ── More ways to train (live inside this tab) ── */}
       {onOpenPage && (
         <div className="grid grid-cols-2 gap-3">
           {[
-            { id: 'library', icon: 'mdi:book-open-variant', title: 'Exercise library', sub: 'Exercises and ready-made workouts' },
-            { id: 'group', icon: 'mdi:account-group-outline', title: 'Train together', sub: 'Live session with friends' },
+            { id: 'library', icon: 'mdi:book-open-variant', title: 'Exercise library' },
+            { id: 'group', icon: 'mdi:account-group-outline', title: 'Train together' },
           ].map(l => (
             <button key={l.id} onClick={() => onOpenPage(l.id)}
               className="text-left bg-surface border border-line hover:border-neon-stroke/30 rounded-2xl p-4 transition-colors">
               <Icon icon={l.icon} width={24} className="text-neon-ink mb-2" />
               <div className="text-sm font-semibold text-ink">{l.title}</div>
-              <div className="text-xs text-muted mt-0.5 leading-snug">{l.sub}</div>
             </button>
           ))}
         </div>
@@ -646,12 +727,6 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
               const exs = (w.exercises || []).map(n => EXERCISES.find(e => e.name === n)).filter(Boolean)
               return (
                 <div key={w.id} className="flex items-center gap-3 bg-inset rounded-xl px-3 py-2.5">
-                  <div className="flex gap-0.5 flex-shrink-0">
-                    {exs.slice(0, 4).map((ex, i) => (
-                      <Icon key={i} icon={getExerciseIcon(ex)} width={16} className="text-muted" />
-                    ))}
-                    {exs.length > 4 && <span className="text-2xs text-muted self-center ml-0.5">+{exs.length - 4}</span>}
-                  </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-xs truncate">{w.name}</div>
                     <div className="text-xs text-muted">{exs.length} exercises</div>
@@ -672,13 +747,8 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
       {history.length > 0 && (
         <Card pad="md">
           <div className="text-lg leading-[1.3] font-semibold text-ink mb-2">Recent sessions</div>
-          <div className="grid grid-cols-[1fr_4rem_4rem] gap-2 px-2 pb-1 border-b border-line">
-            <span className="text-2xs text-muted">Workout</span>
-            <span className="text-2xs text-muted text-right">Volume</span>
-            <span className="text-2xs text-muted text-right">Time</span>
-          </div>
           <div>
-            {[...history].slice(0, 7).map((h, i) => (
+            {[...history].slice(0, 3).map((h, i) => (
               <button
                 key={i}
                 onClick={() => setSelectedSession(h)}
@@ -686,7 +756,7 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
               >
                 <div className="min-w-0">
                   <div className="font-medium text-xs truncate">{h.name}</div>
-                  <div className="text-xs text-muted">{h.date}</div>
+                  <div className="text-xs text-muted">{fmtDay(h.date)}</div>
                 </div>
                 <div className="text-right font-bold text-xs text-neon-ink">{h.volume ? fmtVolume(h.volume) : '—'}</div>
                 <div className="text-right text-xs text-muted">{h.duration}</div>
@@ -746,7 +816,6 @@ function BuilderScreen({ workout, onSave, onBack }) {
     <div className="space-y-4 py-4 slide-up">
       {/* Header */}
       <div>
-        <BackLink onClick={onBack} className="mb-3" />
         <input
           className="w-full bg-transparent border-b border-line-strong focus:border-neon-stroke text-ink text-2xl font-bold outline-none pb-1 placeholder:text-placeholder transition-colors"
           placeholder="Workout name"
@@ -854,7 +923,6 @@ function ConfigScreen({ exercises, free, totalSets, setTotalSets, restDuration, 
   return (
     <div className="space-y-4 py-4 slide-up">
       <div>
-        <BackLink onClick={onBack} className="mb-3" />
         <div className="font-bold text-3xl">{free ? 'Free workout' : 'Configure workout'}</div>
         {free && <div className="text-sm text-muted mt-1">Pick exercises as you go</div>}
       </div>
@@ -894,8 +962,7 @@ function ConfigScreen({ exercises, free, totalSets, setTotalSets, restDuration, 
 // ─────────────────────────────────────────────────────────────────────────────
 // Training
 // ─────────────────────────────────────────────────────────────────────────────
-function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, loggedSets, weight, setWeight, reps, setReps, onLog, onEnd, freeWorkout, onAddSet, onFinishExercise, onEditSet, onDeleteSet }) {
-  const [confirmEnd, setConfirmEnd] = useState(false)
+function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, loggedSets, weight, setWeight, reps, setReps, onLog, freeWorkout, onAddSet, onFinishExercise, onEditSet, onDeleteSet }) {
   const [showDemo, setShowDemo]     = useState(false)
   const { unit, fromLb, fmt } = useUnit()
   const ex = exercises[exIdx]
@@ -937,7 +1004,6 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
         </div>
         <div className="font-bold text-3xl mb-1">{ex.name}</div>
         <div className="text-muted text-sm mb-1">{ex.muscle}</div>
-        <div className="text-xs text-muted italic">{ex.tips}</div>
         <button onClick={() => setShowDemo(true)}
           className="mt-3 inline-flex items-center gap-1.5 text-xs text-neon-ink border border-neon-stroke/30 px-3 py-1.5 rounded-lg hover:bg-neon/10">
           <Icon icon="mdi:play-circle-outline" width={16} /> How to
@@ -956,7 +1022,6 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
 
       <Card pad="lg">
         <div className="text-xs text-muted mb-3">Log set {setIdx + 1}</div>
-        {prev && <div className="text-xs text-muted mb-3">Previous set: {fmt(prev.weight)} × {prev.reps} reps</div>}
         {!prev && suggestion && (
           <div className="mb-4 bg-neon/5 border border-neon-stroke/20 rounded-xl p-3">
             <div className="flex items-center justify-between gap-2">
@@ -981,12 +1046,12 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
             <label className="text-xs text-muted block mb-1">Weight ({unit})</label>
-            <input type="number" placeholder="0" value={weight} onChange={e => setWeight(e.target.value)} min="0" step={unit === 'kg' ? 0.25 : 0.5}
+            <input type="number" placeholder="0" aria-label={`Weight in ${unit}`} value={weight} onChange={e => setWeight(e.target.value)} min="0" step={unit === 'kg' ? 0.25 : 0.5}
               className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-sm outline-none transition-colors" />
           </div>
           <div>
             <label className="text-xs text-muted block mb-1">Reps</label>
-            <input type="number" placeholder="0" value={reps} onChange={e => setReps(e.target.value)} min="1"
+            <input type="number" placeholder="0" aria-label="Reps" value={reps} onChange={e => setReps(e.target.value)} min="1"
               className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-sm outline-none transition-colors" />
           </div>
         </div>
@@ -1001,18 +1066,6 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
 
       {thisExSets.length > 0 && (
         <LoggedSets sets={thisExSets} onEdit={onEditSet} onDelete={onDeleteSet} />
-      )}
-
-      {confirmEnd ? (
-        <div className="flex gap-3">
-          <Button variant="secondary" className="flex-1" onClick={() => setConfirmEnd(false)}>Keep going</Button>
-          <Button variant="danger" className="flex-1" onClick={onEnd}>End workout</Button>
-        </div>
-      ) : (
-        <button onClick={() => setConfirmEnd(true)}
-          className="w-full text-center text-xs text-muted hover:text-ink-2 py-2 min-h-[44px] transition-colors">
-          End workout early
-        </button>
       )}
 
       {!freeWorkout && (
@@ -1156,12 +1209,11 @@ function ExercisePickerScreen({ activeExercises, loggedSets, onPick, onEnd }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Rest
 // ─────────────────────────────────────────────────────────────────────────────
-function RestScreen({ exercises, restDuration, exIdx, setIdx, totalSets, onAdvance, onEnd, freeWorkout }) {
+function RestScreen({ exercises, restDuration, exIdx, setIdx, totalSets, onAdvance, freeWorkout }) {
   const [restLeft, setRestLeft] = useState(() => {
     const end = parseInt(localStorage.getItem('athrion_rest_end') || '0')
     return end ? Math.max(0, Math.ceil((end - Date.now()) / 1000)) : restDuration
   })
-  const [confirmEnd, setConfirmEnd] = useState(false)
 
   useEffect(() => {
     function tick() {
@@ -1220,18 +1272,6 @@ function RestScreen({ exercises, restDuration, exIdx, setIdx, totalSets, onAdvan
       </div>
 
       <Button variant="secondary" onClick={onAdvance}>Skip rest</Button>
-
-      {confirmEnd ? (
-        <div className="flex gap-3 w-full max-w-xs">
-          <Button variant="secondary" className="flex-1" onClick={() => setConfirmEnd(false)}>Keep going</Button>
-          <Button variant="danger" className="flex-1" onClick={onEnd}>End workout</Button>
-        </div>
-      ) : (
-        <button onClick={() => setConfirmEnd(true)}
-          className="text-xs text-muted hover:text-ink-2 min-h-[44px] px-3 transition-colors">
-          End workout early
-        </button>
-      )}
     </div>
   )
 }
@@ -1270,7 +1310,6 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
       <Icon icon="mdi:trophy-outline" width={56} className="mx-auto text-neon-ink" />
       <div>
         <div className="font-bold text-3xl text-neon-ink">Workout complete</div>
-        <div className="text-muted mt-1">Great session, keep it up!</div>
       </div>
 
       {saveStatus === 'queued' && (
@@ -1544,7 +1583,7 @@ function SessionModal({ session, onClose, history }) {
           </div>
         ) : (
           <div className="mb-5 p-3 bg-inset rounded-xl text-center">
-            <div className="text-xs text-muted">No previous session to compare — complete this workout again to see progress.</div>
+            <div className="text-xs text-muted">First time doing this workout.</div>
           </div>
         )}
 
@@ -1575,4 +1614,13 @@ function SessionModal({ session, onClose, history }) {
 
 function asPending(entry) {
   return { ...entry, pending: true }
+}
+
+// 'YYYY-MM-DD' -> "Today", "Yesterday" or "Tue, Oct 20"
+function fmtDay(key) {
+  if (key === todayKey()) return 'Today'
+  const d = new Date(`${key}T12:00:00`)
+  const y = new Date(); y.setDate(y.getDate() - 1)
+  if (key === `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`) return 'Yesterday'
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
 }

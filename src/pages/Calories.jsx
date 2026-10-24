@@ -8,7 +8,8 @@ import { fetchLatestNutritionTarget } from '../lib/fitnessApi.js'
 import AdaptiveNutritionCard from '../components/AdaptiveNutritionCard.jsx'
 import BarcodeScanner from '../components/BarcodeScanner.jsx'
 import { tok } from '../lib/tokens.js'
-import { Segmented, Sheet, Button, SectionTitle } from '../components/ui/index.js'
+import { Segmented, Sheet, Button, SectionTitle, ListRow } from '../components/ui/index.js'
+import { useHeaderAction } from '../lib/shell.js'
 
 const MEALS = [
   { id: 'breakfast', label: 'Breakfast', icon: 'mdi:weather-sunset-up', hours: [5,  11], color: 'warn' },
@@ -34,7 +35,7 @@ export default function Calories(props) {
   return <CaloriesPage {...props} />
 }
 
-function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade }) {
+function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentHandled }) {
   const [foods, setFoods]             = useState([])
   const [saveError, setSaveError]     = useState('')
   const saveQueue = useRef(Promise.resolve()) // one save at a time, in order
@@ -52,6 +53,31 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade }) {
   const [planNutrition, setPlanNutrition] = useState(null)
   const [scanning, setScanning]       = useState(false)
   const fileRef = useRef()
+  const [logFood, setLogFood]         = useState(false)
+  useHeaderAction('mdi:plus', 'Log food', () => setLogFood(true))
+
+  // Opened from the You sheet's Nutrition targets
+  useEffect(() => {
+    if (intent !== 'goals') return
+    setEditingGoals(true)
+    onIntentHandled?.()
+  }, [intent])
+
+  // Log food sheet: each option opens one of the existing add flows
+  function logBy(kind) {
+    setLogFood(false)
+    if (kind === 'photo') {
+      if (!isPro) return onUpgrade?.()
+      if (fileRef.current) return fileRef.current.click()
+      setTab('today') // the photo input lives on the Today view
+      return requestAnimationFrame(() => fileRef.current?.click())
+    }
+    setTab('today')
+    if (kind === 'barcode') return setScanning(true)
+    const meal = getCurrentMeal()
+    setAddingTo(meal)
+    requestAnimationFrame(() => document.getElementById(`meal-${meal}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'center' }))
+  }
 
   // Plan nutrition targets when there is a plan, otherwise profile-based (or custom) goals
   const baseGoals = localGoals ?? resolveGoals(profile)
@@ -396,6 +422,16 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade }) {
         </div>
       )}
 
+      {logFood && (
+        <Sheet title="Log food" onClose={() => setLogFood(false)} bodyClassName="space-y-1 -mx-2">
+          <ListRow icon="mdi:camera-outline" tile="neon-ink" title="Photo" chevron onClick={() => logBy('photo')}
+            meta={isPro ? 'Snap your plate and get calories and macros' : 'Snap your plate and get calories and macros. Included with Pro.'} />
+          <ListRow icon="mdi:barcode-scan" tile="info" title="Barcode" meta="Scan a packet" chevron onClick={() => logBy('barcode')} />
+          <ListRow icon="mdi:pencil-outline" tile="lilac" title="Search or type" chevron onClick={() => logBy('manual')}
+            meta={`Add to ${MEALS.find(m => m.id === getCurrentMeal())?.label.toLowerCase()} by hand`} />
+        </Sheet>
+      )}
+
       {selectedLog && (
         <DayModal log={selectedLog} onClose={() => setSelectedLog(null)} />
       )}
@@ -438,7 +474,7 @@ function MealSection({ meal, foods, allFoods, isAdding, form, setForm, onToggleA
   const mealKcal = foods.reduce((a, f) => a + (f.kcal || 0), 0)
 
   return (
-    <div className="bg-surface border border-line rounded-2xl overflow-hidden transition-all"
+    <div id={`meal-${meal.id}`} className="bg-surface border border-line rounded-2xl overflow-hidden transition-all"
       style={isCurrent ? { borderColor: tok(meal.color, 0.35) } : {}}>
 
       {/* Header */}

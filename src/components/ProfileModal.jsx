@@ -5,24 +5,11 @@ import { signOut } from '../lib/session.js'
 import { Icon } from '@iconify/react'
 import { tok } from '../lib/tokens.js'
 import Sheet from './Sheet.jsx'
-import { Button, Segmented } from './ui/index.js'
+import { Button, Segmented, ListRow } from './ui/index.js'
+import ReminderSettings from './ReminderSettings.jsx'
 import { fmtWeight } from '../lib/units.js'
 import { PRO_FEATURES, annualPerMonth, money } from '../lib/pricing.js'
 
-const QUOTES = [
-  { text: "The only bad workout is the one that didn't happen.", author: "Unknown" },
-  { text: "Pain is temporary. Pride is forever.", author: "Anonymous" },
-  { text: "Your body can stand almost anything. It's your mind you have to convince.", author: "Anonymous" },
-  { text: "Train hard. Recover smart. Repeat.", author: "Anonymous" },
-  { text: "No shortcuts. No excuses. Just work.", author: "Anonymous" },
-  { text: "Push yourself — no one else is going to do it for you.", author: "Anonymous" },
-  { text: "A one-hour workout is 4% of your day. No excuses.", author: "Anonymous" },
-  { text: "The hardest lift is lifting yourself off the couch.", author: "Anonymous" },
-  { text: "Strength is built in the moments you want to quit.", author: "Anonymous" },
-  { text: "Every rep is a vote for the person you want to become.", author: "Anonymous" },
-  { text: "The iron never lies to you.", author: "Henry Rollins" },
-  { text: "If it doesn't challenge you, it doesn't change you.", author: "Fred DeVito" },
-]
 
 function fmtHeight(cm) {
   const totalIn = Math.round(cm / 2.54)
@@ -160,7 +147,7 @@ function SubscriptionScreen({ onBack }) {
 
 // ── Main modal ────────────────────────────────────────────────────────────────
 
-export default function ProfileModal({ session, profile, isPro, theme, onToggleTheme, onClose, onEdit, onUpgrade }) {
+export default function ProfileModal({ session, profile, isPro, theme, onToggleTheme, onClose, onEdit, onUpgrade, onEditTargets }) {
   const [pwState, setPwState] = useState('idle')   // idle | loading | sent | error
   const [screen, setScreen]   = useState('profile') // profile | subscription
 
@@ -169,7 +156,6 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
   // BMI 15-40 across the bar; bands start at 18.5 (14%), 25 (40%) and 30 (60%)
   const bmiPct  = bmi ? Math.min(98, Math.max(2, ((bmi - 15) / (40 - 15)) * 100)) : 0
 
-  const quote   = QUOTES[Math.floor(Date.now() / 86400000) % QUOTES.length]
   const initial = session?.name?.[0]?.toUpperCase() || '?'
 
   async function handleChangePassword() {
@@ -181,7 +167,7 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
   }
 
   return (
-    <Sheet ariaLabel={screen === 'subscription' ? 'Subscription' : 'Profile and settings'} onClose={onClose} bodyClassName="-mx-1">
+    <Sheet ariaLabel={screen === 'subscription' ? 'Subscription' : 'You'} onClose={onClose} bodyClassName="-mx-1">
         {screen === 'subscription' ? (
           <SubscriptionScreen onBack={() => setScreen('profile')} />
         ) : (
@@ -245,62 +231,69 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
             )}
 
             {/* ── Appearance ── */}
-            <div className="mb-6">
-              <div className="text-lg leading-[1.3] font-semibold text-ink mb-2">Appearance</div>
+            <section className="mb-6">
+              <h3 className="text-lg leading-[1.3] font-semibold text-ink mb-2">Appearance</h3>
               <Segmented options={[['dark', 'Dark'], ['light', 'Light']]} value={theme}
                 onChange={t => { if (t !== theme) onToggleTheme?.() }} label="Theme" kind="choice" />
-            </div>
+            </section>
 
-            {/* ── Daily quote ── */}
-            <div className="bg-canvas border border-line rounded-2xl p-5 mb-6 relative overflow-hidden">
-              <div className="text-2xs text-neon-ink mb-2.5">Daily motivation</div>
-              <div className="text-sm text-ink-2 leading-relaxed italic">"{quote.text}"</div>
-              {quote.author !== 'Anonymous' && quote.author !== 'Unknown' && (
-                <div className="text-xs text-muted mt-2">{quote.author}</div>
-              )}
-            </div>
+            {/* ── Reminders (moved here from Progress) ── */}
+            <section className="mb-6">
+              <h3 className="text-lg leading-[1.3] font-semibold text-ink mb-2">Reminders</h3>
+              <ReminderSettings />
+            </section>
 
-            {/* ── Actions ── */}
-            <div className="space-y-2.5">
-              {pwState === 'sent' ? (
-                <div role="status" className="w-full py-3.5 rounded-xl text-sm font-semibold text-neon-ink bg-neon/8 border border-neon-stroke/25 flex items-center justify-center gap-2">
-                  <Icon icon="mdi:check-circle-outline" width={16} />
-                  Reset link sent. Check your inbox.
+            {/* ── Nutrition targets ── */}
+            {onEditTargets && (
+              <section className="mb-6">
+                <h3 className="text-lg leading-[1.3] font-semibold text-ink mb-2">Nutrition</h3>
+                <div className="bg-surface border border-line rounded-2xl p-1">
+                  <ListRow icon="mdi:target" tile="info" title="Nutrition targets" meta="Daily calories, protein and carbs" chevron onClick={onEditTargets} />
                 </div>
-              ) : (
-                <button onClick={handleChangePassword} disabled={pwState === 'loading'}
-                  className="w-full py-3.5 rounded-xl text-sm font-semibold text-ink-2 bg-raised border border-line hover:border-line-strong hover:text-ink transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                  <Icon icon="mdi:key-outline" width={16} />
-                  <span>{pwState === 'loading' ? 'Sending...' : 'Change password'}</span>
-                </button>
-              )}
-              {pwState === 'error' && (
-                <p className="text-danger text-xs text-center">Couldn't send the link. Try again.</p>
-              )}
+              </section>
+            )}
 
-              {!isPro && (
-                <button onClick={onUpgrade}
-                  className="w-full py-3.5 rounded-xl text-sm font-bold bg-neon/10 border border-neon-stroke/30 text-neon-ink hover:bg-neon/15 hover:border-neon-stroke/50 transition-all flex items-center justify-center gap-2">
-                  <Icon icon="mdi:star-four-points-outline" width={16} />
-                  <span>Get ATHRION Pro · from {money(annualPerMonth)} a month</span>
-                </button>
-              )}
-
-              {isPro && (
+            {/* ── Subscription ── */}
+            <section className="mb-6">
+              <h3 className="text-lg leading-[1.3] font-semibold text-ink mb-2">Subscription</h3>
+              {isPro ? (
                 <button onClick={() => setScreen('subscription')}
-                  className="w-full py-3.5 rounded-xl text-sm font-semibold bg-neon/8 border border-neon-stroke/20 hover:bg-neon/12 hover:border-neon-stroke/35 transition-all flex items-center justify-between px-5">
+                  className="press w-full py-3.5 rounded-xl text-sm font-semibold bg-neon/8 border border-neon-stroke/20 hover:bg-neon/12 hover:border-neon-stroke/35 transition-all flex items-center justify-between px-5">
                   <div className="flex items-center gap-2 text-neon-ink">
                     <Icon icon="mdi:check-decagram-outline" width={16} />
                     <span>ATHRION Pro is active</span>
                   </div>
                   <span className="text-muted text-xs flex items-center">Manage <Icon icon="mdi:chevron-right" width={16} /></span>
                 </button>
+              ) : (
+                <button onClick={onUpgrade}
+                  className="press w-full py-3.5 rounded-xl text-sm font-bold bg-neon/10 border border-neon-stroke/30 text-neon-ink hover:bg-neon/15 hover:border-neon-stroke/50 transition-all flex items-center justify-center gap-2">
+                  <Icon icon="mdi:star-four-points-outline" width={16} />
+                  <span>Get ATHRION Pro · from {money(annualPerMonth)} a month</span>
+                </button>
               )}
+            </section>
 
+            {/* ── Account ── */}
+            <section className="mb-6 space-y-2.5">
+              <h3 className="text-lg leading-[1.3] font-semibold text-ink mb-2">Account</h3>
               <Button variant="secondary" full icon="mdi:ruler" onClick={onEdit}>Edit body stats</Button>
+              {pwState === 'sent' ? (
+                <div role="status" className="w-full py-3.5 rounded-xl text-sm font-semibold text-neon-ink bg-neon/8 border border-neon-stroke/25 flex items-center justify-center gap-2">
+                  <Icon icon="mdi:check-circle-outline" width={16} />
+                  Reset link sent. Check your inbox.
+                </div>
+              ) : (
+                <Button variant="secondary" full icon="mdi:key-outline" onClick={handleChangePassword} disabled={pwState === 'loading'}>
+                  {pwState === 'loading' ? 'Sending...' : 'Change password'}
+                </Button>
+              )}
+              {pwState === 'error' && (
+                <p className="text-danger text-xs text-center">Couldn't send the link. Try again.</p>
+              )}
+            </section>
 
-              <Button variant="ghost" full icon="mdi:logout" onClick={() => signOut()} className="!text-danger">Sign out</Button>
-            </div>
+            <Button variant="ghost" full icon="mdi:logout" onClick={() => signOut()} className="!text-danger">Sign out</Button>
           </div>
         )}
     </Sheet>

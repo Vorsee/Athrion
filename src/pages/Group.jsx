@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Icon } from '@iconify/react'
-import { Button, BackLink, Card, Chip, Segmented } from '../components/ui/index.js'
+import { useBackHandler } from '../lib/shell.js'
+import { Button, Card, Chip, Segmented } from '../components/ui/index.js'
 import { tok } from '../lib/tokens.js'
 import { EXERCISES, MUSCLES, getExerciseIcon, todayKey } from '../lib/data.js'
 import {
@@ -75,6 +76,8 @@ export default function Group({ session }) {
   const screenRef = useRef('home')
 
   function goScreen(s) { screenRef.current = s; setScreen(s) }
+  // Back from the lobby leaves the room, as its Back button did
+  useBackHandler(screen === 'lobby', () => handleHome(), 'Train together')
 
   function exNamesToObjs(names) {
     return (names || []).map(n => EXERCISES.find(e => e.name === n)).filter(Boolean)
@@ -483,7 +486,6 @@ function LobbyScreen({ groupSession, participants, isHost, exercises, onAddExerc
 
   return (
     <div className="space-y-4 py-4 slide-up">
-      <BackLink onClick={onBack} />
 
       {/* Room code */}
       <Card pad="none" className="p-6 text-center">
@@ -671,7 +673,7 @@ function TrainingScreen({ exercises, exIdx, setIdx, totalSets, participants, all
           <div>
             <label className="text-xs text-muted block mb-1">Weight ({unit})</label>
             <input
-              type="number" placeholder="0" value={weight}
+              type="number" placeholder="0" aria-label={`Weight in ${unit}`} value={weight}
               onChange={e => setWeight(e.target.value)} min="0" step={unit === 'kg' ? 0.25 : 0.5}
               className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-sm outline-none transition-colors"
             />
@@ -679,7 +681,7 @@ function TrainingScreen({ exercises, exIdx, setIdx, totalSets, participants, all
           <div>
             <label className="text-xs text-muted block mb-1">Reps</label>
             <input
-              type="number" placeholder="0" value={reps}
+              type="number" placeholder="0" aria-label="Reps" value={reps}
               onChange={e => setReps(e.target.value)} min="1"
               className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-sm outline-none transition-colors"
             />

@@ -99,7 +99,7 @@ function NoPlan({ onRegenerate, generating, genError }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Today's Workout
 // ─────────────────────────────────────────────────────────────────────────────
-function TodayWorkout({ dayData, onGoToWorkout, onSwap }) {
+function TodayWorkout({ dayData, onGoToWorkout, onStartWorkout, onSwap }) {
   if (!dayData) return null
 
   const isRest = dayData.type !== 'workout'
@@ -151,8 +151,8 @@ function TodayWorkout({ dayData, onGoToWorkout, onSwap }) {
             ))}
           </div>
 
-          {onGoToWorkout && (
-            <Button full onClick={onGoToWorkout} className="mt-4">Start this workout</Button>
+          {(onStartWorkout || onGoToWorkout) && (
+            <Button full onClick={() => (onStartWorkout ? onStartWorkout(dayData) : onGoToWorkout())} className="mt-4">Start this workout</Button>
           )}
 
           {/* Cooldown */}
@@ -491,7 +491,7 @@ function LockedPlan({ onUpgrade, onStartSetup }) {
             <div className="font-bold text-xl text-ink leading-none">{planData.summary.planName}</div>
           </div>
           <div className="text-xs text-muted">
-            {plan.duration_weeks} weeks · {plan.training_days_per_week} days/week · {GOAL_LABELS[plan.primary_goal]}
+            {plan.duration_weeks} weeks · {workoutDays(planData, plan)} days a week · {GOAL_LABELS[plan.primary_goal]}
           </div>
         </div>
         {todayData && <TodayWorkout dayData={todayData} />}
@@ -511,7 +511,7 @@ export default function Plan({ isPro, onUpgrade, ...props }) {
   return <PlanPage {...props} />
 }
 
-function PlanPage({ onGoToWorkout, profile, onProfileChange }) {
+function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
   const [plan, setPlan]             = useState(undefined) // undefined=loading
   const [nutrition, setNutrition]   = useState(null)
   const [checkin, setCheckin]       = useState(null)
@@ -651,7 +651,7 @@ function PlanPage({ onGoToWorkout, profile, onProfileChange }) {
           <div className="font-bold text-xl text-ink leading-none">{summary.planName ?? goalLabel}</div>
         </div>
         <div className="text-xs text-muted">
-          {summary.durationWeeks ?? plan.duration_weeks} weeks · {plan.training_days_per_week} days/week · {goalLabel}
+          {summary.durationWeeks ?? plan.duration_weeks} weeks · {workoutDays(plan.plan_data, plan)} days a week · {goalLabel}
         </div>
         <button onClick={() => setShowGoal(true)} disabled={generating}
           className="mt-3 w-full border border-line-strong text-ink-2 font-semibold py-2.5 rounded-xl text-xs hover:border-neon-stroke/40 hover:text-neon-ink transition-all disabled:opacity-50 flex items-center justify-center gap-2">
@@ -668,7 +668,7 @@ function PlanPage({ onGoToWorkout, profile, onProfileChange }) {
       <AdaptCard plan={plan} checkin={checkin} generating={generating} onAdapt={() => handleRegenerate(undefined, 'adapt')} />
 
       {/* Today */}
-      {todayData && <TodayWorkout dayData={todayData} onGoToWorkout={onGoToWorkout} onSwap={handleSwap} />}
+      {todayData && <TodayWorkout dayData={todayData} onGoToWorkout={onGoToWorkout} onStartWorkout={onStartWorkout} onSwap={handleSwap} />}
 
       {/* Nutrition */}
       <NutritionCard planNutrition={planData.nutrition} dbNutrition={nutrition} />
@@ -727,4 +727,10 @@ function PlanPage({ onGoToWorkout, profile, onProfileChange }) {
       )}
     </div>
   )
+}
+
+// Days the plan actually trains, not the number asked for during setup
+function workoutDays(planData, plan) {
+  const n = planData?.weeklySchedule?.filter(d => d.type === 'workout').length
+  return n || plan.training_days_per_week
 }

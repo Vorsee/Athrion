@@ -31,7 +31,7 @@ Fitness PWA: AI training plans, workout logging, calorie tracking, progress. Liv
 - Weights are stored in lb everywhere; show and read them through `useUnit()` / `fromLb` / `toLb` in `src/lib/units.js` (the person's `weight_unit`), never hardcode "lb".
 - Design: sentence-case text, no emoji in UI, `mdi:` line icons, text 12px minimum (`text-2xs` 11px only for chart axes and tags), no glows. Colours are CSS variable tokens in `src/index.css` (dark on `:root`, light on `.light`), used through Tailwind names (`bg-surface`, `text-ink`, `text-muted`, `text-neon-ink`…); no raw hex or `text-gray-*` in JSX. Neon `#C8F135` stays the accent. Shared building blocks are in `src/components/ui/`; spec and rubric in `.design/` (gitignored).
 - Brand is written "ATHRION" everywhere in the UI.
-- Bottom nav has 4 tabs; Library and Group open from Workout (`PARENT_TAB` in `components/Nav.jsx`).
+- Bottom nav has 4 tabs: Train, Plan, Food, Progress (page keys `workout`, `plan`, `calories`, `progress`). Library and Group open from Train (`PARENT_TAB` in `components/Nav.jsx`). Pushed sub-screens use `useBackHandler` from `src/lib/shell.js` (header back and the phone's back gesture), not their own back buttons.
 - The exercise demo animation is commented out on purpose in `ExerciseDemo.jsx` until an ExerciseDB HD licence is bought.
 
 ## Open items

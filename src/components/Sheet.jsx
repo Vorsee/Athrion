@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from '@iconify/react'
+import { useBackHandler } from '../lib/shell.js'
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
@@ -12,6 +13,7 @@ export default function Sheet({ title, ariaLabel, onClose, children, footer, bod
   const titleId = useId()
   const closeRef = useRef(onClose)
   closeRef.current = onClose
+  useBackHandler(true, () => closeRef.current?.(), undefined, undefined, true) // phone back closes the sheet
 
   useEffect(() => {
     const opener = document.activeElement

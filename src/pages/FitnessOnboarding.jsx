@@ -5,6 +5,7 @@ import { calculateNutritionTargets, GOAL_LABELS, GOAL_ICONS } from '../lib/nutri
 import { saveFitnessProfile, saveNutritionTarget, generatePlan } from '../lib/fitnessApi.js'
 import { saveGoals } from '../lib/api.js'
 import { TRIAL_DAYS } from '../lib/pricing.js'
+import { useBackHandler } from '../lib/shell.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -171,7 +172,7 @@ function WorkoutSetupStep({ workoutDays, setWorkoutDays, sessionDuration, setSes
       {/* Days per week */}
       <div>
         <div className="text-xs text-muted mb-2">
-          Days per Week <span className="text-neon-ink">{workoutDays}</span>
+          Days per week <span className="text-neon-ink">{workoutDays}</span>
         </div>
         <input type="range" min={1} max={7} value={workoutDays}
           onChange={e => setWorkoutDays(Number(e.target.value))}
@@ -352,6 +353,10 @@ export default function FitnessOnboarding({ existingProfile, saved = null, isPro
   function goNext() { setAnimDir('slide-from-right'); setAnimKey(k => k + 1); setStep(s => s + 1) }
   function goBack() { setAnimDir('slide-from-left');  setAnimKey(k => k + 1); setStep(s => s - 1) }
 
+  // Phone back steps through the questions, then closes setup (free users can close it)
+  useBackHandler(!!onCancel && step === 0, () => onCancel?.(), undefined, undefined, true)
+  useBackHandler(step > 0 && step, goBack, undefined, undefined, true) // re-registers per step
+
   const nutritionPreview = goal && ep.sex && ep.weight_lb && ep.height_cm && ep.age
     ? calculateNutritionTargets({
         sex: ep.sex, weightLb: ep.weight_lb, heightCm: ep.height_cm, age: ep.age,
@@ -453,7 +458,6 @@ export default function FitnessOnboarding({ existingProfile, saved = null, isPro
             </button>
           )}
           <div className="font-bold text-3xl text-ink">ATHRION</div>
-          <div className="text-xs text-muted mt-0.5">Fitness setup</div>
         </div>
 
         <ProgressDots step={step} />

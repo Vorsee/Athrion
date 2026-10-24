@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Icon } from '@iconify/react'
-import { Button, BackLink, Segmented, Chip, Sheet, EmptyState } from '../components/ui/index.js'
+import { useBackHandler } from '../lib/shell.js'
+import { Button, Segmented, Chip, Sheet, EmptyState } from '../components/ui/index.js'
 import { EXERCISES, MUSCLES, getExerciseIcon } from '../lib/data.js'
 import { WORKOUT_LIBRARY } from '../lib/library.js'
 import { saveCustomWorkout } from '../lib/api.js'
@@ -19,6 +20,7 @@ export default function Library({ onStartWorkout }) {
   const [tab, setTab]                   = useState('routines')
   const [selectedRoutine, setSelectedRoutine] = useState(null)
   const [selectedEx, setSelectedEx]     = useState(null)
+  useBackHandler(!!selectedRoutine, () => setSelectedRoutine(null), 'Library', selectedRoutine?.name)
   const [filter, setFilter]             = useState('All')
   const [routineTag, setRoutineTag]     = useState('All')
   const [search, setSearch]             = useState('')
@@ -200,7 +202,6 @@ function RoutineDetail({ workout, onBack, onStartWorkout }) {
     <div className="space-y-4 py-4 slide-up">
       {/* Header */}
       <div>
-        <BackLink onClick={onBack} className="mb-3">Library</BackLink>
         <div className="flex items-start gap-3">
           <Icon icon={workout.icon} width={44} className="text-ink-2" />
           <div className="flex-1">

@@ -4,7 +4,7 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { sb, USER } from '../helpers/supabaseMock.js'
-import { planRow, profile, fitnessProfile } from '../helpers/fixtures.js'
+import { planRow, withWorkoutOn, profile, fitnessProfile } from '../helpers/fixtures.js'
 
 vi.mock('../../src/lib/supabase.js', () => ({ supabase: sb.supabase }))
 vi.mock('@iconify/react', () => ({ Icon: () => null }))
@@ -62,6 +62,15 @@ describe('Plan', () => {
     await userEvent.click(screen.getByText('Train anyway'))
     expect(go).toHaveBeenCalled()
     expect(screen.getByText('Daily nutrition targets')).toBeInTheDocument()
+  })
+  it('starts today\'s workout directly from the plan', async () => {
+    sb.set('fitness_plans', { data: withWorkoutOn('Friday'), error: null })
+    sb.set('fitness_profiles', { data: fitnessProfile, error: null })
+    sb.set('nutrition_targets', { data: null, error: null })
+    const start = vi.fn()
+    render(<P.Plan isPro profile={profile} onGoToWorkout={() => {}} onStartWorkout={start} onProfileChange={() => {}} />)
+    await userEvent.click(await screen.findByText('Start this workout'))
+    expect(start).toHaveBeenCalledWith(expect.objectContaining({ day: 'Friday', type: 'workout' }))
   })
 })
 
@@ -200,7 +209,20 @@ describe('Library and Group live inside Workout', () => {
     render(<P.App />)
     await userEvent.click(await screen.findByText('Train together'))
     expect(await screen.findByText('Host a session')).toBeInTheDocument()
-    await userEvent.click(screen.getByText(/Back to Workout/))
+    await userEvent.click(screen.getByLabelText('Back to Train'))
+    expect(await screen.findByText('Exercise library')).toBeInTheDocument()
+  })
+  it('steps back with the phone back gesture instead of leaving the app', async () => {
+    sb.supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: 't' } } })
+    sb.set('user_profiles', { data: profile, error: null })
+    sb.set('fitness_profiles', { data: fitnessProfile, error: null })
+    sb.set('subscriptions', { data: { status: 'pro' }, error: null })
+    sb.set('fitness_plans', { data: planRow, error: null })
+    render(<P.App />)
+    await userEvent.click(await screen.findByText('Train together'))
+    expect(await screen.findByText('Host a session')).toBeInTheDocument()
+    await waitFor(() => expect(window.history.state?.page).toBe('group'))
+    act(() => window.history.back())
     expect(await screen.findByText('Exercise library')).toBeInTheDocument()
   })
 })
@@ -248,7 +270,7 @@ describe('Onboarding', () => {
   })
   it('renders fitness setup', () => {
     render(<P.FitnessOnboarding existingProfile={profile} onComplete={() => {}} />)
-    expect(screen.getByText('Fitness setup')).toBeInTheDocument()
+    expect(screen.getByText(/main goal/)).toBeInTheDocument()
   })
   it('lets a free user save their answers and targets, then offers the trial instead of generating', async () => {
     sb.set('fitness_profiles', { data: {}, error: null })
@@ -293,11 +315,11 @@ describe('ProfileModal', () => {
 })
 
 describe('App shell', () => {
-  function signedIn() {
+  function signedIn(status = 'free') {
     sb.supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: 't' } } })
     sb.set('user_profiles', { data: profile, error: null })
     sb.set('fitness_profiles', { data: fitnessProfile, error: null })
-    sb.set('subscriptions', { data: { status: 'free' }, error: null })
+    sb.set('subscriptions', { data: { status }, error: null })
     sb.set('fitness_plans', { data: planRow, error: null })
   }
   it('shows new visitors the landing page, then create account', async () => {
@@ -319,7 +341,7 @@ describe('App shell', () => {
     localStorage.clear()
   })
   it('loads the profile and lands on the Workout tab when signed in', async () => {
-    signedIn()
+    signedIn('pro') // the plan's rest day shows on Train for Pro members
     render(<P.App />)
     expect(await screen.findByText('Rest & Recovery')).toBeInTheDocument()
   })
@@ -336,7 +358,7 @@ describe('App shell', () => {
     // hourly, and when the tab regains focus). App treats that as a new login: it shows
     // the Loading screen and remounts the page, so any open screen state is lost.
     it('a token refresh does not reload the profile or remount the page', async () => {
-      signedIn()
+      signedIn('pro')
       render(<P.App />)
       await screen.findByText('Rest & Recovery')
       const before = sb.queriesFor('user_profiles').length

@@ -52,7 +52,6 @@ export default function HomeScreenPrompt() {
         </div>
         <div>
           <div className="text-xs font-bold text-ink leading-tight">Add to Home Screen</div>
-          <div className="text-xs text-muted">Quick access anytime</div>
         </div>
       </div>
 

@@ -1,11 +1,11 @@
-import { useState, useEffect, lazy, Suspense } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { supabase } from './lib/supabase.js'
 import { fetchUserProfile, fetchSubscriptionStatus } from './lib/api.js'
 import { fetchFitnessProfile } from './lib/fitnessApi.js'
 import Workout from './pages/Workout.jsx'
 import { healthSyncAvailable, syncHealthData } from './lib/health.js'
-import { Icon } from '@iconify/react'
-import Nav, { PARENT_TAB } from './components/Nav.jsx'
+import Nav, { LANDING, useMinimisedSession } from './components/Nav.jsx'
+import { useShell, onPageBack, pushEntry, replaceEntry, silentBack, dropBackHandlers, setSessionMinimised } from './lib/shell.js'
 import { createCheckoutSession } from './lib/stripe.js'
 import { UnitProvider } from './lib/units.js'
 import HomeScreenPrompt from './components/HomeScreenPrompt.jsx'
@@ -33,6 +33,8 @@ const Loading = () => (
 )
 const PageLoading = () => <PageSkeleton />
 
+const PAGES = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan, progress: Progress }
+
 export default function App() {
   // undefined = auth not yet resolved; null = logged out; object = logged in
   const [session, setSession]   = useState(undefined)
@@ -52,10 +54,47 @@ export default function App() {
   const [editingProfile, setEditingProfile] = useState(false)
   const [checkout, setCheckout] = useState({ open: false, busy: false, error: '' })
   const [planSetup, setPlanSetup] = useState(false) // free user answering the plan questions
+  const [foodIntent, setFoodIntent] = useState(null) // 'goals': open the targets editor on Food
+  const [resumeTick, setResumeTick] = useState(0)    // bumped when the session bar is tapped
+  const minimised = useMinimisedSession()
+  const { focus } = useShell()
+
+  // Pages live in browser history so the phone's back gesture steps back inside the app.
+  // History is [landing] or [landing, other page], plus one entry per open sub-screen.
+  const pageRef = useRef(page)
+  pageRef.current = page
+  function navigate(next) {
+    const cur = pageRef.current
+    if (next === cur) return
+    const subs = dropBackHandlers()
+    const curDepth = cur === LANDING ? 0 : 1
+    const nextDepth = next === LANDING ? 0 : 1
+    silentBack(subs + (curDepth && !nextDepth ? 1 : 0))
+    if (nextDepth) (curDepth ? replaceEntry : pushEntry)({ page: next })
+    pageRef.current = next
+    setPage(next)
+  }
+
+  useEffect(() => {
+    replaceEntry({ page: LANDING })
+    return onPageBack(state => setPage(state?.page && state.page in PAGES ? state.page : LANDING))
+  }, [])
 
   function handleStartFromLibrary(exercises, name) {
     setPendingWorkout({ exercises, name })
-    setPage('workout')
+    navigate('workout')
+  }
+
+  // Plan's "Start this workout": straight into the session, as on the Train tab
+  function handleStartPlanDay(day) {
+    setPendingWorkout({ name: day.title, planExercises: day.workout?.exercises ?? [] })
+    navigate('workout')
+  }
+
+  function resumeWorkout() {
+    setSessionMinimised(false)
+    setResumeTick(t => t + 1)
+    navigate('workout')
   }
 
   useEffect(() => {
@@ -196,30 +235,29 @@ export default function App() {
   )
 
   const pageProps = {
-    workout: { pendingWorkout, onClearPending: () => setPendingWorkout(null), isPro, onUpgrade: goUpgrade, onOpenPage: setPage },
+    workout: { pendingWorkout, onClearPending: () => setPendingWorkout(null), isPro, onUpgrade: goUpgrade, onOpenPage: navigate, resumeTick },
     library: { onStartWorkout: handleStartFromLibrary },
-    calories: { profile, isPro, onUpgrade: goUpgrade, onGoToPlan: () => setPage('plan') },
+    calories: { profile, isPro, onUpgrade: goUpgrade, onGoToPlan: () => navigate('plan'), intent: foodIntent, onIntentHandled: () => setFoodIntent(null) },
     group: { session },
-    plan: { isPro, onUpgrade: goUpgrade, onStartSetup: () => setPlanSetup(true), onGoToWorkout: () => setPage('workout'), profile, onProfileChange: () => { refreshProfile(); refreshFitnessProfile() } },
+    plan: { isPro, onUpgrade: goUpgrade, onStartSetup: () => setPlanSetup(true), onGoToWorkout: () => navigate('workout'), onStartWorkout: handleStartPlanDay, profile, onProfileChange: () => { refreshProfile(); refreshFitnessProfile() } },
   }
 
-  const pages = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan, progress: Progress }
-  const PageComponent = pages[page] ?? Workout
+  const PageComponent = PAGES[page] ?? Workout
 
   const isLight = theme === 'light'
 
   return (
     <UnitProvider value={profile?.weight_unit === 'kg' ? 'kg' : 'lb'}>
     <div className={`min-h-dvh bg-canvas text-ink font-dm${isLight ? ' light' : ''}`}>
-      <Nav page={page} setPage={setPage} session={session} isPro={isPro} onProfileClick={() => setShowProfile(true)} />
-      <main className="relative z-10 max-w-lg mx-auto px-3 xs:px-4 pb-[82px] xs:pb-[90px]"
-        style={{ paddingTop: 'calc(var(--header-h) + env(safe-area-inset-top))' }}>
-        {PARENT_TAB[page] && (
-          <button onClick={() => setPage(PARENT_TAB[page])}
-            className="flex items-center gap-1 pt-3 -mb-1 text-sm text-ink-2 hover:text-ink">
-            <Icon icon="mdi:chevron-left" width={20} /> Back to {PARENT_TAB[page][0].toUpperCase() + PARENT_TAB[page].slice(1)}
-          </button>
-        )}
+      <Nav page={page} setPage={navigate} session={session} isPro={isPro} onProfileClick={() => setShowProfile(true)}
+        minimised={minimised} onResume={resumeWorkout} />
+      <main className="relative z-10 max-w-lg mx-auto px-4"
+        style={{
+          paddingTop: 'calc(var(--header-h) + env(safe-area-inset-top))',
+          paddingBottom: `calc(${focus ? 24 : minimised ? 52 + 56 + 24 : 56 + 24}px + env(safe-area-inset-bottom))`,
+        }}>
+        {/* Watched by the header: once this scrolls away, the bar title fades in */}
+        <div id="page-top" aria-hidden="true" className="absolute left-0 top-0 h-[calc(var(--header-h)+48px)] w-px pointer-events-none" />
         <Suspense fallback={<PageLoading />}>
           <PageComponent key={page} {...pageProps[page]} />
         </Suspense>
@@ -251,6 +289,7 @@ export default function App() {
             onClose={() => setShowProfile(false)}
             onEdit={() => { setShowProfile(false); setEditingProfile(true) }}
             onUpgrade={goUpgrade}
+            onEditTargets={() => { setShowProfile(false); setFoodIntent('goals'); navigate('calories') }}
           />
         </Suspense>
       )}

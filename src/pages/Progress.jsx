@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Icon } from '@iconify/react'
-import { Button, BackLink, Card, SectionTitle, Segmented, EmptyState, Skeleton, SkeletonRows } from '../components/ui/index.js'
+import { useBackHandler, useHeaderAction } from '../lib/shell.js'
+import { Button, Card, SectionTitle, Segmented, EmptyState, Skeleton, SkeletonRows, Sheet } from '../components/ui/index.js'
 import LineChart from '../components/LineChart.jsx'
-import ReminderSettings from '../components/ReminderSettings.jsx'
 import { fetchWorkoutHistory } from '../lib/api.js'
 import {
   fetchMeasurements, saveMeasurement, deleteMeasurement,
@@ -55,8 +55,6 @@ function Overview({ history, badges }) {
         ))}
       </div>
 
-      <ReminderSettings />
-
       <Card>
         <SectionTitle>Badges · {earnedIds.size}/{BADGES.length}</SectionTitle>
         <div className="grid grid-cols-3 gap-2">
@@ -84,20 +82,13 @@ const MEASURE_FIELDS = [
   ['arm_in', 'Arm (in)'], ['thigh_in', 'Thigh (in)'], ['body_fat_pct', 'Body fat %'],
 ]
 
-function Body({ measurements, checkinWeights, onSaved }) {
-  const { unit, fromLb, toLb } = useUnit()
+// Weigh-in form: on the Body tab and in the header's Log weight sheet
+function WeighInForm({ onSaved }) {
+  const { unit, toLb } = useUnit()
   const [form, setForm] = useState({ date: today(), weight_lb: '' })
   const [showMore, setShowMore] = useState(false)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
-
-  // Measurements take precedence over check-in weights on the same day
-  const weightSeries = useMemo(() => {
-    const byDate = {}
-    for (const c of checkinWeights) byDate[c.date] = c.weight_lb
-    for (const m of measurements) if (m.weight_lb != null) byDate[m.date] = m.weight_lb
-    return Object.entries(byDate).map(([date, value]) => ({ date, value: fromLb(value) }))
-  }, [measurements, checkinWeights, unit])
 
   async function save() {
     setSaving(true); setErr('')
@@ -117,6 +108,42 @@ function Body({ measurements, checkinWeights, onSaved }) {
     }
   }
 
+  return (
+    <div>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="block">
+          <span className="text-xs text-muted">Date</span>
+          <input type="date" value={form.date} max={today()} onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+            className="mt-1 w-full bg-raised border border-line rounded-xl px-3 py-2 text-sm text-ink focus:outline-none focus:border-neon-stroke/40" />
+        </label>
+        <NumField label={`Weight (${unit})`} value={form.weight_lb} onChange={v => setForm(f => ({ ...f, weight_lb: v }))} />
+      </div>
+      {showMore ? (
+        <div className="grid grid-cols-2 gap-3 mt-3">
+          {MEASURE_FIELDS.map(([k, label]) => (
+            <NumField key={k} label={label} value={form[k] ?? ''} onChange={v => setForm(f => ({ ...f, [k]: v }))} />
+          ))}
+        </div>
+      ) : (
+        <button onClick={() => setShowMore(true)} className="press text-xs font-semibold text-neon-ink mt-2 min-h-[44px] inline-flex items-center gap-1"><Icon icon="mdi:plus" width={16} />Add measurements</button>
+      )}
+      {err && <p className="text-xs text-danger mt-2">{err}</p>}
+      <Button full onClick={save} disabled={saving} className="mt-3">{saving ? 'Saving...' : 'Save'}</Button>
+    </div>
+  )
+}
+
+function Body({ measurements, checkinWeights, onSaved }) {
+  const { unit, fromLb } = useUnit()
+
+  // Measurements take precedence over check-in weights on the same day
+  const weightSeries = useMemo(() => {
+    const byDate = {}
+    for (const c of checkinWeights) byDate[c.date] = c.weight_lb
+    for (const m of measurements) if (m.weight_lb != null) byDate[m.date] = m.weight_lb
+    return Object.entries(byDate).map(([date, value]) => ({ date, value: fromLb(value) }))
+  }, [measurements, checkinWeights, unit])
+
   const sorted = [...weightSeries].sort((a, b) => a.date.localeCompare(b.date))
   const change = sorted.length >= 2 ? Math.round((sorted[sorted.length - 1].value - sorted[0].value) * 10) / 10 : null
 
@@ -132,25 +159,7 @@ function Body({ measurements, checkinWeights, onSaved }) {
 
       <Card>
         <SectionTitle>Log a weigh-in</SectionTitle>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="text-xs text-muted">Date</span>
-            <input type="date" value={form.date} max={today()} onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-              className="mt-1 w-full bg-raised border border-line rounded-xl px-3 py-2 text-sm text-ink focus:outline-none focus:border-neon-stroke/40" />
-          </label>
-          <NumField label={`Weight (${unit})`} value={form.weight_lb} onChange={v => setForm(f => ({ ...f, weight_lb: v }))} />
-        </div>
-        {showMore ? (
-          <div className="grid grid-cols-2 gap-3 mt-3">
-            {MEASURE_FIELDS.map(([k, label]) => (
-              <NumField key={k} label={label} value={form[k] ?? ''} onChange={v => setForm(f => ({ ...f, [k]: v }))} />
-            ))}
-          </div>
-        ) : (
-          <button onClick={() => setShowMore(true)} className="press text-xs font-semibold text-neon-ink mt-2 min-h-[44px] inline-flex items-center gap-1"><Icon icon="mdi:plus" width={16} />Add measurements</button>
-        )}
-        {err && <p className="text-xs text-danger mt-2">{err}</p>}
-        <Button full onClick={save} disabled={saving} className="mt-3">{saving ? 'Saving...' : 'Save'}</Button>
+        <WeighInForm onSaved={onSaved} />
       </Card>
 
       {measurements.some(m => MEASURE_FIELDS.some(([k]) => m[k] != null)) && (
@@ -351,7 +360,6 @@ function Health({ health, onChanged }) {
         </div>
         <Button full onClick={save} disabled={saving} className="mt-3">{saving ? 'Saving...' : 'Save today'}</Button>
         {msg && <p className="text-xs text-muted mt-2">{msg}</p>}
-        <p className="text-xs text-muted mt-2">Your coach uses sleep and recovery data when it adapts next week's plan.</p>
       </Card>
 
       {health.length > 1 && (
@@ -373,6 +381,7 @@ function Lifts({ history }) {
   const names = Object.keys(byEx).sort((a, b) => byEx[b].length - byEx[a].length)
   const [selected, setSelected] = useState(null)
   const [query, setQuery] = useState('')
+  useBackHandler(!!selected, () => setSelected(null), 'Progress', selected)
 
   if (!names.length) {
     return (
@@ -394,7 +403,6 @@ function Lifts({ history }) {
     }))
     return (
       <div className="space-y-4">
-        <BackLink onClick={() => setSelected(null)}>All exercises</BackLink>
         <div className="flex items-center gap-3">
           <Icon icon={getExerciseIcon({ name: selected })} width={28} className="text-neon-ink flex-shrink-0" />
           <div className="font-bold text-xl text-ink leading-tight break-words">{selected}</div>
@@ -471,6 +479,8 @@ export default function Progress() {
   const [health, setHealth] = useState([])
   const [badges, setBadges] = useState([])
   const [loading, setLoading] = useState(true)
+  const [logWeight, setLogWeight] = useState(false)
+  useHeaderAction('mdi:scale-bathroom', 'Log weight', () => setLogWeight(true))
 
   async function load() {
     const [h, m, cw, p, hl, earnedRows] = await Promise.all([
@@ -518,6 +528,12 @@ export default function Progress() {
           {tab === 'photos' && <Photos photos={photos} onChanged={load} />}
           {tab === 'health' && <Health health={health} onChanged={load} />}
         </>
+      )}
+
+      {logWeight && (
+        <Sheet title="Log weight" onClose={() => setLogWeight(false)}>
+          <WeighInForm onSaved={() => { setLogWeight(false); load() }} />
+        </Sheet>
       )}
     </div>
   )
