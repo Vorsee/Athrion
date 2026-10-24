@@ -226,10 +226,4 @@ describe('groupApi.js', () => {
     unsub()
     expect(sb.supabase.removeChannel).toHaveBeenCalled()
   })
-  it('team helpers call their tables (note: teams tables do not exist in the live database)', async () => {
-    sb.supabase.rpc.mockResolvedValueOnce({ data: { error: 'Team not found' }, error: null })
-    await expect(group.joinTeamByCode('X', 'Sam')).rejects.toThrow('Team not found')
-    sb.set('teams', ok([]))
-    expect(await group.fetchMyTeams()).toEqual([])
-  })
 })

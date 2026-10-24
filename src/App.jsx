@@ -1,21 +1,30 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { supabase } from './lib/supabase.js'
 import { fetchUserProfile, fetchSubscriptionStatus } from './lib/api.js'
 import { fetchFitnessProfile } from './lib/fitnessApi.js'
-import Auth from './pages/Auth.jsx'
-import Onboarding from './pages/Onboarding.jsx'
-import FitnessOnboarding from './pages/FitnessOnboarding.jsx'
 import Workout from './pages/Workout.jsx'
-import Calories from './pages/Calories.jsx'
-import Library from './pages/Library.jsx'
-import Group from './pages/Group.jsx'
-import Plan from './pages/Plan.jsx'
-import Progress from './pages/Progress.jsx'
 import { healthSyncAvailable, syncHealthData } from './lib/health.js'
-import Upgrade from './pages/Upgrade.jsx'
 import Nav from './components/Nav.jsx'
-import ProfileModal from './components/ProfileModal.jsx'
 import HomeScreenPrompt from './components/HomeScreenPrompt.jsx'
+
+// Workout is the landing tab; everything else loads the first time it's opened
+const Auth              = lazy(() => import('./pages/Auth.jsx'))
+const Onboarding        = lazy(() => import('./pages/Onboarding.jsx'))
+const FitnessOnboarding = lazy(() => import('./pages/FitnessOnboarding.jsx'))
+const Calories          = lazy(() => import('./pages/Calories.jsx'))
+const Library           = lazy(() => import('./pages/Library.jsx'))
+const Group             = lazy(() => import('./pages/Group.jsx'))
+const Plan              = lazy(() => import('./pages/Plan.jsx'))
+const Progress          = lazy(() => import('./pages/Progress.jsx'))
+const Upgrade           = lazy(() => import('./pages/Upgrade.jsx'))
+const ProfileModal      = lazy(() => import('./components/ProfileModal.jsx'))
+
+const Loading = () => (
+  <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center">
+    <div className="text-gray-600 text-sm tracking-widest uppercase">Loading...</div>
+  </div>
+)
+const PageLoading = () => <div className="py-20 text-center text-gray-700 text-sm animate-pulse">Loading...</div>
 
 export default function App() {
   // undefined = auth not yet resolved; null = logged out; object = logged in
@@ -101,33 +110,35 @@ export default function App() {
   }
 
   // Show loading while auth, profile, or fitness profile are resolving
-  if (session === undefined || (session && (profile === undefined || fitnessProfile === undefined))) return (
-    <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center">
-      <div className="text-gray-600 text-sm tracking-widest uppercase">Loading...</div>
-    </div>
-  )
+  if (session === undefined || (session && (profile === undefined || fitnessProfile === undefined))) return <Loading />
 
-  if (!session) return <Auth />
+  if (!session) return <Suspense fallback={<Loading />}><Auth /></Suspense>
 
   const profileComplete = profile && profile.sex && profile.height_cm != null && profile.weight_lb != null && profile.age != null
   if (!profileComplete || editingProfile) return (
-    <Onboarding
-      initialValues={profile}
-      onComplete={() => { setEditingProfile(false); refreshProfile() }}
-    />
+    <Suspense fallback={<Loading />}>
+      <Onboarding
+        initialValues={profile}
+        onComplete={() => { setEditingProfile(false); refreshProfile() }}
+      />
+    </Suspense>
   )
 
   // Pro users who haven't done fitness onboarding get the setup gate
   if (isPro && !fitnessProfile?.onboarding_completed) return (
-    <FitnessOnboarding
-      existingProfile={profile}
-      onComplete={refreshFitnessProfile}
-    />
+    <Suspense fallback={<Loading />}>
+      <FitnessOnboarding
+        existingProfile={profile}
+        onComplete={refreshFitnessProfile}
+      />
+    </Suspense>
   )
 
   // Upgrade page has its own full-screen layout — no nav wrapper
   if (page === 'upgrade') return (
-    <Upgrade onBack={() => setPage('workout')} />
+    <Suspense fallback={<Loading />}>
+      <Upgrade onBack={() => setPage('workout')} />
+    </Suspense>
   )
 
   const pageProps = {
@@ -157,22 +168,26 @@ export default function App() {
       <Nav page={page} setPage={setPage} session={session} isPro={isPro} onProfileClick={() => setShowProfile(true)} />
       <main className="relative z-10 max-w-lg mx-auto px-3 xs:px-4 pb-[82px] xs:pb-[90px]"
         style={{ paddingTop: 'calc(var(--header-h) + env(safe-area-inset-top))' }}>
-        <PageComponent key={page} {...pageProps[page]} />
+        <Suspense fallback={<PageLoading />}>
+          <PageComponent key={page} {...pageProps[page]} />
+        </Suspense>
       </main>
 
       <HomeScreenPrompt />
 
       {showProfile && (
-        <ProfileModal
-          session={session}
-          profile={profile}
-          isPro={isPro}
-          theme={theme}
-          onToggleTheme={toggleTheme}
-          onClose={() => setShowProfile(false)}
-          onEdit={() => { setShowProfile(false); setEditingProfile(true) }}
-          onUpgrade={goUpgrade}
-        />
+        <Suspense fallback={null}>
+          <ProfileModal
+            session={session}
+            profile={profile}
+            isPro={isPro}
+            theme={theme}
+            onToggleTheme={toggleTheme}
+            onClose={() => setShowProfile(false)}
+            onEdit={() => { setShowProfile(false); setEditingProfile(true) }}
+            onUpgrade={goUpgrade}
+          />
+        </Suspense>
       )}
     </div>
   )

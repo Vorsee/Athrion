@@ -1,27 +1,5 @@
-// ── Auth ──────────────────────────────────────────────────────────────────────
+// ── Dates ──────────────────────────────────────────────────────────────────────
 
-export function getSession() {
-  try { return JSON.parse(localStorage.getItem('athrion_session')) } catch { return null }
-}
-export function setSession(user) {
-  localStorage.setItem('athrion_session', JSON.stringify(user))
-}
-export function clearSession() {
-  localStorage.removeItem('athrion_session')
-}
-export function getUsers() {
-  try { return JSON.parse(localStorage.getItem('athrion_users') || '[]') } catch { return [] }
-}
-export function saveUsers(users) {
-  localStorage.setItem('athrion_users', JSON.stringify(users))
-}
-
-// ── User-scoped storage ───────────────────────────────────────────────────────
-
-export function userKey(suffix) {
-  const s = getSession()
-  return `athrion_${s?.email}_${suffix}`
-}
 // YYYY-MM-DD in the user's own timezone (toISOString would give the UTC date)
 export function localDateKey(d = new Date()) {
   const date = new Date(d)
@@ -29,12 +7,6 @@ export function localDateKey(d = new Date()) {
 }
 export function todayKey() {
   return localDateKey()
-}
-export function getStored(key, fallback = null) {
-  try { return JSON.parse(localStorage.getItem(key)) ?? fallback } catch { return fallback }
-}
-export function setStored(key, val) {
-  localStorage.setItem(key, JSON.stringify(val))
 }
 
 // ── Formatting ────────────────────────────────────────────────────────────────

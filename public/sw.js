@@ -1,4 +1,4 @@
-const CACHE = 'athrion-v2'
+const CACHE = 'athrion-v3'
 
 // On install: take control immediately, no waiting
 self.addEventListener('install', () => self.skipWaiting())

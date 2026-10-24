@@ -5,8 +5,8 @@
 // Formula: Mifflin–St Jeor BMR × activity multiplier + goal adjustment
 // Version: 1
 
-export const CALC_VERSION = 1
-export const CALC_FORMULA = 'mifflin_st_jeor'
+const CALC_VERSION = 1
+const CALC_FORMULA = 'mifflin_st_jeor'
 
 // ── Constants (configurable in this one file) ─────────────────────────────────
 

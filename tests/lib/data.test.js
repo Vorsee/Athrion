@@ -1,28 +1,12 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { getSession, setSession, clearSession, getUsers, saveUsers, userKey, todayKey, getStored, setStored, fmtTime, getExerciseIcon, EXERCISES, getTodaysExercises } from '../../src/lib/data.js'
+import { todayKey, localDateKey, fmtTime, getExerciseIcon, EXERCISES, getTodaysExercises } from '../../src/lib/data.js'
 
 afterEach(() => vi.useRealTimers())
 
-describe('local storage helpers', () => {
-  it('round-trips session, users and stored values', () => {
-    setSession({ email: 'a@b.c' })
-    expect(getSession()).toEqual({ email: 'a@b.c' })
-    expect(userKey('x')).toBe('athrion_a@b.c_x')
-    clearSession()
-    expect(getSession()).toBeNull()
-    saveUsers([{ id: 1 }])
-    expect(getUsers()).toEqual([{ id: 1 }])
-    setStored('k', { a: 1 })
-    expect(getStored('k')).toEqual({ a: 1 })
-    expect(getStored('missing', 5)).toBe(5)
-  })
-  it('survives corrupted JSON', () => {
-    localStorage.setItem('athrion_session', '{bad')
-    localStorage.setItem('athrion_users', '{bad')
-    localStorage.setItem('k', '{bad')
-    expect(getSession()).toBeNull()
-    expect(getUsers()).toEqual([])
-    expect(getStored('k', 'fb')).toBe('fb')
+describe('localDateKey', () => {
+  it('formats a date as the local calendar day', () => {
+    expect(localDateKey(new Date('2026-10-23T23:30:00-04:00'))).toBe('2026-10-23')
+    expect(localDateKey('2026-01-05T09:00:00-05:00')).toBe('2026-01-05')
   })
 })
 
