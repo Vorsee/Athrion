@@ -58,10 +58,10 @@ describe('Plan', () => {
     const go = vi.fn()
     render(<P.Plan isPro profile={profile} onGoToWorkout={go} onProfileChange={() => {}} />)
     expect(await screen.findByText('Weekly schedule')).toBeInTheDocument()
-    expect(screen.getByText('Today · Friday')).toBeInTheDocument()
+    expect(screen.getByText('Today')).toBeInTheDocument()
     await userEvent.click(screen.getByText('Train anyway'))
     expect(go).toHaveBeenCalled()
-    expect(screen.getByText('Daily nutrition targets')).toBeInTheDocument()
+    expect(screen.getByText('Daily targets')).toBeInTheDocument()
   })
   it('starts today\'s workout directly from the plan', async () => {
     sb.set('fitness_plans', { data: withWorkoutOn('Friday'), error: null })

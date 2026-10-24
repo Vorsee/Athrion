@@ -27,15 +27,29 @@ describe('Workout tab — rest days match the plan', () => {
     sb.set('fitness_plans', { data: planRow, error: null })
     show()
     expect(await screen.findByText('Rest & Recovery')).toBeInTheDocument()
-    expect(screen.getByText('Light walk and stretching.')).toBeInTheDocument()
+    await userEvent.click(screen.getByLabelText('Recovery')) // recovery notes open from ⓘ
+    expect(await screen.findByText('Light walk and stretching.')).toBeInTheDocument()
+    await userEvent.click(screen.getByLabelText('Close'))
     expect(screen.getByText('rest')).toBeInTheDocument()
     expect(screen.queryByText('Start workout')).toBeNull()
+  })
+
+  describe('regression: fixed in the October 2026 review', () => {
+    // App learns Pro status after Workout mounts; the plan must still show once it does
+    it('shows the plan when Pro status arrives after the tab loaded', async () => {
+      sb.set('fitness_plans', { data: planRow, error: null })
+      const { rerender } = render(<Workout isPro={false} onUpgrade={() => {}} onClearPending={() => {}} />)
+      await waitFor(() => expect(sb.queriesFor('fitness_plans').length).toBeGreaterThan(0))
+      expect(screen.queryByText('Rest & Recovery')).toBeNull()
+      rerender(<Workout isPro onUpgrade={() => {}} onClearPending={() => {}} />)
+      expect(await screen.findByText('Rest & Recovery')).toBeInTheDocument()
+    })
   })
 
   it('offers the plan workouts, next one first, and starts the picked one', async () => {
     sb.set('fitness_plans', { data: planRow, error: null })
     show()
-    await screen.findByText('Want to train anyway?')
+    await screen.findByText('Rest & Recovery')
     const chips = screen.getAllByRole('button').filter(b => /^(Mon|Wed) · /.test(b.textContent))
     expect(chips.map(c => c.textContent)).toEqual(['Mon · Upper Body', 'Wed · Lower Body'])
     expect(screen.getByText('Barbell Bench Press')).toBeInTheDocument() // Monday preselected

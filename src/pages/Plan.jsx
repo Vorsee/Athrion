@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
-import { Button, Card, SectionTitle, PageSkeleton, InlineError } from '../components/ui/index.js'
+import { Button, Card, SectionTitle, PageSkeleton, InlineError, InfoButton, Fact } from '../components/ui/index.js'
 import { getExerciseIcon } from '../lib/data.js'
 import Sheet from '../components/Sheet.jsx'
 import { DemoButton, SwapSheet } from '../components/ExerciseDemo.jsx'
@@ -23,40 +23,35 @@ const TODAY_NAME = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Fri
 
 // "3 sets × 10 · 60s rest · Dumbbells", dropping parts that don't apply
 function formatVolume(ex) {
-  const parts = [ex.sets > 1 ? `${ex.sets} sets × ${ex.reps}` : ex.reps]
-  if (ex.restSeconds > 0) parts.push(`${ex.restSeconds}s rest`)
-  if (ex.equipment) parts.push(ex.equipment)
-  return parts.filter(Boolean).join(' · ')
+  return ex.sets > 1 ? `${ex.sets} × ${ex.reps}` : ex.reps
 }
 
+// One line per exercise: name, sets × reps in neon, actions. Notes open from ⓘ.
 function PlanExerciseCard({ ex, onSwap }) {
   const [swapping, setSwapping] = useState(false)
+  const notes = [ex.intensityNote, ex.formTip, ex.easierVersion && `Easier: ${ex.easierVersion}`, ex.swappedFrom && `Swapped from ${ex.swappedFrom}`].filter(Boolean)
   return (
-    <div className="bg-raised rounded-xl p-3">
-      <div className="flex items-start gap-3">
-        <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-muted mt-0.5" />
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold text-ink leading-snug break-words">{ex.name}</div>
-          <div className="text-xs text-muted mt-0.5">{formatVolume(ex)}</div>
-        </div>
-        <div className="flex gap-1.5 flex-shrink-0">
-          <DemoButton name={ex.name} />
-          {onSwap && (
-            <button onClick={() => setSwapping(true)} aria-label={`Swap ${ex.name}`}
-              className="w-8 h-8 rounded-lg bg-line hover:bg-line-strong flex items-center justify-center text-muted hover:text-neon-ink transition-colors">
-              <Icon icon="mdi:swap-horizontal" width={18} />
-            </button>
-          )}
-        </div>
+    <div className="flex items-center gap-3 bg-raised rounded-xl px-3 py-2.5">
+      <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-neon-ink" aria-hidden="true" />
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-semibold text-ink leading-snug break-words">{ex.name}</div>
+        {ex.restSeconds > 0 && <div className="text-xs text-muted">{ex.restSeconds}s rest</div>}
       </div>
-      {(ex.intensityNote || ex.formTip || ex.easierVersion || ex.swappedFrom) && (
-        <div className="mt-2 pl-[34px] space-y-1 text-xs leading-relaxed break-words">
-          {ex.intensityNote && <div className="text-muted">{ex.intensityNote}</div>}
-          {ex.formTip && <div className="text-muted italic">{ex.formTip}</div>}
-          {ex.easierVersion && <div className="text-muted">Easier: {ex.easierVersion}</div>}
-          {ex.swappedFrom && <div className="text-muted">Swapped from {ex.swappedFrom}</div>}
-        </div>
-      )}
+      <span className="text-sm font-bold text-neon-ink tabular-nums flex-shrink-0">{formatVolume(ex)}</span>
+      <div className="flex items-center gap-1 flex-shrink-0">
+        {notes.length > 0 && (
+          <InfoButton title={ex.name} label={`Notes for ${ex.name}`}>
+            <ul className="space-y-2 text-sm text-ink-2">{notes.map((n, i) => <li key={i}>{n}</li>)}</ul>
+          </InfoButton>
+        )}
+        <DemoButton name={ex.name} />
+        {onSwap && (
+          <button onClick={() => setSwapping(true)} aria-label={`Swap ${ex.name}`}
+            className="press w-9 h-9 rounded-lg bg-line hover:bg-line-strong flex items-center justify-center text-muted hover:text-neon-ink transition-colors">
+            <Icon icon="mdi:swap-horizontal" width={18} />
+          </button>
+        )}
+      </div>
       {swapping && (
         <SwapSheet exercise={ex} onClose={() => setSwapping(false)}
           onSwap={name => { setSwapping(false); onSwap(name) }} />
@@ -104,74 +99,51 @@ function TodayWorkout({ dayData, onGoToWorkout, onStartWorkout, onSwap }) {
 
   const isRest = dayData.type !== 'workout'
   const exercises = dayData.workout?.exercises ?? []
+  const warmup = dayData.workout?.warmup ?? []
+  const cooldown = dayData.workout?.cooldown ?? []
 
   return (
-    <Card>
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <div className="text-xs font-medium text-muted mb-0.5">Today · {TODAY_NAME}</div>
-          <div className="text-lg leading-[1.3] font-semibold text-ink">{dayData.title}</div>
-          {!isRest && (
-            <div className="text-xs text-muted mt-0.5">{dayData.durationMinutes} min · {exercises.length} exercises</div>
-          )}
+    <Card hero={!isRest}>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="min-w-0">
+          <div className="text-xs font-semibold text-neon-ink mb-1">Today</div>
+          <div className="font-bold text-2xl text-ink leading-tight break-words">{dayData.title}</div>
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {isRest
+              ? <Fact icon="mdi:sleep">{dayData.type.replace('_', ' ')}</Fact>
+              : <><Fact icon="mdi:clock-outline">{dayData.durationMinutes} min</Fact><Fact icon="mdi:dumbbell">{exercises.length} exercises</Fact></>}
+          </div>
         </div>
-        {isRest && <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-line text-muted capitalize">{dayData.type.replace('_', ' ')}</span>}
+        {(warmup.length > 0 || cooldown.length > 0 || (isRest && dayData.recoveryNotes)) && (
+          <InfoButton title={isRest ? 'Recovery' : 'Warm-up and cool-down'}>
+            {isRest && <p className="text-sm text-ink-2">{dayData.recoveryNotes}</p>}
+            {[['Warm-up', warmup], ['Cool-down', cooldown]].map(([label, items]) => items.length > 0 && (
+              <div key={label}>
+                <div className="text-sm font-semibold text-ink mb-1.5">{label}</div>
+                <ul className="space-y-1.5">
+                  {items.map((w, i) => (
+                    <li key={i} className="flex justify-between gap-3 text-sm"><span className="text-ink-2">{w.name}</span><span className="text-muted flex-shrink-0">{w.duration}</span></li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </InfoButton>
+        )}
       </div>
 
-      {isRest && dayData.recoveryNotes && (
-        <p className="text-xs text-muted">{dayData.recoveryNotes}</p>
-      )}
-
-      {isRest && onGoToWorkout && (
-        <Button variant="secondary" full onClick={onGoToWorkout} className="mt-4">Train anyway</Button>
-      )}
-
       {!isRest && exercises.length > 0 && (
-        <>
-          {/* Warmup */}
-          {dayData.workout?.warmup?.length > 0 && (
-            <div className="mb-3">
-              <div className="text-xs text-muted mb-1.5">Warm-up</div>
-              {dayData.workout.warmup.map((w, i) => (
-                <div key={i} className="flex items-start gap-2 mb-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-neon/40 mt-1.5 flex-shrink-0" />
-                  <div>
-                    <span className="text-xs text-ink-2">{w.name}</span>
-                    <span className="text-xs text-muted ml-2">{w.duration}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Exercises */}
-          <div className="space-y-2.5">
-            {exercises.map((ex, i) => (
-              <PlanExerciseCard key={i} ex={ex} onSwap={onSwap && (name => onSwap(dayData.day, i, name))} />
-            ))}
-          </div>
-
-          {(onStartWorkout || onGoToWorkout) && (
-            <Button full onClick={() => (onStartWorkout ? onStartWorkout(dayData) : onGoToWorkout())} className="mt-4">Start this workout</Button>
-          )}
-
-          {/* Cooldown */}
-          {dayData.workout?.cooldown?.length > 0 && (
-            <div className="mt-3">
-              <div className="text-xs text-muted mb-1.5">Cool-down</div>
-              {dayData.workout.cooldown.map((c, i) => (
-                <div key={i} className="flex items-start gap-2 mb-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-info/40 mt-1.5 flex-shrink-0" />
-                  <div>
-                    <span className="text-xs text-ink-2">{c.name}</span>
-                    <span className="text-xs text-muted ml-2">{c.duration}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
+        <div className="space-y-2">
+          {exercises.map((ex, i) => (
+            <PlanExerciseCard key={i} ex={ex} onSwap={onSwap && (name => onSwap(dayData.day, i, name))} />
+          ))}
+        </div>
       )}
+
+      {isRest
+        ? onGoToWorkout && <Button variant="secondary" full onClick={onGoToWorkout} className="mt-4">Train anyway</Button>
+        : (onStartWorkout || onGoToWorkout) && exercises.length > 0 && (
+          <Button full icon="mdi:play" onClick={() => (onStartWorkout ? onStartWorkout(dayData) : onGoToWorkout())} className="mt-4">Start this workout</Button>
+        )}
     </Card>
   )
 }
@@ -187,28 +159,25 @@ function NutritionCard({ planNutrition, dbNutrition }) {
   const protein = dbNutrition?.protein_grams ?? n.proteinGrams
   const carbs = dbNutrition?.carb_grams ?? n.carbGrams
   const fat = dbNutrition?.fat_grams ?? n.fatGrams
+  const hydration = n.hydrationAdvice ?? n.hydration_advice
 
   return (
     <Card>
-      <SectionTitle>Daily nutrition targets</SectionTitle>
-      <div className="grid grid-cols-4 gap-3 text-center">
-        {[
-          { label: 'Calories', val: cals, color: 'text-neon-ink' },
-          { label: 'Protein', val: `${protein}g`, color: 'text-ink' },
-          { label: 'Carbs', val: `${carbs}g`, color: 'text-ink' },
-          { label: 'Fat', val: `${fat}g`, color: 'text-ink' },
-        ].map(({ label, val, color }) => (
-          <div key={label}>
-            <div className={`font-bold text-lg ${color}`}>{val}</div>
+      <SectionTitle action={hydration && <InfoButton title="Hydration">{<p className="text-sm text-ink-2">{hydration}</p>}</InfoButton>}>
+        Daily targets
+      </SectionTitle>
+      <div className="flex items-baseline gap-1.5">
+        <span className="font-bold text-4xl text-neon-ink tabular-nums leading-none">{cals}</span>
+        <span className="text-sm text-muted">kcal</span>
+      </div>
+      <div className="grid grid-cols-3 gap-2 mt-3">
+        {[['Protein', protein], ['Carbs', carbs], ['Fat', fat]].map(([label, val]) => (
+          <div key={label} className="bg-raised rounded-xl px-3 py-2">
+            <div className="font-bold text-lg text-ink tabular-nums leading-tight">{val}g</div>
             <div className="text-xs text-muted">{label}</div>
           </div>
         ))}
       </div>
-      {(n.hydrationAdvice || n.hydration_advice) && (
-        <p className="text-xs text-muted mt-3 border-t border-line pt-3">
-          {n.hydrationAdvice ?? n.hydration_advice}
-        </p>
-      )}
     </Card>
   )
 }
@@ -218,37 +187,49 @@ function NutritionCard({ planNutrition, dbNutrition }) {
 // ─────────────────────────────────────────────────────────────────────────────
 const DAY_MS = 24 * 60 * 60 * 1000
 
-function AdaptCard({ plan, checkin, generating, onAdapt }) {
+// This week: the check-in and the adapt action together; what changed sits behind ⓘ
+function AdaptCard({ plan, checkin, checkinFresh, generating, onAdapt, onCheckin }) {
   const adaptation = plan.plan_data?.adaptation
   const week = plan.plan_data?.week ?? 1
   const planAgeDays = (Date.now() - new Date(plan.created_at).getTime()) / DAY_MS
   const checkinSincePlan = checkin && new Date(checkin.created_at) > new Date(plan.created_at)
   const ready = planAgeDays >= 6 || checkinSincePlan
   const nextDate = new Date(new Date(plan.created_at).getTime() + 7 * DAY_MS)
+  const hasChanges = adaptation?.summary || adaptation?.changes?.length
 
   return (
     <Card>
-      <SectionTitle action={plan.ai_model?.startsWith('fallback') && <span className="text-xs text-muted">Standard plan</span>}>
-        Week {week}{week > 1 ? ' · adapted' : ''}
-      </SectionTitle>
-      {adaptation?.summary && <p className="text-xs text-muted leading-relaxed">{adaptation.summary}</p>}
-      {adaptation?.changes?.length > 0 && (
-        <ul className="mt-2 space-y-1">
-          {adaptation.changes.map((c, i) => (
-            <li key={i} className="flex items-start gap-2 text-xs text-muted">
-              <Icon icon="mdi:refresh" width={14} className="text-neon-ink mt-0.5 flex-shrink-0" /><span className="break-words">{c}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {ready ? (
-        <Button full onClick={onAdapt} disabled={generating} className="mt-3">
-          {generating ? 'Adapting your plan...' : `Adapt week ${week + 1} to my progress`}
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-2xl text-ink">Week {week}</span>
+          {week > 1 && <Fact icon="mdi:refresh">Adapted</Fact>}
+          {plan.ai_model?.startsWith('fallback') && <span className="text-xs text-muted">Standard plan</span>}
+        </div>
+        {hasChanges && (
+          <InfoButton title={`What changed in week ${week}`}>
+            {adaptation.summary && <p className="text-sm text-ink-2">{adaptation.summary}</p>}
+            {adaptation.changes?.length > 0 && (
+              <ul className="space-y-2">
+                {adaptation.changes.map((c, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-ink-2">
+                    <Icon icon="mdi:refresh" width={16} className="text-neon-ink mt-0.5 flex-shrink-0" /><span className="break-words">{c}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </InfoButton>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Button variant={checkinFresh ? 'secondary' : 'primary'} icon={checkinFresh ? 'mdi:check' : 'mdi:clipboard-text-outline'} onClick={onCheckin}>
+          {checkinFresh ? 'Checked in' : 'Check in'}
         </Button>
-      ) : (
-        <p className="mt-3 text-xs text-muted">
-          Do your weekly check-in or wait until {nextDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} to adapt next week to your progress.
-        </p>
+        <Button variant={ready && checkinFresh ? 'primary' : 'secondary'} icon="mdi:auto-fix" onClick={onAdapt} disabled={generating || !ready}>
+          {generating ? 'Adapting…' : `Adapt week ${week + 1}`}
+        </Button>
+      </div>
+      {!ready && (
+        <p className="text-xs text-muted mt-2 text-center">Adapting opens {nextDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}, or after a check-in</p>
       )}
     </Card>
   )
@@ -277,10 +258,10 @@ function WeeklySchedule({ schedule, onSwap }) {
               <button onClick={() => setOpenDay(open ? null : day)}
                 className="w-full flex items-center justify-between gap-2 py-2 px-3 text-left">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className={`text-xs font-semibold w-8 flex-shrink-0 ${isToday ? 'text-neon-ink' : 'text-muted'}`}>
+                  <div className={`text-sm font-bold w-9 flex-shrink-0 ${isToday || isWorkout ? 'text-neon-ink' : 'text-muted'}`}>
                     {day.slice(0, 3)}
                   </div>
-                  <div className={`text-xs break-words ${isToday ? 'text-ink' : 'text-muted'}`}>{d.title}</div>
+                  <div className={`text-sm break-words ${isWorkout ? 'text-ink font-semibold' : 'text-muted'}`}>{d.title}</div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {isWorkout && d.durationMinutes > 0 && (
@@ -308,47 +289,72 @@ function WeeklySchedule({ schedule, onSwap }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Advice Card
 // ─────────────────────────────────────────────────────────────────────────────
-function AdviceCard({ advice }) {
-  if (!advice?.topPriorities?.length) return null
+// Priorities, sleep and progression live in one sheet instead of three cards of text
+function CoachNotes({ advice, progression }) {
+  const [open, setOpen] = useState(false)
+  const tips = advice?.topPriorities ?? []
+  if (!tips.length && !advice?.sleepAdvice && !progression?.weeklyStrategy) return null
   return (
-    <Card>
-      <SectionTitle>Top priorities</SectionTitle>
-      <div className="space-y-2">
-        {advice.topPriorities.map((tip, i) => (
-          <div key={i} className="flex items-start gap-2.5">
-            <div className="w-5 h-5 rounded-full bg-neon/15 border border-neon-stroke/20 flex items-center justify-center flex-shrink-0 text-xs text-neon-ink font-bold">{i + 1}</div>
-            <p className="text-xs text-muted leading-relaxed">{tip}</p>
-          </div>
-        ))}
-      </div>
-      {advice.sleepAdvice && (
-        <div className="mt-3 pt-3 border-t border-line">
-          <div className="text-xs text-muted mb-1">Sleep</div>
-          <p className="text-xs text-muted">{advice.sleepAdvice}</p>
-        </div>
+    <>
+      <button onClick={() => setOpen(true)}
+        className="press w-full flex items-center gap-3 bg-surface border border-line hover:border-neon-stroke/30 rounded-2xl px-4 py-3.5 text-left transition-colors">
+        <Icon icon="mdi:lightbulb-on-outline" width={22} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
+        <span className="flex-1 text-sm font-semibold text-ink">Coach notes</span>
+        {tips.length > 0 && <Fact>{tips.length} priorities</Fact>}
+        <Icon icon="mdi:chevron-right" width={20} className="text-muted" aria-hidden="true" />
+      </button>
+      {open && (
+        <Sheet title="Coach notes" onClose={() => setOpen(false)}>
+          {tips.length > 0 && (
+            <ol className="space-y-3">
+              {tips.map((tip, i) => (
+                <li key={i} className="flex items-start gap-3">
+                  <span className="w-6 h-6 rounded-full bg-neon text-on-neon flex items-center justify-center flex-shrink-0 text-xs font-bold">{i + 1}</span>
+                  <p className="text-sm text-ink-2">{tip}</p>
+                </li>
+              ))}
+            </ol>
+          )}
+          {advice?.sleepAdvice && <NoteBlock icon="mdi:sleep" title="Sleep">{advice.sleepAdvice}</NoteBlock>}
+          {progression?.weeklyStrategy && <NoteBlock icon="mdi:trending-up" title="Progression">{progression.weeklyStrategy}{progression.deloadGuidance ? ` ${progression.deloadGuidance}` : ''}</NoteBlock>}
+        </Sheet>
       )}
-    </Card>
+    </>
+  )
+}
+
+function NoteBlock({ icon, title, children }) {
+  return (
+    <div className="flex items-start gap-3">
+      <Icon icon={icon} width={20} className="text-neon-ink mt-0.5 flex-shrink-0" aria-hidden="true" />
+      <div><div className="text-sm font-semibold text-ink">{title}</div><p className="text-sm text-ink-2 mt-0.5">{children}</p></div>
+    </div>
   )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Safety Card
 // ─────────────────────────────────────────────────────────────────────────────
+// Kept visible, as one tap: the count shows there is something to read
 function SafetyCard({ safety }) {
-  if (!safety || (!safety.warnings?.length && !safety.exercisesToAvoid?.length)) return null
+  const [open, setOpen] = useState(false)
+  const items = [...(safety?.warnings ?? []), ...(safety?.exercisesToAvoid?.length ? [`Avoid: ${safety.exercisesToAvoid.join(', ')}`] : [])]
+  if (!items.length) return null
   return (
-    <Card tone="warn">
-      <SectionTitle>Safety notes</SectionTitle>
-      {safety.warnings?.map((w, i) => (
-        <p key={i} className="text-xs text-warn mb-1">{w}</p>
-      ))}
-      {safety.exercisesToAvoid?.length > 0 && (
-        <p className="text-xs text-warn mt-1">Avoid: {safety.exercisesToAvoid.join(', ')}</p>
+    <>
+      <button onClick={() => setOpen(true)}
+        className="press w-full flex items-center gap-3 bg-warn/10 border border-warn/30 rounded-2xl px-4 py-3.5 text-left">
+        <Icon icon="mdi:alert-outline" width={22} className="text-warn flex-shrink-0" aria-hidden="true" />
+        <span className="flex-1 text-sm font-semibold text-warn">Safety notes · {items.length}</span>
+        <Icon icon="mdi:chevron-right" width={20} className="text-warn" aria-hidden="true" />
+      </button>
+      {open && (
+        <Sheet title="Safety notes" onClose={() => setOpen(false)}>
+          <ul className="space-y-2">{items.map((w, i) => <li key={i} className="text-sm text-ink-2">{w}</li>)}</ul>
+          {safety.professionalAdviceRecommended && <p className="text-sm font-semibold text-warn">Get professional guidance before starting.</p>}
+        </Sheet>
       )}
-      {safety.professionalAdviceRecommended && (
-        <p className="text-xs text-warn mt-2">Professional guidance recommended before starting.</p>
-      )}
-    </Card>
+    </>
   )
 }
 
@@ -452,7 +458,7 @@ function GoalModal({ currentGoal, onClose, onConfirm }) {
       </Button>
     }>
       <p className="text-xs text-muted">
-        Your plan, calories and macros will be rebuilt for the new goal. Takes about 30–60 seconds.
+        Rebuilds your plan and daily targets. Takes about a minute.
       </p>
       <div className="grid grid-cols-2 gap-2 pb-2">
         {Object.entries(GOAL_LABELS).map(([id, label]) => (
@@ -497,7 +503,7 @@ function LockedPlan({ onUpgrade, onStartSetup }) {
         {todayData && <TodayWorkout dayData={todayData} />}
         <NutritionCard planNutrition={planData.nutrition} dbNutrition={null} />
         <WeeklySchedule schedule={planData.weeklySchedule} onSwap={noop} />
-        <AdviceCard advice={planData.advice} />
+        <CoachNotes advice={planData.advice} progression={planData.progression} />
       </div>
     </ProLock>
   )
@@ -644,31 +650,34 @@ function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
 
   return (
     <div className="space-y-4 pt-2">
-      {/* Plan header */}
+      {/* Plan header: name, key facts, one menu for rebuilding */}
       <div>
-        <div className="flex items-center gap-2 mb-0.5">
-          <Icon icon={goalIcon} width={22} className="text-neon-ink" />
-          <div className="font-bold text-xl text-ink leading-none">{summary.planName ?? goalLabel}</div>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <Icon icon={goalIcon} width={26} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
+            <h1 className="font-bold text-2xl text-ink leading-tight break-words">{summary.planName ?? goalLabel}</h1>
+          </div>
+          <button onClick={() => setShowGoal(true)} disabled={generating} aria-label="Change goal or rebuild plan"
+            className="press w-10 h-10 -mr-1 rounded-full flex items-center justify-center text-ink-2 hover:text-neon-ink hover:bg-raised disabled:opacity-40 flex-shrink-0">
+            {generating
+              ? <span className="inline-block w-4 h-4 border-2 border-neon-stroke/30 border-t-neon-stroke rounded-full animate-spin" />
+              : <Icon icon="mdi:dots-horizontal" width={24} />}
+          </button>
         </div>
-        <div className="text-xs text-muted">
-          {summary.durationWeeks ?? plan.duration_weeks} weeks · {workoutDays(plan.plan_data, plan)} days a week · {goalLabel}
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          <Fact icon="mdi:calendar-range">{summary.durationWeeks ?? plan.duration_weeks} weeks</Fact>
+          <Fact icon="mdi:calendar-check-outline">{workoutDays(plan.plan_data, plan)} days a week</Fact>
+          <Fact icon="mdi:target">{goalLabel}</Fact>
         </div>
-        <button onClick={() => setShowGoal(true)} disabled={generating}
-          className="mt-3 w-full border border-line-strong text-ink-2 font-semibold py-2.5 rounded-xl text-xs hover:border-neon-stroke/40 hover:text-neon-ink transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-          {generating ? (
-            <>
-              <span className="inline-block w-3.5 h-3.5 border-2 border-neon-stroke/30 border-t-neon-stroke rounded-full animate-spin" />
-              Rebuilding your plan...
-            </>
-          ) : 'Change goal or regenerate'}
-        </button>
+        {generating && <p role="status" className="text-sm font-semibold text-neon-ink mt-2">Rebuilding your plan…</p>}
         {genError && <InlineError className="mt-2">{genError}</InlineError>}
       </div>
 
-      <AdaptCard plan={plan} checkin={checkin} generating={generating} onAdapt={() => handleRegenerate(undefined, 'adapt')} />
-
       {/* Today */}
       {todayData && <TodayWorkout dayData={todayData} onGoToWorkout={onGoToWorkout} onStartWorkout={onStartWorkout} onSwap={handleSwap} />}
+
+      <AdaptCard plan={plan} checkin={checkin} checkinFresh={checkinFresh} generating={generating}
+        onAdapt={() => handleRegenerate(undefined, 'adapt')} onCheckin={() => setShowCheckin(true)} />
 
       {/* Nutrition */}
       <NutritionCard planNutrition={planData.nutrition} dbNutrition={nutrition} />
@@ -676,37 +685,8 @@ function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
       {/* Weekly schedule */}
       <WeeklySchedule schedule={schedule} onSwap={handleSwap} />
 
-      {/* Advice */}
-      {planData.advice && <AdviceCard advice={planData.advice} />}
-
-      {/* Safety */}
       {planData.safety && <SafetyCard safety={planData.safety} />}
-
-      {/* Progression */}
-      {planData.progression?.weeklyStrategy && (
-        <Card>
-          <SectionTitle>Progression strategy</SectionTitle>
-          <p className="text-xs text-muted leading-relaxed">{planData.progression.weeklyStrategy}</p>
-          {planData.progression.deloadGuidance && (
-            <p className="text-xs text-muted mt-2">{planData.progression.deloadGuidance}</p>
-          )}
-        </Card>
-      )}
-
-      {/* Check-in button */}
-      <div className="pt-2">
-        {checkinFresh ? (
-          <div className="text-center">
-            <div className="text-sm font-semibold text-ink-2">Check-in done this week</div>
-            <button onClick={() => setShowCheckin(true)} className="text-xs text-neon-ink mt-1 hover:underline">Do another</button>
-          </div>
-        ) : (
-          <button onClick={() => setShowCheckin(true)}
-            className="w-full border border-neon-stroke/30 text-neon-ink font-semibold py-3 rounded-xl text-sm hover:bg-neon/10 transition-all">
-            Weekly check-in
-          </button>
-        )}
-      </div>
+      <CoachNotes advice={planData.advice} progression={planData.progression} />
 
       {showGoal && (
         <GoalModal

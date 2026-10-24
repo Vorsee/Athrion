@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Icon } from '@iconify/react'
-import { Button, Card, SectionTitle, Skeleton, Chip, Sheet, Segmented, InlineError } from '../components/ui/index.js'
+import { Button, Card, SectionTitle, Skeleton, Chip, Sheet, Segmented, InlineError, InfoButton, Fact } from '../components/ui/index.js'
 import { EXERCISES, getTodaysExercises, todayKey, fmtTime, getExerciseIcon } from '../lib/data.js'
 import { fetchWorkoutHistory, saveWorkoutEntry, fetchCustomWorkouts, saveCustomWorkout, deleteCustomWorkout } from '../lib/api.js'
 import { fetchActivePlan } from '../lib/fitnessApi.js'
@@ -101,6 +101,16 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
     notifySession()
   }
 
+  // The plan is Pro: a lapsed member's old plan would contradict the locked Plan tab.
+  // isPro arrives after mount, so this follows it rather than reading it once.
+  const [fetchedPlan, setFetchedPlan] = useState(null)
+  useEffect(() => {
+    const schedule = isPro ? fetchedPlan?.plan_data?.weeklySchedule : null
+    setPlanSchedule(schedule ?? null)
+    const todayDay = schedule?.find(d => d.day === TODAY_FULL)
+    setPlanWorkout(todayDay?.type === 'workout' && todayDay.workout?.exercises?.length ? todayDay : null) // full dayData, same shape Plan.jsx uses
+  }, [isPro, fetchedPlan])
+
   useEffect(() => {
     fetchBadges().then(b => setEarnedBadgeIds(new Set(b.map(x => x.badge_id)))).catch(() => {})
 
@@ -108,15 +118,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
     Promise.allSettled([
       fetchWorkoutHistory().then(h => setHistory([...loadPending().map(asPending), ...h])),
       fetchCustomWorkouts().then(w => setCustomWorkouts(w)),
-      // The plan is Pro; a lapsed member's old plan would contradict the locked Plan tab
-      (isPro ? fetchActivePlan() : Promise.resolve(null)).then(plan => {
-        if (!plan?.plan_data?.weeklySchedule) return
-        setPlanSchedule(plan.plan_data.weeklySchedule)
-        const todayDay = plan.plan_data.weeklySchedule.find(d => d.day === TODAY_FULL)
-        if (todayDay?.type === 'workout' && todayDay.workout?.exercises?.length) {
-          setPlanWorkout(todayDay)  // store full dayData, same shape Plan.jsx uses
-        }
-      }),
+      fetchActivePlan().then(plan => setFetchedPlan(plan ?? null)),
     ]).then(() => { setHomeReady(true); retryPending() })
 
     // Restore in-progress workout
@@ -602,22 +604,27 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
 
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
-            <div>
-              <div className="text-xs font-medium text-muted mb-0.5">Today's training</div>
-              <div className="text-lg leading-[1.3] font-semibold text-ink">{isRestDay ? todayPlan.title : planWorkout ? planName : fallbackName}</div>
-              {!isRestDay && planWorkout?.durationMinutes && (
-                <div className="text-xs text-muted mt-0.5">{planWorkout.durationMinutes} min · {planExercises.length} exercises</div>
-              )}
+            <div className="min-w-0">
+              <div className="text-xs font-semibold text-neon-ink mb-1">Today's training</div>
+              <div className="font-bold text-2xl text-ink leading-tight break-words">{isRestDay ? todayPlan.title : planWorkout ? planName : fallbackName}</div>
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {isRestDay
+                  ? <Fact icon="mdi:sleep">{todayPlan.type.replace('_', ' ')}</Fact>
+                  : <>
+                      {planWorkout?.durationMinutes && <Fact icon="mdi:clock-outline">{planWorkout.durationMinutes} min</Fact>}
+                      <Fact icon="mdi:dumbbell">{(shownWorkout ? planExercises : fallbackExs).length} exercises</Fact>
+                    </>}
+              </div>
             </div>
-            {isRestDay && <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-line text-ink-2 capitalize">{todayPlan.type.replace('_', ' ')}</span>}
+            {isRestDay && todayPlan.recoveryNotes && (
+              <InfoButton title="Recovery"><p className="text-sm text-ink-2">{todayPlan.recoveryNotes}</p></InfoButton>
+            )}
           </div>
 
           {isRestDay && (
             <div className="mb-4">
-              <p className="text-xs text-muted leading-relaxed">{todayPlan.recoveryNotes || 'Recovery is part of the plan. Your muscles grow while you rest.'}</p>
               {otherDays.length > 0 && (
                 <>
-                  <div className="text-xs text-muted mt-4 mb-2">Want to train anyway?</div>
                   <div className="flex flex-wrap gap-1.5">
                     {otherDays.map(d => (
                       <button key={d.day} onClick={() => setPickedDay(d)}
@@ -626,9 +633,6 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
                       </button>
                     ))}
                   </div>
-                  {shownWorkout?.durationMinutes && (
-                    <div className="text-xs text-muted mt-2">{shownWorkout.durationMinutes} min · {planExercises.length} exercises</div>
-                  )}
                 </>
               )}
             </div>
@@ -638,28 +642,20 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
           {shownWorkout ? (
             <div className="space-y-2 mb-5">
               {planExercises.map((ex, i) => (
-                <div key={i} className="flex items-start gap-3 bg-raised rounded-xl px-3 py-2.5">
-                  <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-muted mt-0.5" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-ink leading-snug break-words">{ex.name}</div>
-                    <div className="text-xs text-muted mt-0.5">
-                      {[ex.sets > 1 ? `${ex.sets} sets × ${ex.reps}` : ex.reps,
-                        ex.restSeconds > 0 && `${ex.restSeconds}s rest`].filter(Boolean).join(' · ')}
-                    </div>
-                  </div>
+                <div key={i} className="flex items-center gap-3 bg-raised rounded-xl px-3 py-2.5">
+                  <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-neon-ink" aria-hidden="true" />
+                  <div className="flex-1 min-w-0 text-sm font-semibold text-ink leading-snug break-words">{ex.name}</div>
+                  <span className="text-sm font-bold text-neon-ink tabular-nums flex-shrink-0">{ex.sets > 1 ? `${ex.sets} × ${ex.reps}` : ex.reps}</span>
                   <DemoButton name={ex.name} />
                 </div>
               ))}
             </div>
           ) : !isRestDay && (
-            <div className="space-y-1 mb-5">
+            <div className="space-y-2 mb-5">
               {fallbackExs.map((ex, i) => (
-                <div key={i} className="flex items-center gap-3 py-2 border-b border-line last:border-0">
-                  <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-muted" />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm truncate">{ex.name}</div>
-                    <div className="text-xs text-muted">{ex.muscle}</div>
-                  </div>
+                <div key={i} className="flex items-center gap-3 bg-raised rounded-xl px-3 py-2.5">
+                  <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-neon-ink" aria-hidden="true" />
+                  <div className="flex-1 min-w-0 text-sm font-semibold text-ink truncate">{ex.name}</div>
                   <DemoButton name={ex.name} />
                 </div>
               ))}
