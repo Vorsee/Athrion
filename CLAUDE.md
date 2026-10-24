@@ -29,14 +29,15 @@ Fitness PWA: AI training plans, workout logging, calorie tracking, progress. Liv
 - Dates: use `todayKey()` / `localDateKey()` from `src/lib/data.js`, never `toISOString().slice(0, 10)` (UTC bug).
 - Pro features are gated twice: UI (`components/ProLock.jsx`, or an inline Pro tag), and server-side in the Edge Function. Pro = AI plan, adaptive targets, AI photo meal scan, unlimited saved workouts; one list in `PRO_FEATURES` (`src/lib/pricing.js`). Calorie logging, barcode and targets are free. "Get Pro" opens `UpgradeSheet` (`goUpgrade` in App), which then goes to Stripe.
 - Weights are stored in lb everywhere; show and read them through `useUnit()` / `fromLb` / `toLb` in `src/lib/units.js` (the person's `weight_unit`), never hardcode "lb".
-- Design: sentence-case text, no emoji in UI, `mdi:` line icons, text 12px minimum (`text-2xs` 11px only for chart axes and tags), no glows. Colours are CSS variable tokens in `src/index.css` (dark on `:root`, light on `.light`), used through Tailwind names (`bg-surface`, `text-ink`, `text-muted`, `text-neon-ink`…); no raw hex or `text-gray-*` in JSX. Neon `#C8F135` stays the accent. Shared building blocks are in `src/components/ui/`; spec and rubric in `.design/` (gitignored).
+- Design: sentence-case text, no emoji in UI, `mdi:` line icons, text 12px minimum (`text-2xs` 11px only for chart axes and tags), no glows. Colours are CSS variable tokens in `src/index.css` (dark on `:root`, light on `.light`), used through Tailwind names (`bg-surface`, `text-ink`, `text-muted`, `text-neon-ink`…); no raw hex or `text-gray-*` in JSX. Neon `#C8F135` stays the accent. Shared building blocks are in `src/components/ui/` (`PageHeader`, `ExerciseRow`, `ActionRow`, `BigNumber`, `StatTiles`, `InfoButton`/`Fact`): big title with neon fact chips, one-line rows, explanations behind ⓘ rather than on the page; spec and rubric in `.design/` (gitignored).
 - Brand is written "ATHRION" everywhere in the UI.
 - Bottom nav has 4 tabs: Train, Plan, Food, Progress (page keys `workout`, `plan`, `calories`, `progress`). Library and Group open from Train (`PARENT_TAB` in `components/Nav.jsx`). Pushed sub-screens use `useBackHandler` from `src/lib/shell.js` (header back and the phone's back gesture), not their own back buttons.
 - The exercise demo animation is commented out on purpose in `ExerciseDemo.jsx` until an ExerciseDB HD licence is bought.
 
 ## Open items
-- Check Stripe webhook failed deliveries (payment routes were broken until Oct 2026 by a bad `SUPABASE_URL` on Vercel).
+- Live checkout and webhook verified Oct 2026 (webhook secret replaced with the live endpoint's). Payment calls go through `postAsUser` in `src/lib/stripe.js`, which renews an expired token.
 - After the first deploy with the new checkout works, remove `VITE_STRIPE_PRICE_ID` from Vercel. Confirm `STRIPE_SECRET_KEY` there is the live key.
+- Plan generation takes 30-60s (Opus, ~3.5-4.5k output tokens). Ideas: `AI_MODEL=claude-sonnet-5-5` secret, drop the nutrition section the server overwrites anyway, shorten per-exercise notes, show progress steps.
 - Not built yet: RPE / warm-up sets / supersets, Strong/Hevy import, Apple/Google sign-in, a 1200x630 `og:image`.
 - Privacy policy (`public/privacypolicy.html`) is a draft.
 - Not yet tested on a real device: push notifications, barcode camera, health sync.
