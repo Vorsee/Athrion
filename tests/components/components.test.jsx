@@ -20,6 +20,7 @@ vi.mock('../../src/lib/exerciseDb.js', () => exerciseDb)
 const push = vi.hoisted(() => ({
   pushSupported: vi.fn(() => true), needsHomeScreenInstall: vi.fn(() => false),
   currentSubscription: vi.fn(async () => null), enablePush: vi.fn(async () => ({})), disablePush: vi.fn(async () => {}),
+  sendTestPush: vi.fn(async () => ({ sent: 1 })),
 }))
 vi.mock('../../src/lib/push.js', () => push)
 
@@ -116,6 +117,19 @@ describe('ReminderSettings', () => {
     const upsert = sb.op(sb.queriesFor('reminder_settings').at(-1), 'upsert')[0]
     expect(upsert).toMatchObject({ enabled: true, reminder_hour: 18, timezone: 'America/New_York' })
     expect(screen.getByText(/reminder around 6\s?PM/i)).toBeInTheDocument()
+  })
+  it('sends a test notification once reminders are on', async () => {
+    sb.set('reminder_settings', { data: { enabled: true, reminder_hour: 7, streak_warnings: true }, error: null })
+    push.currentSubscription.mockResolvedValueOnce({ endpoint: 'x' })
+    render(<ReminderSettings />)
+    await userEvent.click(await screen.findByText('Send test notification'))
+    expect(push.sendTestPush).toHaveBeenCalled()
+    expect(await screen.findByText(/Test sent/)).toBeInTheDocument()
+  })
+  it('hides the test button while reminders are off', async () => {
+    render(<ReminderSettings />)
+    await screen.findByRole('switch')
+    expect(screen.queryByText('Send test notification')).toBeNull()
   })
   it('shows the push error when permission is refused', async () => {
     push.enablePush.mockRejectedValueOnce(new Error('Notifications are blocked.'))

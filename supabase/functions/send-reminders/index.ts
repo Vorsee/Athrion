@@ -25,12 +25,53 @@ async function buildMessage(userId: string, settings: any, local: ReturnType<typ
   return chooseMessage(plan?.plan_data, (logs ?? []).map((l: any) => l.created_at), settings, local)
 }
 
+const cors = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+// "Send test notification" from the app: pushes to the signed-in user's own devices only
+async function sendTestPush(req: Request) {
+  const authHeader = req.headers.get('Authorization')
+  if (!authHeader) return Response.json({ error: 'Unauthorized' }, { status: 401, headers: cors })
+  const userClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
+    global: { headers: { Authorization: authHeader } },
+  })
+  const { data: { user } } = await userClient.auth.getUser()
+  if (!user) return Response.json({ error: 'Please sign in again.' }, { status: 401, headers: cors })
+
+  const { data: subs } = await admin.from('push_subscriptions').select('*').eq('user_id', user.id)
+  if (!subs?.length) {
+    return Response.json({ error: 'This account has no device with reminders turned on.' }, { status: 404, headers: cors })
+  }
+  const message = { title: 'Test notification ✅', body: 'Workout reminders are working on this device.', tag: 'test', url: '/' }
+  let sent = 0, removed = 0
+  for (const sub of subs) {
+    try {
+      await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, JSON.stringify(message), { TTL: 600 })
+      sent++
+    } catch (e: any) {
+      if (e.statusCode === 404 || e.statusCode === 410) {
+        await admin.from('push_subscriptions').delete().eq('id', sub.id)
+        removed++
+      } else {
+        console.error('test push failed', user.id, e.statusCode, e.body ?? e.message)
+      }
+    }
+  }
+  if (!sent) return Response.json({ error: 'The push service rejected every device. Turn reminders off and on again.', removed }, { status: 502, headers: cors })
+  return Response.json({ sent, removed }, { headers: cors })
+}
+
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
+
+  const body = await req.json().catch(() => ({}))
+  if (body.test === true) return sendTestPush(req)
+
   if (req.headers.get('x-cron-secret') !== Deno.env.get('CRON_SECRET')) {
     return new Response('Unauthorized', { status: 401 })
   }
-
-  const body = await req.json().catch(() => ({}))
 
   // Verifies push encryption works in this runtime without contacting a push service
   if (body.selfTest) {

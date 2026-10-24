@@ -124,6 +124,32 @@ describe('send-reminders', () => {
   })
 })
 
+describe('send-reminders test notification', () => {
+  const auth = { Authorization: 'Bearer user-jwt' }
+  it('needs a signed-in user', async () => {
+    const h = await load('send-reminders')
+    expect((await h(post({ test: true }))).status).toBe(401)
+    sb.supabase.auth.getUser.mockResolvedValueOnce({ data: { user: null } })
+    expect((await h(post({ test: true }, auth))).status).toBe(401)
+  })
+  it('explains when no device is subscribed', async () => {
+    sb.set('push_subscriptions', { data: [], error: null })
+    const h = await load('send-reminders')
+    const res = await h(post({ test: true }, auth))
+    expect(res.status).toBe(404)
+    expect((await res.json()).error).toMatch(/no device/)
+  })
+  it('pushes only to the caller\'s own devices', async () => {
+    sb.set('push_subscriptions', (q: any) => q.ops.some((o: any) => o[0] === 'delete') ? { data: null, error: null } : { data: [{ id: 1, endpoint: 'https://push/me', p256dh: 'p', auth: 'a' }], error: null })
+    webpush.sendNotification.mockResolvedValue({})
+    const h = await load('send-reminders')
+    expect(await (await h(post({ test: true }, auth))).json()).toEqual({ sent: 1, removed: 0 })
+    const q = sb.queriesFor('push_subscriptions')[0]
+    expect(sb.op(q, 'eq')).toEqual(['user_id', 'user-1'])
+    expect(JSON.parse(webpush.sendNotification.mock.calls.at(-1)[1])).toMatchObject({ title: 'Test notification ✅', tag: 'test' })
+  })
+})
+
 describe('analyze-meal', () => {
   const auth = { Authorization: 'Bearer user-jwt' }
   const photo = { base64: 'aGk=', mediaType: 'image/png' }

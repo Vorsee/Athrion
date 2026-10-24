@@ -75,6 +75,16 @@ describe('push.js', () => {
     expect(existing.unsubscribe).toHaveBeenCalled()
     expect(sb.op(sb.queriesFor('push_subscriptions')[0], 'eq')).toEqual(['endpoint', 'https://push/1'])
   })
+  it('asks the server for a test push with the user token', async () => {
+    const { mod } = await loadPush()
+    const fetchMock = vi.fn(async () => ({ ok: false, status: 404, json: async () => ({ error: 'This account has no device with reminders turned on.' }) }))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(mod.sendTestPush()).rejects.toThrow('no device')
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('https://test.supabase.co/functions/v1/send-reminders')
+    expect(init.headers.Authorization).toBe('Bearer jwt-token')
+    expect(JSON.parse(init.body)).toEqual({ test: true })
+  })
   it('detects iOS Safari outside the home screen', async () => {
     const { mod } = await loadPush()
     vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)')

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { fetchReminderSettings, saveReminderSettings } from '../lib/progressApi.js'
-import { pushSupported, needsHomeScreenInstall, currentSubscription, enablePush, disablePush } from '../lib/push.js'
+import { pushSupported, needsHomeScreenInstall, currentSubscription, enablePush, disablePush, sendTestPush } from '../lib/push.js'
 
 const HOURS = Array.from({ length: 18 }, (_, i) => i + 5) // 5am – 10pm
 const fmtHour = h => new Date(2000, 0, 1, h).toLocaleTimeString(undefined, { hour: 'numeric' })
@@ -57,6 +57,18 @@ export default function ReminderSettings() {
     }
   }
 
+  async function sendTest() {
+    setBusy(true); setMsg('')
+    try {
+      await sendTestPush()
+      setMsg('Test sent. It should appear within a few seconds.')
+    } catch (e) {
+      setMsg(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="bg-[#141414] border border-[#1e1e1e] rounded-2xl p-4 space-y-3">
       <div className="flex items-center justify-between gap-3">
@@ -88,6 +100,10 @@ export default function ReminderSettings() {
             <span className="text-xs text-gray-400">Warn me before I lose my streak</span>
             <Toggle on={settings.streak_warnings} onChange={v => update({ streak_warnings: v })} label="Streak warnings" />
           </div>
+          <button onClick={sendTest} disabled={busy}
+            className="w-full py-2 rounded-xl border border-[#2a2a2a] text-xs font-semibold text-gray-300 hover:text-neon hover:border-neon/40 disabled:opacity-50 transition-colors">
+            Send test notification
+          </button>
         </div>
       )}
       {busy && <p className="text-[11px] text-gray-500">Working...</p>}
