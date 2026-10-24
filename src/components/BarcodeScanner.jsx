@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { Button } from './ui/index.js'
 import Sheet from './Sheet.jsx'
 
 // Open Food Facts: free, open product database (world.openfoodfacts.org)
@@ -109,66 +110,65 @@ export default function BarcodeScanner({ defaultMeal, meals, onAdd, onClose }) {
   }
 
   return (
-    <Sheet title="Scan Barcode" onClose={onClose} footer={stage === 'found' && (
-      <button onClick={() => onAdd({ name: `${product.name} (${g} g)`, ...macros, meal })} disabled={!g}
-        className="w-full bg-neon text-black font-bold py-3.5 rounded-xl text-sm disabled:opacity-50">
-        Add to {meals.find(m => m.id === meal)?.label ?? meal} →
-      </button>
+    <Sheet title="Scan barcode" onClose={onClose} footer={stage === 'found' && (
+      <Button full onClick={() => onAdd({ name: `${product.name} (${g} g)`, ...macros, meal })} disabled={!g}>
+        Add to {(meals.find(m => m.id === meal)?.label ?? meal).toLowerCase()}
+      </Button>
     )}>
       {stage === 'scan' && (
         <>
           <div className="relative w-full aspect-[4/3] bg-black rounded-xl overflow-hidden">
             <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
-            <div className="absolute inset-x-8 top-1/2 -translate-y-1/2 h-24 border-2 border-neon/70 rounded-lg pointer-events-none" />
+            <div className="absolute inset-x-8 top-1/2 -translate-y-1/2 h-24 border-2 border-neon-stroke/70 rounded-lg pointer-events-none" />
           </div>
-          <p className="text-xs text-gray-400">Point the camera at the barcode.</p>
-          {(cameraError || err) && <p className="text-xs text-red-400">{cameraError || err}</p>}
+          <p className="text-xs text-muted">Point the camera at the barcode.</p>
+          {(cameraError || err) && <p className="text-xs text-danger">{cameraError || err}</p>}
           <div className="flex gap-2 pb-2">
             <input value={manualCode} onChange={e => setManualCode(e.target.value.replace(/\D/g, ''))} inputMode="numeric" placeholder="Or type the barcode number"
-              className="flex-1 bg-[#1a1a1a] border border-[#262626] rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon/40" />
+              className="flex-1 bg-raised border border-line rounded-xl px-3 py-2 text-sm text-ink placeholder:text-placeholder focus:outline-none focus:border-neon-stroke/40" />
             <button onClick={() => manualCode && handleCode(manualCode)} disabled={manualCode.length < 8}
-              className="px-4 rounded-xl bg-[#222] text-sm text-white disabled:opacity-40">Look up</button>
+              className="px-4 rounded-xl bg-line text-sm text-ink disabled:opacity-40">Look up</button>
           </div>
         </>
       )}
 
-      {stage === 'loading' && <div className="py-10 text-center text-sm text-gray-400 animate-pulse">Looking up product...</div>}
+      {stage === 'loading' && <div className="py-10 text-center text-sm text-muted animate-pulse">Looking up product...</div>}
 
       {stage === 'missing' && (
         <div className="py-6 text-center space-y-3">
-          <p className="text-sm text-gray-400">This product isn't in the Open Food Facts database yet.</p>
-          <button onClick={() => setStage('scan')} className="text-xs text-neon">Scan another</button>
+          <p className="text-sm text-muted">This product isn't in the Open Food Facts database yet.</p>
+          <button onClick={() => setStage('scan')} className="text-xs text-neon-ink">Scan another</button>
         </div>
       )}
 
       {stage === 'found' && product && (
         <div className="space-y-4 pb-2">
           <div>
-            <div className="font-semibold text-white break-words">{product.name}</div>
-            <div className="text-xs text-gray-400">
+            <div className="font-semibold text-ink break-words">{product.name}</div>
+            <div className="text-xs text-muted">
               Per 100 g: {Math.round(product.per100.kcal)} kcal · P {product.per100.protein}g · C {product.per100.carbs}g · F {product.per100.fat}g
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="text-xs text-gray-400">Amount (g)</span>
+              <span className="text-xs text-muted">Amount (g)</span>
               <input type="number" inputMode="decimal" value={grams} onChange={e => setGrams(e.target.value)}
-                className="mt-1 w-full bg-[#1a1a1a] border border-[#262626] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-neon/40" />
-              {product.servingLabel && <span className="text-xs text-gray-400">1 serving = {product.servingLabel}</span>}
+                className="mt-1 w-full bg-raised border border-line rounded-xl px-3 py-2 text-sm text-ink focus:outline-none focus:border-neon-stroke/40" />
+              {product.servingLabel && <span className="text-xs text-muted">1 serving = {product.servingLabel}</span>}
             </label>
             <label className="block">
-              <span className="text-xs text-gray-400">Meal</span>
+              <span className="text-xs text-muted">Meal</span>
               <select value={meal} onChange={e => setMeal(e.target.value)}
-                className="mt-1 w-full bg-[#1a1a1a] border border-[#262626] rounded-xl px-3 py-2 text-sm text-white focus:outline-none">
+                className="mt-1 w-full bg-raised border border-line rounded-xl px-3 py-2 text-sm text-ink focus:outline-none">
                 {meals.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
               </select>
             </label>
           </div>
           <div className="grid grid-cols-4 gap-2 text-center">
             {[['kcal', macros.kcal], ['Protein', `${macros.protein}g`], ['Carbs', `${macros.carbs}g`], ['Fat', `${macros.fat}g`]].map(([l, v]) => (
-              <div key={l} className="bg-[#161616] rounded-xl py-2">
-                <div className="font-bold text-lg text-white">{v}</div>
-                <div className="text-xs text-gray-400">{l}</div>
+              <div key={l} className="bg-raised rounded-xl py-2">
+                <div className="font-bold text-lg text-ink">{v}</div>
+                <div className="text-xs text-muted">{l}</div>
               </div>
             ))}
           </div>

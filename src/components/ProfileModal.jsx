@@ -3,6 +3,11 @@ import { supabase } from '../lib/supabase.js'
 import { cancelSubscription } from '../lib/stripe.js'
 import { signOut } from '../lib/session.js'
 import { Icon } from '@iconify/react'
+import { tok } from '../lib/tokens.js'
+import Sheet from './Sheet.jsx'
+import { Button, Segmented } from './ui/index.js'
+import { fmtWeight } from '../lib/units.js'
+import { PRO_FEATURES, annualPerMonth, money } from '../lib/pricing.js'
 
 const QUOTES = [
   { text: "The only bad workout is the one that didn't happen.", author: "Unknown" },
@@ -33,10 +38,10 @@ function calcBMI(height_cm, weight_lb) {
 }
 
 function bmiInfo(bmi) {
-  if (bmi < 18.5) return { label: 'Underweight', color: '#60a5fa' }
-  if (bmi < 25)   return { label: 'Normal',      color: '#C8F135' }
-  if (bmi < 30)   return { label: 'Overweight',  color: '#f59e0b' }
-  return               { label: 'Obese',       color: '#ef4444' }
+  if (bmi < 18.5) return { label: 'Underweight', color: 'info' }
+  if (bmi < 25)   return { label: 'Normal',      color: 'neon-ink' }
+  if (bmi < 30)   return { label: 'Overweight',  color: 'warn' }
+  return               { label: 'Obese',       color: 'danger' }
 }
 
 function fmtDate(iso) {
@@ -63,90 +68,71 @@ function SubscriptionScreen({ onBack }) {
   }
 
   return (
-    <div className="px-6">
+    <div>
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={onBack}
-          className="w-8 h-8 rounded-full bg-[#1e1e1e] flex items-center justify-center text-gray-400 hover:text-white transition-colors text-lg leading-none">
-          ←
+        <button onClick={onBack} aria-label="Back"
+          className="press w-10 h-10 -ml-2 rounded-full flex items-center justify-center text-ink-2 hover:text-ink hover:bg-raised transition-colors">
+          <Icon icon="mdi:chevron-left" width={24} />
         </button>
         <div className="font-bold text-base">Subscription</div>
       </div>
 
       {/* Plan card */}
-      <div className="bg-gradient-to-br from-[#0e1500] to-[#0a0a0a] border border-neon/30 rounded-2xl p-5 mb-5">
+      <div className="bg-gradient-to-br from-neon-tint to-canvas border border-neon-stroke/30 rounded-2xl p-5 mb-5">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <div className="font-bold text-xl text-neon leading-none">Athrion Pro</div>
-            <div className="text-xs text-gray-400 mt-0.5">Monthly subscription</div>
+            <div className="font-bold text-xl text-neon-ink leading-none">ATHRION Pro</div>
+            <div className="text-xs text-muted mt-0.5">Your subscription</div>
           </div>
-          <div className="bg-neon text-black text-xs font-black px-3 py-1 rounded-full">
-            ACTIVE
+          <div className="bg-neon text-on-neon text-xs font-bold px-3 py-1 rounded-full">
+            Active
           </div>
-        </div>
-
-        <div className="flex items-end gap-1 mb-4">
-          <span className="font-bold text-3xl text-white leading-none">$5.99</span>
-          <span className="text-gray-400 text-sm mb-0.5">/ month</span>
         </div>
 
         <div className="space-y-2 text-sm">
-          {[
-            'Unlimited custom workouts',
-            'Full nutrition & calorie tracker',
-            'Daily macro goals & meal history',
-            'AI fitness plan & coaching',
-          ].map(f => (
-            <div key={f} className="flex items-center gap-2 text-gray-300">
-              <span className="text-neon text-xs">✓</span>
-              <span className="text-xs">{f}</span>
+          {PRO_FEATURES.map(f => (
+            <div key={f.title} className="flex items-center gap-2 text-ink-2">
+              <Icon icon="mdi:check" width={14} className="text-neon-ink flex-shrink-0" />
+              <span className="text-xs">{f.title}</span>
             </div>
           ))}
         </div>
+        <div className="text-xs text-muted mt-4">Your price and renewal date are on your Stripe receipt email.</div>
       </div>
 
       {/* Status / actions */}
       {step === 'idle' && (
-        <button
-          onClick={() => setStep('confirm')}
-          className="w-full py-3.5 rounded-xl text-sm font-semibold text-red-400 bg-red-500/8 border border-red-500/20 hover:bg-red-500/15 hover:border-red-500/40 transition-all">
-          Cancel subscription
-        </button>
+        <Button variant="danger" full onClick={() => setStep('confirm')}>Cancel subscription</Button>
       )}
 
       {step === 'confirm' && (
-        <div className="bg-[#1a0000] border border-red-900/40 rounded-2xl p-5">
-          <div className="font-bold text-sm text-red-400 mb-1">Are you sure?</div>
-          <p className="text-xs text-gray-400 leading-relaxed mb-4">
+        <div className="bg-danger/12 border border-danger/12 rounded-2xl p-5">
+          <div className="font-bold text-sm text-danger mb-1">Are you sure?</div>
+          <p className="text-xs text-muted leading-relaxed mb-4">
             You'll keep Pro access until the end of your current billing period. After that your account moves to Free.
           </p>
           <div className="flex gap-3">
-            <button onClick={() => setStep('idle')}
-              className="flex-1 py-3 rounded-xl text-sm font-semibold text-gray-400 bg-[#1e1e1e] border border-[#2a2a2a] hover:text-white transition-all">
-              Keep Pro
-            </button>
-            <button onClick={handleCancel}
-              className="flex-1 py-3 rounded-xl text-sm font-bold text-red-400 bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-all">
-              Yes, Cancel
-            </button>
+            <Button variant="secondary" className="flex-1" onClick={() => setStep('idle')}>Keep Pro</Button>
+            <Button variant="danger" className="flex-1" onClick={handleCancel}>Yes, cancel</Button>
           </div>
         </div>
       )}
 
       {step === 'loading' && (
-        <div className="w-full py-3.5 rounded-xl text-sm font-semibold text-gray-400 bg-[#1a1a1a] border border-[#262626] flex items-center justify-center gap-2">
-          <span className="spin inline-block w-4 h-4 border-2 border-gray-700 border-t-gray-400 rounded-full" />
+        <div className="w-full py-3.5 rounded-xl text-sm font-semibold text-muted bg-raised border border-line flex items-center justify-center gap-2">
+          <span className="spin inline-block w-4 h-4 border-2 border-line-strong border-t-muted rounded-full" />
           Cancelling…
         </div>
       )}
 
       {step === 'done' && (
-        <div className="bg-[#111] border border-[#222] rounded-2xl p-5 text-center">
-          <div className="text-2xl mb-2">✓</div>
-          <div className="font-bold text-sm text-white mb-1">Subscription cancelled</div>
-          <p className="text-xs text-gray-400 leading-relaxed">
+        <div className="bg-surface border border-line rounded-2xl p-5 text-center">
+          <Icon icon="mdi:check-circle-outline" width={32} className="text-neon-ink mx-auto mb-2" />
+          <div className="font-bold text-sm text-ink mb-1">Subscription cancelled</div>
+          <p className="text-xs text-muted leading-relaxed">
             You'll keep Pro access until{' '}
-            <span className="text-gray-300 font-semibold">
+            <span className="text-ink-2 font-semibold">
               {result?.period_end ? fmtDate(result.period_end) : 'the end of your billing period'}
             </span>.
             No further charges will be made.
@@ -155,17 +141,17 @@ function SubscriptionScreen({ onBack }) {
       )}
 
       {step === 'error' && (
-        <div className="bg-red-950/30 border border-red-900/40 rounded-2xl p-4">
-          <div className="text-sm text-red-400 font-semibold mb-1">Cancellation failed</div>
-          <p className="text-xs text-gray-400 mb-3">{errMsg}</p>
+        <div className="bg-danger/12 border border-danger/12 rounded-2xl p-4">
+          <div className="text-sm text-danger font-semibold mb-1">Cancellation failed</div>
+          <p className="text-xs text-muted mb-3">{errMsg}</p>
           <button onClick={() => setStep('idle')}
-            className="text-xs text-gray-400 hover:text-white transition-colors underline">
+            className="text-xs text-muted hover:text-ink transition-colors underline">
             Try again
           </button>
         </div>
       )}
 
-      <p className="text-center text-xs text-gray-500 mt-4">
+      <p className="text-center text-xs text-muted mt-4">
         Need help? Contact support at support@athrion.app
       </p>
     </div>
@@ -180,6 +166,7 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
 
   const bmi     = profile ? calcBMI(profile.height_cm, profile.weight_lb) : null
   const cat     = bmi ? bmiInfo(bmi) : null
+  // BMI 15-40 across the bar; bands start at 18.5 (14%), 25 (40%) and 30 (60%)
   const bmiPct  = bmi ? Math.min(98, Math.max(2, ((bmi - 15) / (40 - 15)) * 100)) : 0
 
   const quote   = QUOTES[Math.floor(Date.now() / 86400000) % QUOTES.length]
@@ -194,143 +181,128 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-
-      <div
-        className="relative w-full max-w-lg bg-[#111] border border-[#222] rounded-t-3xl pb-10 max-h-[88vh] overflow-y-auto modal-up"
-        onClick={e => e.stopPropagation()}
-        style={{ scrollbarWidth: 'none' }}
-      >
-        {/* Handle */}
-        <div className="w-10 h-1 bg-[#2a2a2a] rounded-full mx-auto mt-4 mb-6" />
-
+    <Sheet ariaLabel={screen === 'subscription' ? 'Subscription' : 'Profile and settings'} onClose={onClose} bodyClassName="-mx-1">
         {screen === 'subscription' ? (
           <SubscriptionScreen onBack={() => setScreen('profile')} />
         ) : (
-          <div className="px-6">
+          <div>
             {/* ── User header ── */}
             <div className="flex items-center gap-4 mb-7">
-              <div className="w-14 h-14 rounded-2xl bg-neon/10 border border-neon/25 flex items-center justify-center flex-shrink-0">
-                <span className="font-bold text-xl text-neon">{initial}</span>
+              <div className="w-14 h-14 rounded-2xl bg-neon/10 border border-neon-stroke/25 flex items-center justify-center flex-shrink-0">
+                <span className="font-bold text-xl text-neon-ink">{initial}</span>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="font-bold text-lg leading-tight truncate">{session.name}</div>
-                <div className="text-xs text-gray-400 mt-0.5 truncate">{session.email}</div>
+                <div className="text-xs text-muted mt-0.5 truncate">{session.email}</div>
               </div>
-              <button onClick={onClose}
-                className="w-8 h-8 rounded-full bg-[#1e1e1e] flex items-center justify-center text-gray-400 hover:text-white transition-colors flex-shrink-0 text-lg leading-none">
-                ×
-              </button>
             </div>
 
             {/* ── Body stats ── */}
             {profile && (
               <>
-                <div className="text-sm font-semibold text-gray-200 mb-2">Body stats</div>
+                <div className="text-lg leading-[1.3] font-semibold text-ink mb-2">Body stats</div>
                 <div className="grid grid-cols-5 gap-2 mb-5">
                   {[
                     ['Height', fmtHeight(profile.height_cm)],
-                    ['Weight', `${profile.weight_lb} lb`],
+                    ['Weight', fmtWeight(profile.weight_lb, profile.weight_unit === 'kg' ? 'kg' : 'lb')],
                     ['Age',    profile.age ? `${profile.age} yr` : '—'],
                     ['BMI',    bmi.toFixed(1)],
                     ['Sex',    profile.sex === 'other' ? 'N/A'
                       : profile.sex.charAt(0).toUpperCase() + profile.sex.slice(1)],
                   ].map(([label, val]) => (
-                    <div key={label} className="bg-[#0d0d0d] rounded-xl p-3 text-center">
-                      <div className="font-bold text-lg text-white leading-tight">{val}</div>
-                      <div className="text-[11px] text-gray-400 mt-0.5">{label}</div>
+                    <div key={label} className="bg-inset rounded-xl p-3 text-center">
+                      <div className="font-bold text-lg text-ink leading-tight">{val}</div>
+                      <div className="text-2xs text-muted mt-0.5">{label}</div>
                     </div>
                   ))}
                 </div>
 
                 {/* ── BMI gauge ── */}
-                <div className="bg-[#0d0d0d] rounded-2xl p-4 mb-6">
+                <div className="bg-inset rounded-2xl p-4 mb-6">
                   <div className="flex items-center justify-between mb-3">
-                    <div className="text-sm font-semibold text-gray-200">Body mass index</div>
+                    <div className="text-lg leading-[1.3] font-semibold text-ink">Body mass index</div>
                     <div className="text-xs font-bold px-2 py-0.5 rounded-full"
-                      style={{ background: `${cat.color}18`, color: cat.color }}>
+                      style={{ background: tok(cat.color, 0.12), color: tok(cat.color) }}>
                       {cat.label}
                     </div>
                   </div>
 
                   <div className="relative h-3 rounded-full mb-3" style={{
-                    background: 'linear-gradient(to right, #ef4444 0%, #ef4444 24%, #f59e0b 24%, #f59e0b 48%, #C8F135 48%, #C8F135 78%, #60a5fa 78%)',
+                    background: `linear-gradient(to right, ${tok('info')} 0%, ${tok('info')} 14%, ${tok('neon-stroke')} 14%, ${tok('neon-stroke')} 40%, ${tok('warn')} 40%, ${tok('warn')} 60%, ${tok('danger')} 60%)`,
                   }}>
-                    <div className="absolute top-1/2 -translate-y-1/2 w-5 h-5 rounded-full border-2 border-[#111] shadow-xl -translate-x-1/2 transition-all duration-700"
-                      style={{ left: `${100 - bmiPct}%`, background: cat.color }} />
+                    <div className="absolute top-1/2 -translate-y-1/2 w-5 h-5 rounded-full border-2 border-surface -translate-x-1/2 transition-all duration-700"
+                      style={{ left: `${bmiPct}%`, background: tok(cat.color) }} />
                   </div>
 
-                  <div className="grid grid-cols-4 text-[11px] text-gray-500">
-                    <span>Obese</span>
-                    <span className="text-center">Over</span>
+                  <div className="grid grid-cols-4 text-2xs text-muted">
+                    <span>Under</span>
                     <span className="text-center">Normal</span>
-                    <span className="text-right">Under</span>
+                    <span className="text-center">Over</span>
+                    <span className="text-right">Obese</span>
                   </div>
                 </div>
               </>
             )}
 
+            {/* ── Appearance ── */}
+            <div className="mb-6">
+              <div className="text-lg leading-[1.3] font-semibold text-ink mb-2">Appearance</div>
+              <Segmented options={[['dark', 'Dark'], ['light', 'Light']]} value={theme}
+                onChange={t => { if (t !== theme) onToggleTheme?.() }} label="Theme" kind="choice" />
+            </div>
+
             {/* ── Daily quote ── */}
-            <div className="bg-[#0a0a0a] border border-[#1e1e1e] rounded-2xl p-5 mb-6 relative overflow-hidden">
-              <div className="absolute -top-2 right-4 font-bold text-7xl text-neon/8 leading-none select-none pointer-events-none">"</div>
-              <div className="text-[11px] text-neon mb-2.5">Daily motivation</div>
-              <div className="text-sm text-gray-300 leading-relaxed italic">"{quote.text}"</div>
+            <div className="bg-canvas border border-line rounded-2xl p-5 mb-6 relative overflow-hidden">
+              <div className="text-2xs text-neon-ink mb-2.5">Daily motivation</div>
+              <div className="text-sm text-ink-2 leading-relaxed italic">"{quote.text}"</div>
               {quote.author !== 'Anonymous' && quote.author !== 'Unknown' && (
-                <div className="text-xs text-gray-400 mt-2">— {quote.author}</div>
+                <div className="text-xs text-muted mt-2">{quote.author}</div>
               )}
             </div>
 
             {/* ── Actions ── */}
             <div className="space-y-2.5">
               {pwState === 'sent' ? (
-                <div className="w-full py-3.5 rounded-xl text-center text-sm font-semibold text-neon bg-neon/8 border border-neon/25">
-                  ✓ Reset link sent — check your inbox
+                <div role="status" className="w-full py-3.5 rounded-xl text-sm font-semibold text-neon-ink bg-neon/8 border border-neon-stroke/25 flex items-center justify-center gap-2">
+                  <Icon icon="mdi:check-circle-outline" width={16} />
+                  Reset link sent. Check your inbox.
                 </div>
               ) : (
                 <button onClick={handleChangePassword} disabled={pwState === 'loading'}
-                  className="w-full py-3.5 rounded-xl text-sm font-semibold text-gray-300 bg-[#1a1a1a] border border-[#262626] hover:border-[#3a3a3a] hover:text-white transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                  className="w-full py-3.5 rounded-xl text-sm font-semibold text-ink-2 bg-raised border border-line hover:border-line-strong hover:text-ink transition-all disabled:opacity-50 flex items-center justify-center gap-2">
                   <Icon icon="mdi:key-outline" width={16} />
                   <span>{pwState === 'loading' ? 'Sending...' : 'Change password'}</span>
                 </button>
               )}
               {pwState === 'error' && (
-                <p className="text-red-400 text-xs text-center">Failed to send — try again.</p>
+                <p className="text-danger text-xs text-center">Couldn't send the link. Try again.</p>
               )}
 
               {!isPro && (
                 <button onClick={onUpgrade}
-                  className="w-full py-3.5 rounded-xl text-sm font-bold bg-neon/10 border border-neon/30 text-neon hover:bg-neon/15 hover:border-neon/50 transition-all flex items-center justify-center gap-2">
+                  className="w-full py-3.5 rounded-xl text-sm font-bold bg-neon/10 border border-neon-stroke/30 text-neon-ink hover:bg-neon/15 hover:border-neon-stroke/50 transition-all flex items-center justify-center gap-2">
                   <Icon icon="mdi:star-four-points-outline" width={16} />
-                  <span>Upgrade to Pro · $5.99/mo</span>
+                  <span>Get ATHRION Pro · from {money(annualPerMonth)} a month</span>
                 </button>
               )}
 
               {isPro && (
                 <button onClick={() => setScreen('subscription')}
-                  className="w-full py-3.5 rounded-xl text-sm font-semibold bg-neon/8 border border-neon/20 hover:bg-neon/12 hover:border-neon/35 transition-all flex items-center justify-between px-5">
-                  <div className="flex items-center gap-2 text-neon">
-                    <span>✓</span>
-                    <span>Athrion Pro — active</span>
+                  className="w-full py-3.5 rounded-xl text-sm font-semibold bg-neon/8 border border-neon-stroke/20 hover:bg-neon/12 hover:border-neon-stroke/35 transition-all flex items-center justify-between px-5">
+                  <div className="flex items-center gap-2 text-neon-ink">
+                    <Icon icon="mdi:check-decagram-outline" width={16} />
+                    <span>ATHRION Pro is active</span>
                   </div>
-                  <span className="text-gray-400 text-xs">Manage →</span>
+                  <span className="text-muted text-xs flex items-center">Manage <Icon icon="mdi:chevron-right" width={16} /></span>
                 </button>
               )}
 
-              <button onClick={onEdit}
-                className="w-full py-3.5 rounded-xl text-sm font-semibold text-gray-300 bg-[#1a1a1a] border border-[#262626] hover:border-[#3a3a3a] hover:text-white transition-all flex items-center justify-center gap-2">
-                <Icon icon="mdi:ruler" width={16} />
-                <span>Edit body stats</span>
-              </button>
+              <Button variant="secondary" full icon="mdi:ruler" onClick={onEdit}>Edit body stats</Button>
 
-              <button onClick={() => signOut()}
-                className="w-full py-3.5 rounded-xl text-sm font-semibold text-red-500 hover:text-red-400 bg-[#1a1a1a] border border-[#262626] hover:border-red-900/40 transition-all">
-                Sign out
-              </button>
+              <Button variant="ghost" full icon="mdi:logout" onClick={() => signOut()} className="!text-danger">Sign out</Button>
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </Sheet>
   )
 }

@@ -3,8 +3,12 @@ import { createClient } from '@supabase/supabase-js'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-// The only price this endpoint sells; never trust a price sent by the browser
-const PRO_PRICE_ID = process.env.STRIPE_PRICE_ID || process.env.VITE_STRIPE_PRICE_ID
+// The only prices this endpoint sells; the browser picks a plan name, never a price
+const PRICES = {
+  monthly: process.env.STRIPE_PRICE_MONTHLY,
+  annual: process.env.STRIPE_PRICE_ANNUAL,
+}
+const TRIAL_DAYS = 7
 
 async function readJson(req) {
   const chunks = []
@@ -31,21 +35,40 @@ export default async function handler(req, res) {
   } catch {
     return res.status(400).json({ error: 'Invalid JSON body' })
   }
-  if (!PRO_PRICE_ID) return res.status(500).json({ error: 'Pro price is not configured' })
-  if (body.price_id && body.price_id !== PRO_PRICE_ID) return res.status(400).json({ error: 'Unknown price' })
+  const plan = body.plan ?? 'monthly'
+  if (!Object.hasOwn(PRICES, plan)) return res.status(400).json({ error: 'Unknown plan' })
+  if (!PRICES[plan]) return res.status(500).json({ error: 'Pro price is not configured' })
+
+  // One free trial per person: anyone who has been through checkout before already has a Stripe customer
+  const { data: sub } = await supabase
+    .from('subscriptions')
+    .select('stripe_customer_id')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  const customer = sub?.stripe_customer_id
+  const appUrl = process.env.APP_URL || 'https://athrion.app'
 
   try {
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       payment_method_types: ['card'],
-      line_items: [{ price: PRO_PRICE_ID, quantity: 1 }],
-      success_url: `${process.env.APP_URL || 'https://athrion.app'}?upgraded=1`,
-      cancel_url: process.env.APP_URL || 'https://athrion.app',
+      line_items: [{ price: PRICES[plan], quantity: 1 }],
+      allow_promotion_codes: true,
+      ...(customer
+        ? { customer }
+        : {
+            customer_email: user.email,
+            subscription_data: {
+              trial_period_days: TRIAL_DAYS,
+              trial_settings: { end_behavior: { missing_payment_method: 'cancel' } },
+            },
+          }),
+      success_url: `${appUrl}?upgraded=1`,
+      cancel_url: appUrl,
       client_reference_id: user.id,
-      customer_email: user.email,
-      metadata: { user_id: user.id },
+      metadata: { user_id: user.id, plan },
     })
-    res.json({ url: session.url })
+    res.json({ url: session.url, trial: !customer })
   } catch (err) {
     console.error('Stripe checkout error:', err.message)
     res.status(500).json({ error: err.message })

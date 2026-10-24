@@ -20,7 +20,7 @@ function DemoAnimation({ demo }) {
   )
 
   return (
-    <div className="relative w-full aspect-[3/2] bg-[#1a1a1a] rounded-xl overflow-hidden">
+    <div className="relative w-full aspect-[3/2] bg-raised rounded-xl overflow-hidden">
       {demo.images.map((src, i) => (
         <img key={src} src={imageUrl(src)} alt={`${demo.name} ${i ? 'end' : 'start'} position`}
           className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-300 ${i === frame ? 'opacity-100' : 'opacity-0'}`} />
@@ -47,7 +47,7 @@ export function DemoButton({ name, className = '' }) {
   return (
     <>
       <button onClick={e => { e.stopPropagation(); setOpen(true) }} aria-label={`How to do ${name}`}
-        className={`flex-shrink-0 w-8 h-8 rounded-lg bg-[#222] hover:bg-[#2a2a2a] flex items-center justify-center text-gray-400 hover:text-neon transition-colors ${className}`}>
+        className={`flex-shrink-0 w-8 h-8 rounded-lg bg-line hover:bg-line-strong flex items-center justify-center text-muted hover:text-neon-ink transition-colors ${className}`}>
         <Icon icon="mdi:play-circle-outline" width={18} />
       </button>
       {open && <ExerciseDemoSheet name={name} onClose={() => setOpen(false)} />}
@@ -59,16 +59,16 @@ export function ExerciseDemoSheet({ name, onClose }) {
   const { loading, demo, error } = useDemo(name)
 
   return (
-    <Sheet title="How To" onClose={onClose} footer={
+    <Sheet title="How to" onClose={onClose} footer={
       <a href={youtubeSearchUrl(name)} target="_blank" rel="noreferrer"
-        className="w-full flex items-center justify-center gap-2 border border-[#2a2a2a] text-gray-300 font-semibold py-3 rounded-xl text-xs hover:border-neon/40 hover:text-neon">
+        className="w-full flex items-center justify-center gap-2 border border-line-strong text-ink-2 font-semibold py-3 rounded-xl text-xs hover:border-neon-stroke/40 hover:text-neon-ink">
         <Icon icon="mdi:youtube" width={18} /> Watch a video
       </a>
     }>
-      <div className="font-semibold text-white break-words">{name}</div>
+      <div className="font-semibold text-ink break-words">{name}</div>
       {loading && (
         <div className="space-y-2 animate-pulse">
-          {[0, 1, 2, 3].map(i => <div key={i} className="h-3 bg-[#1a1a1a] rounded" />)}
+          {[0, 1, 2, 3].map(i => <div key={i} className="h-3 bg-raised rounded" />)}
         </div>
       )}
       {!loading && demo && (
@@ -76,25 +76,25 @@ export function ExerciseDemoSheet({ name, onClose }) {
           {/* Animation hidden until the ExerciseDB HD licence is in place; turn back on by restoring this block.
           <DemoAnimation demo={demo} />
           {(demo.name.toLowerCase() !== name.toLowerCase() || demo.gif) && (
-            <div className="flex justify-between gap-3 text-xs text-gray-400">
+            <div className="flex justify-between gap-3 text-xs text-muted">
               <span>{demo.name.toLowerCase() !== name.toLowerCase() && `Shown: ${demo.name}`}</span>
               {demo.gif && <span className="flex-shrink-0">Animation: ExerciseDB</span>}
             </div>
           )}
           */}
           {demo.name.toLowerCase() !== name.toLowerCase() && (
-            <div className="text-xs text-gray-400">Steps for: {demo.name}</div>
+            <div className="text-xs text-muted">Steps for: {demo.name}</div>
           )}
           <div className="flex flex-wrap gap-1.5">
             {[...demo.primaryMuscles, ...demo.secondaryMuscles.slice(0, 2)].map((m, i) => (
-              <span key={m} className={`text-xs capitalize px-2 py-0.5 rounded-md ${i < demo.primaryMuscles.length ? 'bg-neon/15 text-neon' : 'bg-[#222] text-gray-400'}`}>{m}</span>
+              <span key={m} className={`text-xs capitalize px-2 py-0.5 rounded-md ${i < demo.primaryMuscles.length ? 'bg-neon/15 text-neon-ink' : 'bg-line text-muted'}`}>{m}</span>
             ))}
-            {demo.equipment && <span className="text-xs capitalize px-2 py-0.5 rounded-md bg-[#222] text-gray-400">{demo.equipment}</span>}
+            {demo.equipment && <span className="text-xs capitalize px-2 py-0.5 rounded-md bg-line text-muted">{demo.equipment}</span>}
           </div>
           <ol className="space-y-2 pb-2">
             {demo.instructions.map((step, i) => (
-              <li key={i} className="flex gap-2.5 text-xs text-gray-400 leading-relaxed">
-                <span className="font-bold text-neon text-sm leading-tight w-4 flex-shrink-0">{i + 1}</span>
+              <li key={i} className="flex gap-2.5 text-xs text-muted leading-relaxed">
+                <span className="font-bold text-neon-ink text-sm leading-tight w-4 flex-shrink-0">{i + 1}</span>
                 <span>{step}</span>
               </li>
             ))}
@@ -102,7 +102,7 @@ export function ExerciseDemoSheet({ name, onClose }) {
         </>
       )}
       {!loading && !demo && (
-        <p className="text-xs text-gray-400 pb-2">
+        <p className="text-xs text-muted pb-2">
           {error ? 'The exercise library could not be loaded right now.' : "We don't have a demo for this one yet."} Tap below for a video.
         </p>
       )}
@@ -124,18 +124,18 @@ export function SwapSheet({ exercise, onSwap, onClose }) {
   ].filter(Boolean)
 
   return (
-    <Sheet title="Swap Exercise" onClose={onClose}>
-      <p className="text-xs text-gray-400">Replacing <span className="text-white">{exercise.name}</span>. Sets, reps and rest stay the same.</p>
+    <Sheet title="Swap exercise" onClose={onClose}>
+      <p className="text-xs text-muted">Replacing <span className="text-ink">{exercise.name}</span>. Sets, reps and rest stay the same.</p>
       <div className="space-y-2 pb-4">
         {options.map(o => (
           <button key={o.tag + o.name} onClick={() => onSwap(o.name)}
-            className="w-full flex items-center justify-between gap-3 bg-[#1a1a1a] border border-[#222] hover:border-neon/40 rounded-xl px-3 py-3 text-left">
-            <span className="text-sm text-white break-words">{o.name}</span>
-            <span className="text-xs capitalize text-gray-400 flex-shrink-0">{o.tag}</span>
+            className="w-full flex items-center justify-between gap-3 bg-raised border border-line hover:border-neon-stroke/40 rounded-xl px-3 py-3 text-left">
+            <span className="text-sm text-ink break-words">{o.name}</span>
+            <span className="text-xs capitalize text-muted flex-shrink-0">{o.tag}</span>
           </button>
         ))}
-        {alts === null && <div className="h-12 bg-[#1a1a1a] rounded-xl animate-pulse" />}
-        {alts !== null && !options.length && <p className="text-xs text-gray-400">No alternatives found for this exercise.</p>}
+        {alts === null && <div className="h-12 bg-raised rounded-xl animate-pulse" />}
+        {alts !== null && !options.length && <p className="text-xs text-muted">No alternatives found for this exercise.</p>}
       </div>
     </Sheet>
   )

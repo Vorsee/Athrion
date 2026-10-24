@@ -32,7 +32,6 @@ export default defineConfig({
       VITE_SUPABASE_URL: 'https://test.supabase.co',
       VITE_SUPABASE_ANON_KEY: 'anon-test-key',
       VITE_VAPID_PUBLIC_KEY: 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U',
-      VITE_STRIPE_PRICE_ID: 'price_test',
     },
     coverage: {
       provider: 'v8',

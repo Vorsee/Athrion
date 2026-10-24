@@ -37,16 +37,23 @@ beforeEach(() => {
 })
 
 describe('Sheet', () => {
-  it('renders into the body above the page and closes on backdrop or ✕, not on content clicks', async () => {
+  it('renders into the body above the page and closes on backdrop or the close button, not on content clicks', async () => {
     const onClose = vi.fn()
     const { container } = render(<div><Sheet title="Pick" onClose={onClose} footer={<span>Foot</span>}><p>Body</p></Sheet></div>)
     expect(container).not.toHaveTextContent('Body') // portalled
     expect(document.body).toHaveTextContent('Body')
     await userEvent.click(screen.getByText('Body'))
     expect(onClose).not.toHaveBeenCalled()
-    await userEvent.click(screen.getByText('✕'))
+    await userEvent.click(screen.getByLabelText('Close'))
     expect(onClose).toHaveBeenCalledTimes(1)
     expect(document.body.querySelector('.z-\\[60\\]')).toBeTruthy()
+  })
+  it('is a labelled dialog that closes on Escape', async () => {
+    const onClose = vi.fn()
+    render(<Sheet title="Pick" onClose={onClose}><p>Body</p></Sheet>)
+    expect(screen.getByRole('dialog', { name: 'Pick' })).toHaveAttribute('aria-modal', 'true')
+    await userEvent.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 })
 

@@ -80,7 +80,97 @@ describe('Workout tab — logging', () => {
   it('starts a free workout', async () => {
     sb.set('fitness_plans', { data: null, error: null })
     show()
-    await userEvent.click(await screen.findByText('+ Free workout'))
+    await userEvent.click(await screen.findByText('Free workout'))
     expect(await screen.findByText('Pick exercises as you go')).toBeInTheDocument()
   })
 })
+
+describe('Workout tab — saving a finished workout', () => {
+  beforeEach(() => localStorage.clear())
+  // An insert fails (or succeeds) only when ok() says so; reads always return []
+  const logs = ok => sb.set('workout_logs', q => (q.ops.some(o => o[0] === 'insert')
+    ? (ok() ? { data: { id: 'w1', name: 'Saved', sets: [] }, error: null } : { data: null, error: { message: 'offline' } })
+    : { data: [], error: null }))
+
+  async function finishWorkout() {
+    sb.set('fitness_plans', { data: withWorkoutOn('Friday'), error: null })
+    show()
+    await userEvent.click(await screen.findByText('Start workout'))
+    const [weight, reps] = screen.getAllByPlaceholderText('0')
+    await userEvent.type(weight, '50')
+    await userEvent.type(reps, '10')
+    await userEvent.click(screen.getByText('Log set'))
+    await userEvent.click(await screen.findByText('End workout early'))
+    await userEvent.click(await screen.findByText('End workout'))
+  }
+
+  describe('regression: fixed in the October 2026 review', () => {
+    // saveHistory swallowed the error, so "Workout complete" showed and the session was gone
+    it('keeps a workout that fails to save, says so, and saves it on retry', async () => {
+      let online = false
+      logs(() => online)
+      await finishWorkout()
+      expect(await screen.findByText(/isn't saved to your account yet/)).toBeInTheDocument()
+      expect(JSON.parse(localStorage.getItem('athrion_pending_workouts'))).toHaveLength(1)
+
+      online = true
+      await userEvent.click(screen.getByText('Try again'))
+      await waitFor(() => expect(localStorage.getItem('athrion_pending_workouts')).toBeNull())
+      expect(screen.queryByText(/isn't saved to your account yet/)).not.toBeInTheDocument()
+    })
+  })
+
+  it('shows no warning when the save works', async () => {
+    logs(() => true)
+    await finishWorkout()
+    expect(await screen.findByText('Workout complete')).toBeInTheDocument()
+    expect(screen.queryByText(/isn't saved/)).not.toBeInTheDocument()
+    expect(localStorage.getItem('athrion_pending_workouts')).toBeNull()
+  })
+})
+
+describe('Workout tab — flexible logging', () => {
+  beforeEach(() => localStorage.clear())
+  async function startAndLog(w = '50', r = '10') {
+    sb.set('fitness_plans', { data: withWorkoutOn('Friday'), error: null })
+    show()
+    await userEvent.click(await screen.findByText('Start workout'))
+    const [weight, reps] = screen.getAllByPlaceholderText('0')
+    await userEvent.type(weight, w)
+    await userEvent.type(reps, r)
+    await userEvent.click(screen.getByText('Log set'))
+    await userEvent.click(await screen.findByText(/Skip rest/))
+  }
+  const saved = () => JSON.parse(localStorage.getItem('athrion_workout'))
+
+  it('adds a set to just this exercise', async () => {
+    await startAndLog()
+    const before = screen.getByText(/^Set 2 of \d+$/).textContent
+    await userEvent.click(screen.getByText('Add a set'))
+    const n = Number(before.match(/of (\d+)/)[1])
+    expect(screen.getByText(`Set 2 of ${n + 1}`)).toBeInTheDocument()
+    expect(saved().setCounts[0]).toBe(n + 1)
+  })
+  it('corrects and deletes a logged set', async () => {
+    await startAndLog()
+    await userEvent.click(screen.getByLabelText('Edit set 1'))
+    const weight = screen.getByLabelText(/Weight \(lb\)/, { selector: 'input' })
+    await userEvent.clear(weight); await userEvent.type(weight, '55')
+    await userEvent.click(screen.getByText('Save'))
+    expect(saved().loggedSets[0]).toMatchObject({ weight: 55, reps: 10 })
+    await userEvent.click(screen.getByLabelText('Delete set 1'))
+    expect(saved().loggedSets).toHaveLength(0)
+    expect(screen.getByText(/^Set 1 of/)).toBeInTheDocument()
+  })
+  it('skips an exercise without logging it', async () => {
+    sb.set('fitness_plans', { data: withWorkoutOn('Friday'), error: null })
+    show()
+    await userEvent.click(await screen.findByText('Start workout'))
+    const first = saved().exerciseNames[0]
+    await userEvent.click(screen.getByText('Skip exercise'))
+    expect(saved().exIdx).toBe(1)
+    expect(saved().setCounts[0]).toBe(0)
+    expect(screen.queryByRole('heading', { name: first })).toBeNull()
+  })
+})
+

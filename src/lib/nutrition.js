@@ -153,14 +153,14 @@ export function calculateNutritionTargets({ sex, weightLb, heightCm, age, activi
 // ── Display helpers ───────────────────────────────────────────────────────────
 
 export const GOAL_LABELS = {
-  lose_weight:          'Lose Weight',
-  build_muscle:         'Build Muscle',
-  improve_strength:     'Improve Strength',
-  improve_endurance:    'Improve Endurance',
-  athletic_performance: 'Athletic Performance',
-  maintain_weight:      'Maintain Weight',
-  general_fitness:      'General Fitness',
-  mobility_flexibility: 'Mobility & Flexibility',
+  lose_weight:          'Lose weight',
+  build_muscle:         'Build muscle',
+  improve_strength:     'Improve strength',
+  improve_endurance:    'Improve endurance',
+  athletic_performance: 'Athletic performance',
+  maintain_weight:      'Maintain weight',
+  general_fitness:      'General fitness',
+  mobility_flexibility: 'Mobility and flexibility',
 }
 
 export const GOAL_ICONS = {

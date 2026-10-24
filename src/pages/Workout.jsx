@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Icon } from '@iconify/react'
+import { Button, BackLink, Card, SectionTitle, Skeleton, Chip, Sheet, Segmented, InlineError } from '../components/ui/index.js'
 import { EXERCISES, getTodaysExercises, todayKey, fmtTime, getExerciseIcon } from '../lib/data.js'
 import { fetchWorkoutHistory, saveWorkoutEntry, fetchCustomWorkouts, saveCustomWorkout, deleteCustomWorkout } from '../lib/api.js'
 import { fetchActivePlan } from '../lib/fitnessApi.js'
@@ -7,6 +8,9 @@ import { DemoButton, ExerciseDemoSheet } from '../components/ExerciseDemo.jsx'
 import { buildExerciseHistory, getRecords, suggestNext, parseRepRange, findNewPRs } from '../lib/progress.js'
 import { BADGES, computeEarnedBadges } from '../lib/badges.js'
 import { fetchBadges, awardBadges } from '../lib/progressApi.js'
+import { tok } from '../lib/tokens.js'
+import { loadPending, queueWorkout, flushPending } from '../lib/pendingWorkouts.js'
+import { useUnit } from '../lib/units.js'
 
 const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 const dayIdx = new Date().getDay()
@@ -24,10 +28,12 @@ function matchPlanExercises(planExercises) {
 const FREE_WORKOUT_LIMIT = 3
 
 export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgrade, onOpenPage }) {
+  const { unit, toLb } = useUnit()
   const [screen, setScreen]                   = useState('home')
   const [activeExercises, setActiveExercises] = useState([])
   const [activeWorkoutName, setActiveWorkoutName] = useState('')
   const [totalSets, setTotalSets]             = useState(3)
+  const [setCounts, setSetCounts]             = useState([]) // per-exercise overrides of totalSets (sets added or skipped)
   const [restDuration, setRestDuration]       = useState(60)
   const [restPerExercise, setRestPerExercise] = useState([]) // per-exercise overrides from AI plan
   const [exIdx, setExIdx]                     = useState(0)
@@ -46,6 +52,8 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
   const [sessionPRs, setSessionPRs]           = useState([])
   const [earnedBadgeIds, setEarnedBadgeIds]   = useState(null)
   const [sessionBadges, setSessionBadges]     = useState([])
+  const [lastSave, setLastSave]               = useState('saving') // saving | saved | queued, for the done screen
+  const [pendingCount, setPendingCount]       = useState(() => loadPending().length)
 
   const exerciseHistory = useMemo(() => buildExerciseHistory(history), [history])
 
@@ -61,6 +69,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       exIdx: overrides.exIdx ?? exIdx,
       setIdx: overrides.setIdx ?? setIdx,
       loggedSets: overrides.loggedSets ?? loggedSets,
+      setCounts: overrides.setCounts ?? setCounts,
       startTime,
       freeWorkout,
     }
@@ -76,7 +85,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
 
     // Today's workout depends on all three, so reveal it once they've all settled
     Promise.allSettled([
-      fetchWorkoutHistory().then(h => setHistory(h)),
+      fetchWorkoutHistory().then(h => setHistory([...loadPending().map(asPending), ...h])),
       fetchCustomWorkouts().then(w => setCustomWorkouts(w)),
       fetchActivePlan().then(plan => {
         if (!plan?.plan_data?.weeklySchedule) return
@@ -86,7 +95,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
           setPlanWorkout(todayDay)  // store full dayData, same shape Plan.jsx uses
         }
       }),
-    ]).then(() => setHomeReady(true))
+    ]).then(() => { setHomeReady(true); retryPending() })
 
     // Restore in-progress workout
     try {
@@ -104,6 +113,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       setExIdx(s.exIdx || 0)
       setSetIdx(s.setIdx || 0)
       setLoggedSets(s.loggedSets || [])
+      setSetCounts(s.setCounts || [])
       setStartTime(s.startTime)
       setFreeWorkout(s.freeWorkout || false)
       const validScreens = ['rest', 'exercise-picker']
@@ -122,7 +132,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
     setActiveExercises(exercises)
     setActiveWorkoutName(name)
     setRestPerExercise([])
-    setExIdx(0); setSetIdx(0); setLoggedSets([])
+    setExIdx(0); setSetIdx(0); setLoggedSets([]); setSetCounts([])
     setWeight(''); setReps('')
     setFreeWorkout(false)
     setScreen('config')
@@ -137,7 +147,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
     setRestPerExercise(perExRest)
     setFreeWorkout(false)
     const t = Date.now()
-    setExIdx(0); setSetIdx(0); setLoggedSets([])
+    setExIdx(0); setSetIdx(0); setLoggedSets([]); setSetCounts([])
     setWeight(''); setReps('')
     setStartTime(t)
     localStorage.setItem('athrion_workout', JSON.stringify({
@@ -152,7 +162,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
   function startFreeWorkout() {
     setActiveExercises([])
     setActiveWorkoutName('Free workout')
-    setExIdx(0); setSetIdx(0); setLoggedSets([])
+    setExIdx(0); setSetIdx(0); setLoggedSets([]); setSetCounts([])
     setWeight(''); setReps('')
     setFreeWorkout(true)
     setScreen('config')
@@ -182,10 +192,35 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
     setCustomWorkouts(prev => prev.filter(w => w.id !== id))
   }
 
+  // Retry when the connection comes back
+  useEffect(() => {
+    const onOnline = () => retryPending()
+    window.addEventListener('online', onOnline)
+    return () => window.removeEventListener('online', onOnline)
+  }, [])
+
+  // history is newest-first; a workout that fails to save is queued on this device, never dropped
   async function saveHistory(entry) {
-    let saved = { ...entry, created_at: new Date().toISOString() }
-    try { saved = await saveWorkoutEntry(entry) } catch {}
-    setHistory(prev => [saved, ...prev]) // history is newest-first
+    setLastSave('saving')
+    try {
+      const saved = await saveWorkoutEntry(entry)
+      setHistory(prev => [saved, ...prev])
+      setLastSave('saved')
+    } catch {
+      const queued = { ...entry, created_at: new Date().toISOString() }
+      queueWorkout(queued)
+      setHistory(prev => [asPending(queued), ...prev])
+      setPendingCount(loadPending().length)
+      setLastSave('queued')
+    }
+  }
+
+  async function retryPending() {
+    if (!loadPending().length) return
+    const { saved, left } = await flushPending(saveWorkoutEntry)
+    setPendingCount(left)
+    if (saved.length) setHistory(prev => [...loadPending().map(asPending), ...saved, ...prev.filter(h => !h.pending)])
+    setLastSave(left ? 'queued' : 'saved')
   }
 
   async function handleSaveAsWorkout(name, exerciseNames) {
@@ -201,7 +236,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
     const duration = Math.round((Date.now() - startTime) / 60000)
     const volume = loggedSets.reduce((a, s) => a + s.weight * s.reps, 0)
     // Compare against history before this session is added to it
-    setSessionPRs(findNewPRs(loggedSets, history))
+    setSessionPRs(findNewPRs(loggedSets, history, unit))
     setSessionBadges([])
     if (loggedSets.length > 0 && (duration >= 2 || volume >= 10)) {
       const entry = { date: todayKey(), name: activeWorkoutName, duration: `${duration}min`, volume, sets: loggedSets }
@@ -218,6 +253,59 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       }
     }
     setScreen('done')
+  }
+
+  // ── Set and exercise controls ─────────────────────────────────────────────
+  const setsFor = i => setCounts[i] ?? totalSets
+
+  function goToNextExercise(counts = setCounts) {
+    localStorage.removeItem('athrion_rest_end')
+    setSetIdx(0); setWeight(''); setReps('')
+    if (freeWorkout) {
+      persistWorkout({ screen: 'exercise-picker', setIdx: 0, setCounts: counts })
+      setScreen('exercise-picker')
+      return
+    }
+    const nextEx = exIdx + 1
+    if (nextEx >= activeExercises.length) return handleEndWorkout()
+    setExIdx(nextEx)
+    persistWorkout({ screen: 'training', exIdx: nextEx, setIdx: 0, setCounts: counts })
+    setScreen('training')
+  }
+
+  function changeSetCount(next) {
+    const counts = [...setCounts]
+    counts[exIdx] = next
+    setSetCounts(counts)
+    return counts
+  }
+
+  function handleAddSet() {
+    persistWorkout({ setCounts: changeSetCount(setsFor(exIdx) + 1) })
+  }
+
+  // Stop this exercise now: what was logged counts as done, the rest are skipped
+  function handleFinishExercise() {
+    const done = loggedSets.filter(s => s.ex === activeExercises[exIdx]?.name).length
+    goToNextExercise(changeSetCount(done))
+  }
+
+  // i indexes loggedSets; weight comes in the person's unit
+  function handleEditSet(i, { weight: w, reps: r }) {
+    const next = loggedSets.map((s, j) => (j === i ? { ...s, weight: toLb(parseFloat(w) || 0), reps: parseInt(r) || 0 } : s))
+    setLoggedSets(next)
+    persistWorkout({ loggedSets: next })
+  }
+
+  function handleDeleteSet(i) {
+    const ex = loggedSets[i].ex
+    let n = 0
+    const next = loggedSets.filter((_, j) => j !== i).map(s => (s.ex === ex ? { ...s, set: ++n } : s))
+    setLoggedSets(next)
+    const curName = activeExercises[exIdx]?.name
+    const nextSetIdx = ex === curName ? n : setIdx
+    setSetIdx(nextSetIdx)
+    persistWorkout({ loggedSets: next, setIdx: nextSetIdx })
   }
 
   // ── Screens ────────────────────────────────────────────────────────────────
@@ -238,6 +326,8 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       isPro={isPro}
       onUpgrade={onUpgrade}
       onOpenPage={onOpenPage}
+      pendingCount={pendingCount}
+      onRetryPending={retryPending}
     />
   )
 
@@ -258,7 +348,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       onBack={() => setScreen('home')}
       onBegin={() => {
         const t = Date.now()
-        setExIdx(0); setSetIdx(0); setLoggedSets([])
+        setExIdx(0); setSetIdx(0); setLoggedSets([]); setSetCounts([])
         setWeight(''); setReps('')
         setStartTime(t)
         const nextScreen = freeWorkout ? 'exercise-picker' : 'training'
@@ -295,13 +385,15 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
     <TrainingScreen
       exerciseHistory={exerciseHistory}
       exercises={activeExercises}
-      exIdx={exIdx} setIdx={setIdx} totalSets={totalSets}
+      exIdx={exIdx} setIdx={setIdx} setsFor={setsFor}
       loggedSets={loggedSets} weight={weight} setWeight={setWeight}
+      onAddSet={handleAddSet} onFinishExercise={handleFinishExercise}
+      onEditSet={handleEditSet} onDeleteSet={handleDeleteSet}
       reps={reps} setReps={setReps}
       freeWorkout={freeWorkout}
       onEnd={handleEndWorkout}
       onLog={() => {
-        const w = parseFloat(weight) || 0
+        const w = toLb(parseFloat(weight) || 0) // typed in the person's unit, stored in lb
         const r = parseInt(reps) || 0
         const newLog = [...loggedSets, { ex: activeExercises[exIdx].name, set: setIdx + 1, weight: w, reps: r }]
         setLoggedSets(newLog)
@@ -318,27 +410,14 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
   if (screen === 'rest') return (
     <RestScreen
       exercises={activeExercises}
-      restDuration={currentRest} exIdx={exIdx} setIdx={setIdx} totalSets={totalSets}
+      restDuration={currentRest} exIdx={exIdx} setIdx={setIdx} totalSets={setsFor(exIdx)}
       freeWorkout={freeWorkout}
       onEnd={handleEndWorkout}
       onAdvance={() => {
         localStorage.removeItem('athrion_rest_end')
         const nextSet = setIdx + 1
-        if (nextSet >= totalSets) {
-          if (freeWorkout) {
-            setSetIdx(0); setWeight(''); setReps('')
-            persistWorkout({ screen: 'exercise-picker', setIdx: 0 })
-            setScreen('exercise-picker')
-          } else {
-            const nextEx = exIdx + 1
-            if (nextEx >= activeExercises.length) {
-              handleEndWorkout()
-            } else {
-              setExIdx(nextEx); setSetIdx(0); setWeight(''); setReps('')
-              persistWorkout({ screen: 'training', exIdx: nextEx, setIdx: 0 })
-              setScreen('training')
-            }
-          }
+        if (nextSet >= setsFor(exIdx)) {
+          goToNextExercise()
         } else {
           setSetIdx(nextSet); setWeight(''); setReps('')
           persistWorkout({ screen: 'training', setIdx: nextSet })
@@ -357,6 +436,8 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       freeWorkout={freeWorkout}
       activeExercises={activeExercises}
       onSaveWorkout={handleSaveAsWorkout}
+      saveStatus={lastSave}
+      onRetrySave={retryPending}
       onHome={() => { clearPersistedWorkout(); setScreen('home') }}
     />
   )
@@ -373,7 +454,8 @@ function upcomingWorkoutDays(schedule) {
     .sort((a, b) => ((order.indexOf(a.day) - dayIdx + 7) % 7) - ((order.indexOf(b.day) - dayIdx + 7) % 7))
 }
 
-function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade, onOpenPage }) {
+function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade, onOpenPage, pendingCount = 0, onRetryPending }) {
+  const { fmtVolume } = useUnit()
   const [selectedSession, setSelectedSession] = useState(null)
   const weekSessions = history.filter(h => (Date.now() - new Date(h.date)) < 7 * 86400000).length
   const totalMins = history.reduce((a, h) => a + (parseInt(h.duration) || 0), 0)
@@ -408,58 +490,63 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
   return (
     <div className="space-y-4 py-4 slide-up">
 
+      {pendingCount > 0 && (
+        <InlineError onRetry={onRetryPending}>
+          {pendingCount === 1 ? "1 workout isn't" : `${pendingCount} workouts aren't`} saved to your account yet. They're kept on this phone and will save when you're back online.
+        </InlineError>
+      )}
+
       {/* ── Stats ── */}
       <div className="grid grid-cols-2 gap-3">
-        <Card className="p-4">
-          <div className="text-sm font-semibold text-gray-200 mb-1">This week</div>
-          <div className="font-bold text-3xl text-white">{weekSessions} <span className="text-base text-gray-400">sessions</span></div>
+        <Card pad="md">
+          <div className="text-sm font-semibold text-ink-2 mb-1">This week</div>
+          <div className="font-bold text-3xl text-ink">{weekSessions} <span className="text-base text-muted">sessions</span></div>
         </Card>
-        <Card className="p-4">
-          <div className="text-sm font-semibold text-gray-200 mb-1">Total time</div>
-          <div className="font-bold text-3xl text-white">{(totalMins / 60).toFixed(1)}<span className="text-base text-gray-400">h</span></div>
+        <Card pad="md">
+          <div className="text-sm font-semibold text-ink-2 mb-1">Total time</div>
+          <div className="font-bold text-3xl text-ink">{(totalMins / 60).toFixed(1)}<span className="text-base text-muted">h</span></div>
         </Card>
       </div>
 
       {/* ── Today's Training — neon border, plan data straight from AI ── */}
       {!ready ? (
-        <div className="rounded-2xl border border-[#1e1e1e] bg-[#111] p-5 space-y-3 animate-pulse">
-          <div className="h-3 w-24 bg-[#1e1e1e] rounded" />
-          <div className="h-4 w-40 bg-[#1e1e1e] rounded" />
-          {[0, 1, 2, 3].map(i => <div key={i} className="h-12 bg-[#1a1a1a] rounded-xl" />)}
-          <div className="h-12 bg-[#1a1a1a] rounded-xl" />
-        </div>
+        <Card pad="lg" role="status" aria-label="Loading today's training" className="space-y-3">
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-5 w-40" />
+          {[0, 1, 2, 3].map(i => <Skeleton key={i} className="h-12 rounded-xl" />)}
+          <Skeleton className="h-12 rounded-xl" />
+        </Card>
       ) : (
-      <div className="rounded-2xl border border-neon/30">
-        <div className="bg-[#111] rounded-2xl p-5">
+      <Card hero>
 
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
             <div>
-              <div className="text-sm font-semibold text-gray-200 mb-0.5">Today's training</div>
-              <div className="font-bold text-base text-white">{isRestDay ? todayPlan.title : planWorkout ? planName : fallbackName}</div>
+              <div className="text-xs font-medium text-muted mb-0.5">Today's training</div>
+              <div className="text-lg leading-[1.3] font-semibold text-ink">{isRestDay ? todayPlan.title : planWorkout ? planName : fallbackName}</div>
               {!isRestDay && planWorkout?.durationMinutes && (
-                <div className="text-xs text-gray-400 mt-0.5">{planWorkout.durationMinutes} min · {planExercises.length} exercises</div>
+                <div className="text-xs text-muted mt-0.5">{planWorkout.durationMinutes} min · {planExercises.length} exercises</div>
               )}
             </div>
-            {isRestDay && <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-[#222] text-gray-300 capitalize">{todayPlan.type.replace('_', ' ')}</span>}
+            {isRestDay && <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-line text-ink-2 capitalize">{todayPlan.type.replace('_', ' ')}</span>}
           </div>
 
           {isRestDay && (
             <div className="mb-4">
-              <p className="text-xs text-gray-400 leading-relaxed">{todayPlan.recoveryNotes || 'Recovery is part of the plan. Your muscles grow while you rest.'}</p>
+              <p className="text-xs text-muted leading-relaxed">{todayPlan.recoveryNotes || 'Recovery is part of the plan. Your muscles grow while you rest.'}</p>
               {otherDays.length > 0 && (
                 <>
-                  <div className="text-xs text-gray-400 mt-4 mb-2">Want to train anyway?</div>
+                  <div className="text-xs text-muted mt-4 mb-2">Want to train anyway?</div>
                   <div className="flex flex-wrap gap-1.5">
                     {otherDays.map(d => (
                       <button key={d.day} onClick={() => setPickedDay(d)}
-                        className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all text-left ${shownWorkout === d ? 'bg-neon/15 text-neon border-neon/30' : 'bg-[#1a1a1a] text-gray-400 border-[#2a2a2a] hover:text-white'}`}>
+                        className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all text-left ${shownWorkout === d ? 'bg-neon/15 text-neon-ink border-neon-stroke/30' : 'bg-raised text-muted border-line-strong hover:text-ink'}`}>
                         <span className="font-semibold">{d.day.slice(0, 3)}</span> · {d.title}
                       </button>
                     ))}
                   </div>
                   {shownWorkout?.durationMinutes && (
-                    <div className="text-xs text-gray-400 mt-2">{shownWorkout.durationMinutes} min · {planExercises.length} exercises</div>
+                    <div className="text-xs text-muted mt-2">{shownWorkout.durationMinutes} min · {planExercises.length} exercises</div>
                   )}
                 </>
               )}
@@ -470,11 +557,11 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
           {shownWorkout ? (
             <div className="space-y-2 mb-5">
               {planExercises.map((ex, i) => (
-                <div key={i} className="flex items-start gap-3 bg-[#1a1a1a] rounded-xl px-3 py-2.5">
-                  <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-gray-400 mt-0.5" />
+                <div key={i} className="flex items-start gap-3 bg-raised rounded-xl px-3 py-2.5">
+                  <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-muted mt-0.5" />
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-white leading-snug break-words">{ex.name}</div>
-                    <div className="text-xs text-gray-400 mt-0.5">
+                    <div className="text-sm font-semibold text-ink leading-snug break-words">{ex.name}</div>
+                    <div className="text-xs text-muted mt-0.5">
                       {[ex.sets > 1 ? `${ex.sets} sets × ${ex.reps}` : ex.reps,
                         ex.restSeconds > 0 && `${ex.restSeconds}s rest`,
                         ex.equipment].filter(Boolean).join(' · ')}
@@ -487,11 +574,11 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
           ) : !isRestDay && (
             <div className="space-y-1 mb-5">
               {fallbackExs.map((ex, i) => (
-                <div key={i} className="flex items-center gap-3 py-2 border-b border-[#1a1a1a] last:border-0">
-                  <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-gray-400" />
+                <div key={i} className="flex items-center gap-3 py-2 border-b border-line last:border-0">
+                  <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-muted" />
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm truncate">{ex.name}</div>
-                    <div className="text-xs text-gray-400">{ex.muscle}</div>
+                    <div className="text-xs text-muted">{ex.muscle}</div>
                   </div>
                   <DemoButton name={ex.name} />
                 </div>
@@ -500,18 +587,12 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
           )}
 
           {(!isRestDay || shownWorkout) && (
-            <NeonBtn onClick={shownWorkout ? handlePlanStart : () => onStart(fallbackExs, fallbackName)} className="w-full">
+            <Button full onClick={shownWorkout ? handlePlanStart : () => onStart(fallbackExs, fallbackName)}>
               {isRestDay ? 'Train anyway' : 'Start workout'}
-            </NeonBtn>
+            </Button>
           )}
-          <button
-            onClick={onFreeStart}
-            className="w-full mt-2.5 py-3 rounded-xl border border-[#2a2a2a] bg-[#0d0d0d] text-gray-400 hover:text-white hover:border-[#444] text-sm font-semibold transition-all"
-          >
-            + Free workout
-          </button>
-        </div>
-      </div>
+          <Button variant="ghost" full icon="mdi:plus" onClick={onFreeStart} className="mt-2">Free workout</Button>
+      </Card>
       )}
 
       {/* ── More ways to train (live inside this tab) ── */}
@@ -522,41 +603,41 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
             { id: 'group', icon: 'mdi:account-group-outline', title: 'Train together', sub: 'Live session with friends' },
           ].map(l => (
             <button key={l.id} onClick={() => onOpenPage(l.id)}
-              className="text-left bg-[#111] border border-[#222] hover:border-neon/30 rounded-2xl p-4 transition-colors">
-              <Icon icon={l.icon} width={24} className="text-neon mb-2" />
-              <div className="text-sm font-semibold text-white">{l.title}</div>
-              <div className="text-xs text-gray-400 mt-0.5 leading-snug">{l.sub}</div>
+              className="text-left bg-surface border border-line hover:border-neon-stroke/30 rounded-2xl p-4 transition-colors">
+              <Icon icon={l.icon} width={24} className="text-neon-ink mb-2" />
+              <div className="text-sm font-semibold text-ink">{l.title}</div>
+              <div className="text-xs text-muted mt-0.5 leading-snug">{l.sub}</div>
             </button>
           ))}
         </div>
       )}
 
       {/* ── My Workouts ── */}
-      <Card className="p-5">
+      <Card pad="lg">
         <div className="flex items-center justify-between mb-4">
-          <div className="text-sm font-semibold text-gray-200">My workouts</div>
+          <div className="text-lg leading-[1.3] font-semibold text-ink">My workouts</div>
           <div className="flex items-center gap-2">
             {!isPro && (
-              <span className="text-xs text-gray-400 font-semibold">{customWorkouts.length}/{FREE_WORKOUT_LIMIT}</span>
+              <span className="text-xs text-muted font-semibold">{customWorkouts.length}/{FREE_WORKOUT_LIMIT}</span>
             )}
             <button
               onClick={!isPro && customWorkouts.length >= FREE_WORKOUT_LIMIT ? onUpgrade : onCreateNew}
               className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all ${
                 !isPro && customWorkouts.length >= FREE_WORKOUT_LIMIT
-                  ? 'text-gray-400 border border-[#2a2a2a] bg-[#1a1a1a] hover:border-neon/30 hover:text-neon'
-                  : 'text-neon border border-neon/30 bg-neon/10 hover:bg-neon/20'
+                  ? 'text-muted border border-line-strong bg-raised hover:border-neon-stroke/30 hover:text-neon-ink'
+                  : 'text-neon-ink border border-neon-stroke/30 bg-neon/10 hover:bg-neon/20'
               }`}
             >
-              {!isPro && customWorkouts.length >= FREE_WORKOUT_LIMIT ? 'Upgrade' : '+ New'}
+              {!isPro && customWorkouts.length >= FREE_WORKOUT_LIMIT ? 'Get Pro' : <span className="inline-flex items-center gap-1"><Icon icon="mdi:plus" width={14} />New</span>}
             </button>
           </div>
         </div>
 
         {customWorkouts.length === 0 ? (
           <div className="text-center py-6">
-            <div className="text-gray-400 text-sm mb-3">No custom workouts yet</div>
-            <button onClick={onCreateNew} className="text-xs text-neon hover:text-white transition-colors">
-              Create your first workout →
+            <div className="text-muted text-sm mb-3">No custom workouts yet</div>
+            <button onClick={onCreateNew} className="text-xs text-neon-ink hover:text-ink transition-colors">
+              Create your first workout
             </button>
           </div>
         ) : (
@@ -564,26 +645,21 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
             {customWorkouts.map(w => {
               const exs = (w.exercises || []).map(n => EXERCISES.find(e => e.name === n)).filter(Boolean)
               return (
-                <div key={w.id} className="flex items-center gap-3 bg-[#0d0d0d] rounded-xl px-3 py-2.5">
+                <div key={w.id} className="flex items-center gap-3 bg-inset rounded-xl px-3 py-2.5">
                   <div className="flex gap-0.5 flex-shrink-0">
                     {exs.slice(0, 4).map((ex, i) => (
-                      <Icon key={i} icon={getExerciseIcon(ex)} width={16} className="text-gray-400" />
+                      <Icon key={i} icon={getExerciseIcon(ex)} width={16} className="text-muted" />
                     ))}
-                    {exs.length > 4 && <span className="text-[11px] text-gray-400 self-center ml-0.5">+{exs.length - 4}</span>}
+                    {exs.length > 4 && <span className="text-2xs text-muted self-center ml-0.5">+{exs.length - 4}</span>}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-xs truncate">{w.name}</div>
-                    <div className="text-xs text-gray-400">{exs.length} exercises</div>
+                    <div className="text-xs text-muted">{exs.length} exercises</div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <button onClick={() => onEdit(w)} className="text-xs text-gray-400 hover:text-white transition-colors">Edit</button>
-                    <button onClick={() => onDelete(w.id)} className="text-xs text-red-600 hover:text-red-400 transition-colors">Del</button>
-                    <button
-                      onClick={() => onStart(exs, w.name)}
-                      className="bg-neon text-black font-bold py-1 px-3 rounded-lg text-xs transition-all"
-                    >
-                      Start
-                    </button>
+                    <button onClick={() => onEdit(w)} className="press min-h-[36px] px-1.5 text-xs font-semibold text-muted hover:text-ink transition-colors">Edit</button>
+                    <button onClick={() => onDelete(w.id)} className="press min-h-[36px] px-1.5 text-xs font-semibold text-danger hover:underline transition-colors">Del</button>
+                    <Button size="sm" onClick={() => onStart(exs, w.name)}>Start</Button>
                   </div>
                 </div>
               )
@@ -594,26 +670,26 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
 
       {/* ── Recent Sessions ── */}
       {history.length > 0 && (
-        <Card className="p-4">
-          <div className="text-sm font-semibold text-gray-200 mb-2">Recent sessions</div>
-          <div className="grid grid-cols-[1fr_4rem_4rem] gap-2 px-2 pb-1 border-b border-[#1a1a1a]">
-            <span className="text-[11px] text-gray-500">Workout</span>
-            <span className="text-[11px] text-gray-500 text-right">Volume</span>
-            <span className="text-[11px] text-gray-500 text-right">Time</span>
+        <Card pad="md">
+          <div className="text-lg leading-[1.3] font-semibold text-ink mb-2">Recent sessions</div>
+          <div className="grid grid-cols-[1fr_4rem_4rem] gap-2 px-2 pb-1 border-b border-line">
+            <span className="text-2xs text-muted">Workout</span>
+            <span className="text-2xs text-muted text-right">Volume</span>
+            <span className="text-2xs text-muted text-right">Time</span>
           </div>
           <div>
             {[...history].slice(0, 7).map((h, i) => (
               <button
                 key={i}
                 onClick={() => setSelectedSession(h)}
-                className="w-full grid grid-cols-[1fr_4rem_4rem] gap-2 items-center px-2 py-1.5 hover:bg-[#1a1a1a] rounded-lg transition-colors text-left border-b border-[#111] last:border-0"
+                className="w-full grid grid-cols-[1fr_4rem_4rem] gap-2 items-center px-2 py-1.5 hover:bg-raised rounded-lg transition-colors text-left border-b border-line last:border-0"
               >
                 <div className="min-w-0">
                   <div className="font-medium text-xs truncate">{h.name}</div>
-                  <div className="text-xs text-gray-400">{h.date}</div>
+                  <div className="text-xs text-muted">{h.date}</div>
                 </div>
-                <div className="text-right font-bold text-xs text-neon">{h.volume ? `${h.volume}lb` : '—'}</div>
-                <div className="text-right text-xs text-gray-400">{h.duration}</div>
+                <div className="text-right font-bold text-xs text-neon-ink">{h.volume ? fmtVolume(h.volume) : '—'}</div>
+                <div className="text-right text-xs text-muted">{h.duration}</div>
               </button>
             ))}
           </div>
@@ -670,10 +746,10 @@ function BuilderScreen({ workout, onSave, onBack }) {
     <div className="space-y-4 py-4 slide-up">
       {/* Header */}
       <div>
-        <button onClick={onBack} className="text-gray-400 text-sm hover:text-white transition-colors mb-3">← Back</button>
+        <BackLink onClick={onBack} className="mb-3" />
         <input
-          className="w-full bg-transparent border-b border-[#333] focus:border-neon text-white text-2xl font-bold outline-none pb-1 placeholder-[#333] transition-colors"
-          placeholder="WORKOUT NAME"
+          className="w-full bg-transparent border-b border-line-strong focus:border-neon-stroke text-ink text-2xl font-bold outline-none pb-1 placeholder:text-placeholder transition-colors"
+          placeholder="Workout name"
           value={name}
           onChange={e => setName(e.target.value)}
         />
@@ -681,33 +757,33 @@ function BuilderScreen({ workout, onSave, onBack }) {
 
       {/* Selected exercises */}
       {selected.length > 0 && (
-        <Card className="p-4">
-          <div className="text-xs text-gray-400 mb-3">
-            Your Workout · {selected.length} exercise{selected.length !== 1 ? 's' : ''}
+        <Card pad="md">
+          <div className="text-xs text-muted mb-3">
+            Your workout · {selected.length} exercise{selected.length !== 1 ? 's' : ''}
           </div>
           <div className="space-y-2">
             {selected.map((exName, i) => {
               const ex = EXERCISES.find(e => e.name === exName)
               return (
-                <div key={i} className="flex items-center gap-2 bg-[#0d0d0d] rounded-xl p-3">
-                  <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-gray-400" />
+                <div key={i} className="flex items-center gap-2 bg-inset rounded-xl p-3">
+                  <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-muted" />
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm truncate">{exName}</div>
-                    <div className="text-xs text-gray-400">{ex?.muscle}</div>
+                    <div className="text-xs text-muted">{ex?.muscle}</div>
                   </div>
                   <div className="flex items-center gap-0.5 flex-shrink-0">
                     <button
-                      onClick={() => moveUp(i)} disabled={i === 0}
-                      className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-white disabled:opacity-20 transition-colors text-sm"
-                    >↑</button>
+                      onClick={() => moveUp(i)} disabled={i === 0} aria-label={`Move ${exName} up`}
+                      className="press w-9 h-9 rounded-md flex items-center justify-center text-muted hover:text-ink hover:bg-raised disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                    ><Icon icon="mdi:chevron-up" width={20} /></button>
                     <button
-                      onClick={() => moveDown(i)} disabled={i === selected.length - 1}
-                      className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-white disabled:opacity-20 transition-colors text-sm"
-                    >↓</button>
+                      onClick={() => moveDown(i)} disabled={i === selected.length - 1} aria-label={`Move ${exName} down`}
+                      className="press w-9 h-9 rounded-md flex items-center justify-center text-muted hover:text-ink hover:bg-raised disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                    ><Icon icon="mdi:chevron-down" width={20} /></button>
                     <button
-                      onClick={() => remove(i)}
-                      className="w-8 h-8 flex items-center justify-center text-red-400 hover:text-red-300 transition-colors text-base"
-                    >×</button>
+                      onClick={() => remove(i)} aria-label={`Remove ${exName}`}
+                      className="press w-9 h-9 rounded-md flex items-center justify-center text-danger hover:bg-danger/12 transition-colors"
+                    ><Icon icon="mdi:close" width={18} /></button>
                   </div>
                 </div>
               )
@@ -718,16 +794,16 @@ function BuilderScreen({ workout, onSave, onBack }) {
 
       {/* Save button */}
       {selected.length > 0 && name.trim() && (
-        <NeonBtn onClick={handleSave} disabled={saving} className="w-full">
+        <Button full onClick={handleSave} disabled={saving}>
           {saving ? 'Saving...' : workout.id ? 'Save changes' : 'Create workout'}
-        </NeonBtn>
+        </Button>
       )}
 
       {/* Exercise library */}
-      <Card className="p-4">
-        <div className="text-sm font-semibold text-gray-200 mb-3">Exercise library</div>
+      <Card pad="md">
+        <div className="text-lg leading-[1.3] font-semibold text-ink mb-3">Exercise library</div>
         <input
-          className="w-full bg-[#0d0d0d] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-3 py-2.5 text-sm outline-none transition-colors mb-3"
+          className="w-full bg-inset border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-3 py-2.5 text-sm outline-none transition-colors mb-3"
           placeholder="Search by name or muscle..."
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -735,15 +811,7 @@ function BuilderScreen({ workout, onSave, onBack }) {
         {/* Muscle filter chips */}
         <div className="flex gap-1.5 overflow-x-auto pb-2 mb-3" style={{ scrollbarWidth: 'none' }}>
           {muscles.map(m => (
-            <button
-              key={m}
-              onClick={() => setFilter(m)}
-              className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
-                filter === m ? 'bg-neon text-black' : 'bg-[#1a1a1a] text-gray-400 border border-[#2a2a2a]'
-              }`}
-            >
-              {m}
-            </button>
+            <Chip key={m} selected={filter === m} onClick={() => setFilter(m)}>{m}</Chip>
           ))}
         </div>
 
@@ -751,22 +819,24 @@ function BuilderScreen({ workout, onSave, onBack }) {
           {filtered.map((ex, i) => {
             const added = selected.includes(ex.name)
             return (
-              <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-[#0d0d0d]">
-                <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-gray-400" />
+              <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-inset">
+                <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-muted" />
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm truncate">{ex.name}</div>
-                  <div className="text-xs text-gray-400">{ex.muscle} · {ex.equipment}</div>
+                  <div className="text-xs text-muted">{ex.muscle} · {ex.equipment}</div>
                 </div>
                 <button
                   onClick={() => add(ex.name)}
                   disabled={added}
                   className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                     added
-                      ? 'bg-[#1a1a1a] text-gray-400 border border-[#2a2a2a] cursor-default'
-                      : 'bg-neon text-black'
+                      ? 'bg-raised text-muted border border-line-strong cursor-default'
+                      : 'bg-neon text-on-neon'
                   }`}
                 >
-                  {added ? '✓' : '+ Add'}
+                  {added
+                    ? <Icon icon="mdi:check" width={16} aria-label="Added" />
+                    : <span className="inline-flex items-center gap-1"><Icon icon="mdi:plus" width={14} />Add</span>}
                 </button>
               </div>
             )
@@ -784,45 +854,31 @@ function ConfigScreen({ exercises, free, totalSets, setTotalSets, restDuration, 
   return (
     <div className="space-y-4 py-4 slide-up">
       <div>
-        <button onClick={onBack} className="text-gray-400 text-sm hover:text-white transition-colors mb-3">← Back</button>
+        <BackLink onClick={onBack} className="mb-3" />
         <div className="font-bold text-3xl">{free ? 'Free workout' : 'Configure workout'}</div>
-        {free && <div className="text-sm text-gray-400 mt-1">Pick exercises as you go</div>}
+        {free && <div className="text-sm text-muted mt-1">Pick exercises as you go</div>}
       </div>
 
-      <Card className="p-5">
-        <div className="text-sm font-semibold text-gray-200 mb-4">Sets per Exercise</div>
-        <div className="flex gap-2">
-          {[2, 3, 4, 5].map(n => (
-            <button key={n} onClick={() => setTotalSets(n)}
-              className={`flex-1 py-3 rounded-xl font-bold text-lg transition-all ${totalSets === n ? 'bg-neon text-black' : 'bg-[#1a1a1a] text-white border border-[#2a2a2a]'}`}>
-              {n}
-            </button>
-          ))}
-        </div>
+      <Card pad="lg">
+        <div className="text-lg leading-[1.3] font-semibold text-ink mb-4">Sets per exercise</div>
+        <Segmented options={[2, 3, 4, 5].map(n => [n, String(n)])} value={totalSets} onChange={setTotalSets} label="Sets per exercise" kind="choice" scroll={false} />
       </Card>
 
-      <Card className="p-5">
-        <div className="text-sm font-semibold text-gray-200 mb-4">Rest duration</div>
-        <div className="flex gap-2">
-          {[30, 60, 90, 120].map(s => (
-            <button key={s} onClick={() => setRestDuration(s)}
-              className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all ${restDuration === s ? 'bg-neon text-black' : 'bg-[#1a1a1a] text-white border border-[#2a2a2a]'}`}>
-              {s}s
-            </button>
-          ))}
-        </div>
+      <Card pad="lg">
+        <div className="text-lg leading-[1.3] font-semibold text-ink mb-4">Rest duration</div>
+        <Segmented options={[30, 60, 90, 120].map(s => [s, `${s}s`])} value={restDuration} onChange={setRestDuration} label="Rest duration" kind="choice" scroll={false} />
       </Card>
 
       {!free && exercises.length > 0 && (
-        <Card className="p-5">
-          <div className="text-sm font-semibold text-gray-200 mb-3">Exercises</div>
+        <Card pad="lg">
+          <div className="text-lg leading-[1.3] font-semibold text-ink mb-3">Exercises</div>
           <div className="space-y-2">
             {exercises.map((ex, i) => (
-              <div key={i} className="flex items-center gap-3 bg-[#0d0d0d] rounded-xl p-3">
-                <Icon icon={getExerciseIcon(ex)} width={24} className="flex-shrink-0 text-gray-400" />
+              <div key={i} className="flex items-center gap-3 bg-inset rounded-xl p-3">
+                <Icon icon={getExerciseIcon(ex)} width={24} className="flex-shrink-0 text-muted" />
                 <div>
                   <div className="font-medium text-sm">{ex.name}</div>
-                  <div className="text-xs text-gray-400">{ex.muscle} · {totalSets} sets</div>
+                  <div className="text-xs text-muted">{ex.muscle} · {totalSets} sets</div>
                 </div>
               </div>
             ))}
@@ -830,7 +886,7 @@ function ConfigScreen({ exercises, free, totalSets, setTotalSets, restDuration, 
         </Card>
       )}
 
-      <NeonBtn onClick={onBegin} className="w-full">{free ? 'Pick first exercise →' : 'Begin training →'}</NeonBtn>
+      <Button full onClick={onBegin}>{free ? 'Pick first exercise' : 'Begin training'}</Button>
     </div>
   )
 }
@@ -838,138 +894,192 @@ function ConfigScreen({ exercises, free, totalSets, setTotalSets, restDuration, 
 // ─────────────────────────────────────────────────────────────────────────────
 // Training
 // ─────────────────────────────────────────────────────────────────────────────
-function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, totalSets, loggedSets, weight, setWeight, reps, setReps, onLog, onEnd, freeWorkout }) {
+function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, loggedSets, weight, setWeight, reps, setReps, onLog, onEnd, freeWorkout, onAddSet, onFinishExercise, onEditSet, onDeleteSet }) {
   const [confirmEnd, setConfirmEnd] = useState(false)
   const [showDemo, setShowDemo]     = useState(false)
+  const { unit, fromLb, fmt } = useUnit()
   const ex = exercises[exIdx]
   const setsDone = freeWorkout
     ? loggedSets.length
-    : (exIdx * totalSets + setIdx)
-  const setsTotal = freeWorkout ? null : exercises.length * totalSets
+    : exercises.slice(0, exIdx).reduce((a, _, i) => a + setsFor(i), 0) + setIdx
+  const setsTotal = freeWorkout ? null : exercises.reduce((a, _, i) => a + setsFor(i), 0)
+  const totalSets = setsFor(exIdx)
+  const thisExSets = loggedSets.map((s, i) => ({ ...s, i })).filter(s => s.ex === ex.name)
   const progress = freeWorkout ? null : (setsDone / setsTotal) * 100
   const prev = loggedSets.filter(s => s.ex === ex.name).slice(-1)[0]
   const pastSessions = exerciseHistory?.[ex.name] ?? []
   const lastSession = pastSessions[pastSessions.length - 1]
   const records = pastSessions.length ? getRecords(pastSessions) : null
-  const suggestion = suggestNext(pastSessions, parseRepRange(ex.reps))
+  const suggestion = suggestNext(pastSessions, { ...parseRepRange(ex.reps), unit })
 
   return (
     <div className="space-y-4 py-4 slide-in">
       {freeWorkout ? (
-        <div className="flex justify-between text-xs text-gray-400">
+        <div className="flex justify-between text-xs text-muted">
           <span>Free workout</span>
           <span>{setsDone} sets logged</span>
         </div>
       ) : (
         <div>
-          <div className="flex justify-between text-xs text-gray-400 mb-2">
+          <div className="flex justify-between text-xs text-muted mb-2">
             <span>Exercise {exIdx + 1}/{exercises.length}</span>
             <span>{Math.round(progress)}% done</span>
           </div>
-          <div className="h-1 bg-[#1e1e1e] rounded-full overflow-hidden">
+          <div className="h-1 bg-raised rounded-full overflow-hidden">
             <div className="h-full bg-neon rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
           </div>
         </div>
       )}
 
-      <div className="bg-[#0b0f00] border border-neon/30 rounded-2xl p-6 text-center">
+      <div className="bg-neon-tint border border-neon-stroke/30 rounded-2xl p-6 text-center">
         <div className="flex justify-center mb-3">
-          <Icon icon={getExerciseIcon(ex)} width={56} className="text-neon/80" />
+          <Icon icon={getExerciseIcon(ex)} width={56} className="text-neon-ink/80" />
         </div>
         <div className="font-bold text-3xl mb-1">{ex.name}</div>
-        <div className="text-gray-400 text-sm mb-1">{ex.muscle}</div>
-        <div className="text-xs text-gray-400 italic">{ex.tips}</div>
+        <div className="text-muted text-sm mb-1">{ex.muscle}</div>
+        <div className="text-xs text-muted italic">{ex.tips}</div>
         <button onClick={() => setShowDemo(true)}
-          className="mt-3 inline-flex items-center gap-1.5 text-xs text-neon border border-neon/30 px-3 py-1.5 rounded-lg hover:bg-neon/10">
+          className="mt-3 inline-flex items-center gap-1.5 text-xs text-neon-ink border border-neon-stroke/30 px-3 py-1.5 rounded-lg hover:bg-neon/10">
           <Icon icon="mdi:play-circle-outline" width={16} /> How to
         </button>
         {showDemo && <ExerciseDemoSheet name={ex.name} onClose={() => setShowDemo(false)} />}
       </div>
 
-      <Card className="p-4">
-        <div className="text-xs text-gray-400 mb-3">Set {setIdx + 1} of {totalSets}</div>
+      <Card pad="md">
+        <div className="text-xs text-muted mb-3">Set {setIdx + 1} of {totalSets}</div>
         <div className="flex gap-2">
           {Array.from({ length: totalSets }, (_, i) => (
-            <div key={i} className={`flex-1 h-2 rounded-full transition-all duration-300 ${i < setIdx ? 'bg-neon' : i === setIdx ? 'bg-neon ring-pulse' : 'bg-[#222]'}`} />
+            <div key={i} className={`flex-1 h-2 rounded-full transition-all duration-300 ${i < setIdx ? 'bg-neon' : i === setIdx ? 'bg-neon ring-2 ring-inset ring-ink' : 'bg-line'}`} />
           ))}
         </div>
       </Card>
 
-      <Card className="p-5">
-        <div className="text-xs text-gray-400 mb-3">Log Set {setIdx + 1}</div>
-        {prev && <div className="text-xs text-gray-400 mb-3">Previous set: {prev.weight}lb × {prev.reps} reps</div>}
+      <Card pad="lg">
+        <div className="text-xs text-muted mb-3">Log set {setIdx + 1}</div>
+        {prev && <div className="text-xs text-muted mb-3">Previous set: {fmt(prev.weight)} × {prev.reps} reps</div>}
         {!prev && suggestion && (
-          <div className="mb-4 bg-neon/5 border border-neon/20 rounded-xl p-3">
+          <div className="mb-4 bg-neon/5 border border-neon-stroke/20 rounded-xl p-3">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <div className="text-sm font-semibold text-gray-200">Try today</div>
-                <div className="font-bold text-xl text-neon leading-tight">
-                  {suggestion.weight > 0 ? `${suggestion.weight} lb × ${suggestion.reps}` : `${suggestion.reps} reps`}
+                <div className="text-sm font-semibold text-ink-2">Try today</div>
+                <div className="font-bold text-xl text-neon-ink leading-tight">
+                  {suggestion.weight > 0 ? `${fmt(suggestion.weight)} × ${suggestion.reps}` : `${suggestion.reps} reps`}
                 </div>
               </div>
-              <button onClick={() => { setWeight(String(suggestion.weight)); setReps(String(suggestion.reps)) }}
-                className="flex-shrink-0 text-xs font-semibold text-black bg-neon px-3 py-1.5 rounded-lg">
+              <button onClick={() => { setWeight(String(fromLb(suggestion.weight))); setReps(String(suggestion.reps)) }}
+                className="flex-shrink-0 text-xs font-semibold text-on-neon bg-neon px-3 py-1.5 rounded-lg">
                 Use
               </button>
             </div>
-            <div className="text-xs text-gray-400 mt-1">{suggestion.reason}</div>
-            <div className="text-xs text-gray-400 mt-1.5 flex flex-wrap gap-x-3">
-              {lastSession && <span>Last: {lastSession.sets.map(st => `${st.weight}×${st.reps}`).join(', ')}</span>}
-              {records?.maxWeight > 0 && <span>PR: {records.maxWeight} lb × {records.maxWeightReps}</span>}
+            <div className="text-xs text-muted mt-1">{suggestion.reason}</div>
+            <div className="text-xs text-muted mt-1.5 flex flex-wrap gap-x-3">
+              {lastSession && <span>Last: {lastSession.sets.map(st => `${fromLb(st.weight)}×${st.reps}`).join(', ')}</span>}
+              {records?.maxWeight > 0 && <span>PR: {fmt(records.maxWeight)} × {records.maxWeightReps}</span>}
             </div>
           </div>
         )}
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
-            <label className="text-xs text-gray-400 block mb-1">Weight (lb)</label>
-            <input type="number" placeholder="0" value={weight} onChange={e => setWeight(e.target.value)} min="0" step="0.5"
-              className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-4 py-3 text-sm outline-none transition-colors" />
+            <label className="text-xs text-muted block mb-1">Weight ({unit})</label>
+            <input type="number" placeholder="0" value={weight} onChange={e => setWeight(e.target.value)} min="0" step={unit === 'kg' ? 0.25 : 0.5}
+              className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-sm outline-none transition-colors" />
           </div>
           <div>
-            <label className="text-xs text-gray-400 block mb-1">Reps</label>
+            <label className="text-xs text-muted block mb-1">Reps</label>
             <input type="number" placeholder="0" value={reps} onChange={e => setReps(e.target.value)} min="1"
-              className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-4 py-3 text-sm outline-none transition-colors" />
+              className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-sm outline-none transition-colors" />
           </div>
         </div>
-        <NeonBtn onClick={onLog} className="w-full">Log set</NeonBtn>
+        <Button full onClick={onLog}>Log set</Button>
+        <div className="flex gap-2 mt-3">
+          <Button variant="secondary" size="sm" icon="mdi:plus" className="flex-1" onClick={onAddSet}>Add a set</Button>
+          <Button variant="secondary" size="sm" iconRight="mdi:skip-next" className="flex-1" onClick={onFinishExercise}>
+            {thisExSets.length ? (freeWorkout ? 'Next exercise' : 'Finish exercise') : 'Skip exercise'}
+          </Button>
+        </div>
       </Card>
+
+      {thisExSets.length > 0 && (
+        <LoggedSets sets={thisExSets} onEdit={onEditSet} onDelete={onDeleteSet} />
+      )}
 
       {confirmEnd ? (
         <div className="flex gap-3">
-          <button onClick={() => setConfirmEnd(false)}
-            className="flex-1 py-3 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] text-gray-300 font-semibold text-sm transition-all hover:border-[#444]">
-            Keep going
-          </button>
-          <button onClick={onEnd}
-            className="flex-1 py-3 rounded-xl bg-red-500/20 border border-red-500/40 text-red-400 font-semibold text-sm transition-all hover:bg-red-500/30">
-            End workout
-          </button>
+          <Button variant="secondary" className="flex-1" onClick={() => setConfirmEnd(false)}>Keep going</Button>
+          <Button variant="danger" className="flex-1" onClick={onEnd}>End workout</Button>
         </div>
       ) : (
         <button onClick={() => setConfirmEnd(true)}
-          className="w-full text-center text-xs text-gray-400 hover:text-gray-400 py-2 transition-colors">
+          className="w-full text-center text-xs text-muted hover:text-ink-2 py-2 min-h-[44px] transition-colors">
           End workout early
         </button>
       )}
 
       {!freeWorkout && (
-        <Card className="p-4">
-          <div className="text-sm font-semibold text-gray-200 mb-3">Queue</div>
+        <Card pad="md">
+          <div className="text-lg leading-[1.3] font-semibold text-ink mb-3">Queue</div>
           <div className="space-y-2">
             {exercises.map((e, i) => (
               <div key={i} className={`flex items-center gap-2 ${i < exIdx ? 'opacity-30' : ''}`}>
                 <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                  i < exIdx ? 'bg-neon text-black' : i === exIdx ? 'border-2 border-neon text-neon' : 'border border-[#333] text-gray-400'
+                  i < exIdx ? 'bg-neon text-on-neon' : i === exIdx ? 'border-2 border-neon-stroke text-neon-ink' : 'border border-line-strong text-muted'
                 }`}>
-                  {i < exIdx ? '✓' : i + 1}
+                  {i < exIdx ? <Icon icon="mdi:check" width={14} aria-label="Done" /> : i + 1}
                 </div>
-                <span className={`text-sm ${i === exIdx ? 'text-white font-medium' : 'text-gray-400'}`}>{e.name}</span>
+                <span className={`text-sm ${i === exIdx ? 'text-ink font-medium' : 'text-muted'}`}>{e.name}</span>
               </div>
             ))}
           </div>
         </Card>
       )}
     </div>
+  )
+}
+
+// Sets logged for the current exercise; each can be corrected or removed
+function LoggedSets({ sets, onEdit, onDelete }) {
+  const { unit, fromLb, fmt } = useUnit()
+  const [editing, setEditing] = useState(null) // index into loggedSets
+  const [draft, setDraft] = useState({ weight: '', reps: '' })
+  const field = 'w-full bg-raised border border-line focus:border-neon-stroke text-ink rounded-lg px-3 py-2 text-sm outline-none'
+
+  return (
+    <Card pad="md">
+      <div className="text-sm font-semibold text-ink-2 mb-2">Logged this exercise</div>
+      <ul className="divide-y divide-line">
+        {sets.map(s => (
+          <li key={s.i} className="py-2">
+            {editing === s.i ? (
+              <form className="flex items-end gap-2" onSubmit={e => { e.preventDefault(); onEdit(s.i, draft); setEditing(null) }}>
+                <label className="flex-1 text-xs text-muted">Weight ({unit})
+                  <input type="number" min="0" step={unit === 'kg' ? 0.25 : 0.5} value={draft.weight} autoFocus
+                    onChange={e => setDraft(d => ({ ...d, weight: e.target.value }))} className={`${field} mt-1`} />
+                </label>
+                <label className="flex-1 text-xs text-muted">Reps
+                  <input type="number" min="1" value={draft.reps}
+                    onChange={e => setDraft(d => ({ ...d, reps: e.target.value }))} className={`${field} mt-1`} />
+                </label>
+                <Button size="sm" type="submit">Save</Button>
+                <Button size="sm" variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
+              </form>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted w-12 flex-shrink-0">Set {s.set}</span>
+                <span className="flex-1 text-sm font-semibold text-ink">{s.weight > 0 ? `${fmt(s.weight)} × ${s.reps}` : `${s.reps} reps`}</span>
+                <button aria-label={`Edit set ${s.set}`} onClick={() => { setDraft({ weight: String(fromLb(s.weight)), reps: String(s.reps) }); setEditing(s.i) }}
+                  className="press w-11 h-11 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-raised">
+                  <Icon icon="mdi:pencil-outline" width={18} />
+                </button>
+                <button aria-label={`Delete set ${s.set}`} onClick={() => onDelete(s.i)}
+                  className="press w-11 h-11 rounded-full flex items-center justify-center text-muted hover:text-danger hover:bg-raised">
+                  <Icon icon="mdi:trash-can-outline" width={18} />
+                </button>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Card>
   )
 }
 
@@ -993,18 +1103,18 @@ function ExercisePickerScreen({ activeExercises, loggedSets, onPick, onEnd }) {
     <div className="space-y-4 py-4 slide-up">
       <div>
         <div className="font-bold text-3xl">Choose exercise</div>
-        <div className="text-sm text-gray-400 mt-1">
+        <div className="text-sm text-muted mt-1">
           {activeExercises.length === 0 ? 'Pick your first exercise' : `${loggedSets.length} sets logged · pick what's next`}
         </div>
       </div>
 
       {loggedSets.length > 0 && (
-        <NeonBtn onClick={onEnd} className="w-full">Finish workout →</NeonBtn>
+        <Button full onClick={onEnd}>Finish workout</Button>
       )}
 
-      <Card className="p-4">
+      <Card pad="md">
         <input
-          className="w-full bg-[#0d0d0d] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-3 py-2.5 text-sm outline-none transition-colors mb-3"
+          className="w-full bg-inset border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-3 py-2.5 text-sm outline-none transition-colors mb-3"
           placeholder="Search exercises..."
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -1013,12 +1123,7 @@ function ExercisePickerScreen({ activeExercises, loggedSets, onPick, onEnd }) {
 
         <div className="flex gap-1.5 overflow-x-auto pb-2 mb-3" style={{ scrollbarWidth: 'none' }}>
           {muscles.map(m => (
-            <button key={m} onClick={() => setFilter(m)}
-              className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
-                filter === m ? 'bg-neon text-black' : 'bg-[#1a1a1a] text-gray-400 border border-[#2a2a2a]'
-              }`}>
-              {m}
-            </button>
+            <Chip key={m} selected={filter === m} onClick={() => setFilter(m)}>{m}</Chip>
           ))}
         </div>
 
@@ -1026,20 +1131,19 @@ function ExercisePickerScreen({ activeExercises, loggedSets, onPick, onEnd }) {
           {filtered.map((ex, i) => {
             const already = doneNames.has(ex.name)
             return (
-              <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-[#0d0d0d]">
-                <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-gray-400" />
+              <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-inset">
+                <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-muted" />
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm truncate">{ex.name}</div>
-                  <div className="text-xs text-gray-400">{ex.muscle} · {ex.equipment}</div>
+                  <div className="text-xs text-muted">{ex.muscle} · {ex.equipment}</div>
                 </div>
                 {already && (
-                  <span className="text-xs text-neon/50 flex-shrink-0">done</span>
+                  <span className="text-xs text-neon-ink/50 flex-shrink-0">done</span>
                 )}
-                <button
-                  onClick={() => onPick(ex)}
-                  className="flex-shrink-0 bg-neon text-black font-bold px-3 py-1.5 rounded-lg text-xs transition-all">
-                  Go →
-                </button>
+                <Button
+                  onClick={() => onPick(ex)}>
+                  Go
+                </Button>
               </div>
             )
           })}
@@ -1090,47 +1194,41 @@ function RestScreen({ exercises, restDuration, exIdx, setIdx, totalSets, onAdvan
   return (
     <div className="flex flex-col items-center justify-center min-h-[70vh] space-y-8 fade-in">
       <div className="text-center">
-        <div className="text-sm font-semibold text-gray-200 mb-1">Rest</div>
-        <div className="text-white font-medium">{exercises[exIdx].name} — Set {setIdx + 1} done ✓</div>
+        <div className="text-sm font-semibold text-ink-2 mb-1">Rest</div>
+        <div className="text-ink font-medium flex items-center justify-center gap-1.5">
+          <Icon icon="mdi:check-circle-outline" width={18} className="text-neon-ink flex-shrink-0" />
+          {exercises[exIdx].name}, set {setIdx + 1} done
+        </div>
       </div>
 
       <div className="relative w-40 h-40">
         <svg className="w-40 h-40 -rotate-90" viewBox="0 0 160 160">
-          <circle cx="80" cy="80" r={r} fill="none" stroke="#1e1e1e" strokeWidth="8"/>
-          <circle cx="80" cy="80" r={r} fill="none" stroke="#C8F135" strokeWidth="8"
+          <circle cx="80" cy="80" r={r} fill="none" className="stroke-line" strokeWidth="8"/>
+          <circle cx="80" cy="80" r={r} fill="none" className="stroke-neon-stroke" strokeWidth="8"
             strokeDasharray={`${circ * pct / 100} ${circ}`} strokeLinecap="round"
             style={{ transition: 'stroke-dasharray 0.5s linear' }}/>
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <div className="font-bold text-4xl text-neon leading-none">{fmtTime(restLeft)}</div>
-          <div className="text-sm font-semibold text-gray-200">rest</div>
+          <div className="font-bold text-4xl text-neon-ink leading-none tabular-nums">{fmtTime(restLeft)}</div>
+          <div className="text-xs font-medium text-muted">rest</div>
         </div>
       </div>
 
       <div className="text-center">
-        <div className="text-sm font-semibold text-gray-200 mb-1">Up next</div>
+        <div className="text-sm font-semibold text-ink-2 mb-1">Up next</div>
         <div className="font-bold text-lg">{nextLabel}</div>
       </div>
 
-      <button onClick={onAdvance}
-        className="bg-[#1a1a1a] border border-[#2a2a2a] text-gray-400 hover:text-white hover:border-[#444] transition-all px-6 py-2.5 rounded-xl text-sm font-medium">
-        Skip rest →
-      </button>
+      <Button variant="secondary" onClick={onAdvance}>Skip rest</Button>
 
       {confirmEnd ? (
         <div className="flex gap-3 w-full max-w-xs">
-          <button onClick={() => setConfirmEnd(false)}
-            className="flex-1 py-3 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] text-gray-300 font-semibold text-sm transition-all hover:border-[#444]">
-            Keep going
-          </button>
-          <button onClick={onEnd}
-            className="flex-1 py-3 rounded-xl bg-red-500/20 border border-red-500/40 text-red-400 font-semibold text-sm transition-all hover:bg-red-500/30">
-            End workout
-          </button>
+          <Button variant="secondary" className="flex-1" onClick={() => setConfirmEnd(false)}>Keep going</Button>
+          <Button variant="danger" className="flex-1" onClick={onEnd}>End workout</Button>
         </div>
       ) : (
         <button onClick={() => setConfirmEnd(true)}
-          className="text-xs text-gray-400 hover:text-gray-400 transition-colors">
+          className="text-xs text-muted hover:text-ink-2 min-h-[44px] px-3 transition-colors">
           End workout early
         </button>
       )}
@@ -1141,7 +1239,8 @@ function RestScreen({ exercises, restDuration, exIdx, setIdx, totalSets, onAdvan
 // ─────────────────────────────────────────────────────────────────────────────
 // Done
 // ─────────────────────────────────────────────────────────────────────────────
-function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, freeWorkout, activeExercises, onSaveWorkout }) {
+function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, freeWorkout, activeExercises, onSaveWorkout, saveStatus, onRetrySave }) {
+  const { fmt, fmtVolume } = useUnit()
   const duration = Math.round((Date.now() - startTime) / 60000)
   const volume   = loggedSets.reduce((a, s) => a + s.weight * s.reps, 0)
 
@@ -1168,31 +1267,37 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
 
   return (
     <div className="flex flex-col items-center text-center space-y-5 py-6 slide-up">
-      <Icon icon="mdi:trophy-outline" width={56} className="mx-auto text-neon" />
+      <Icon icon="mdi:trophy-outline" width={56} className="mx-auto text-neon-ink" />
       <div>
-        <div className="font-bold text-3xl text-neon">Workout complete</div>
-        <div className="text-gray-400 mt-1">Great session, keep it up!</div>
+        <div className="font-bold text-3xl text-neon-ink">Workout complete</div>
+        <div className="text-muted mt-1">Great session, keep it up!</div>
       </div>
 
+      {saveStatus === 'queued' && (
+        <InlineError onRetry={onRetrySave} className="w-full text-left">
+          This workout isn't saved to your account yet. It's kept on this phone and will save when you're back online.
+        </InlineError>
+      )}
+
       <div className="grid grid-cols-3 gap-3 w-full">
-        {[['Duration', `${duration}m`], ['Volume', `${volume}lb`], ['Sets', loggedSets.length]].map(([l, v]) => (
-          <Card key={l} className="p-4">
-            <div className="text-xs text-gray-400 mb-1">{l}</div>
+        {[['Duration', `${duration}m`], ['Volume', fmtVolume(volume)], ['Sets', loggedSets.length]].map(([l, v]) => (
+          <Card key={l}>
+            <div className="text-xs text-muted mb-1">{l}</div>
             <div className="font-bold text-xl">{v}</div>
           </Card>
         ))}
       </div>
 
       {badges.length > 0 && (
-        <Card className="p-5 w-full text-left border-neon/30">
-          <div className="text-xs text-neon mb-3">Badge unlocked</div>
+        <Card pad="lg" tone="neon" className="w-full text-left">
+          <div className="text-xs text-neon-ink mb-3">Badge unlocked</div>
           <div className="space-y-3">
             {badges.map(b => (
               <div key={b.id} className="flex items-center gap-3">
-                <Icon icon={b.icon} width={32} className="text-neon flex-shrink-0" />
+                <Icon icon={b.icon} width={32} className="text-neon-ink flex-shrink-0" />
                 <div>
-                  <div className="text-sm font-semibold text-white">{b.name}</div>
-                  <div className="text-xs text-gray-400">{b.desc}</div>
+                  <div className="text-sm font-semibold text-ink">{b.name}</div>
+                  <div className="text-xs text-muted">{b.desc}</div>
                 </div>
               </div>
             ))}
@@ -1201,16 +1306,16 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
       )}
 
       {prs.length > 0 && (
-        <Card className="p-5 w-full text-left border-neon/30">
-          <div className="text-xs text-neon mb-3">New personal records</div>
+        <Card pad="lg" tone="neon" className="w-full text-left">
+          <div className="text-xs text-neon-ink mb-3">New personal records</div>
           <div className="space-y-2">
             {prs.map((pr, i) => (
               <div key={i} className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold text-white break-words">{pr.name}</div>
-                  <div className="text-xs text-gray-400">{pr.type}</div>
+                  <div className="text-sm font-semibold text-ink break-words">{pr.name}</div>
+                  <div className="text-xs text-muted">{pr.type}</div>
                 </div>
-                <div className="font-bold text-lg text-neon flex-shrink-0">{pr.value}</div>
+                <div className="font-bold text-lg text-neon-ink flex-shrink-0">{pr.value}</div>
               </div>
             ))}
           </div>
@@ -1219,19 +1324,19 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
 
       {/* Save as custom workout — only for free workouts with exercises */}
       {freeWorkout && uniqueExNames.length > 0 && (
-        <Card className="p-5 w-full text-left">
-          <div className="text-sm font-semibold text-gray-200 mb-3">Save as Workout</div>
+        <Card pad="lg" className="w-full text-left">
+          <div className="text-lg leading-[1.3] font-semibold text-ink mb-3">Save as workout</div>
 
           {saveState === 'saved' ? (
-            <div className="flex items-center gap-2 py-2 text-neon text-sm font-semibold">
-              <span>✓</span>
-              <span>"{workoutName}" saved to My Workouts</span>
+            <div className="flex items-center gap-2 py-2 text-neon-ink text-sm font-semibold">
+              <Icon icon="mdi:check-circle-outline" width={18} />
+              <span>"{workoutName}" saved to My workouts</span>
             </div>
           ) : (
             <>
               <input
-                className="w-full bg-transparent border-b border-[#333] focus:border-neon text-white font-bold text-xl outline-none pb-1 placeholder-[#333] transition-colors mb-4"
-                placeholder="WORKOUT NAME"
+                className="w-full bg-transparent border-b border-line-strong focus:border-neon-stroke text-ink font-bold text-xl outline-none pb-1 placeholder:text-placeholder transition-colors mb-4"
+                placeholder="Workout name"
                 value={workoutName}
                 onChange={e => setWorkoutName(e.target.value)}
               />
@@ -1239,11 +1344,11 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
                 {uniqueExNames.map((name, i) => {
                   const ex = EXERCISES.find(e => e.name === name)
                   return (
-                    <div key={i} className="flex items-center gap-2.5 py-1 border-b border-[#1a1a1a] last:border-0">
-                      <span className="text-xs text-gray-400 w-4 flex-shrink-0">{i + 1}</span>
-                      <Icon icon={getExerciseIcon(ex)} width={18} className="flex-shrink-0 text-gray-400" />
-                      <span className="text-sm text-gray-300">{name}</span>
-                      <span className="text-xs text-gray-400 ml-auto">{ex?.muscle}</span>
+                    <div key={i} className="flex items-center gap-2.5 py-1 border-b border-line last:border-0">
+                      <span className="text-xs text-muted w-4 flex-shrink-0">{i + 1}</span>
+                      <Icon icon={getExerciseIcon(ex)} width={18} className="flex-shrink-0 text-muted" />
+                      <span className="text-sm text-ink-2">{name}</span>
+                      <span className="text-xs text-muted ml-auto">{ex?.muscle}</span>
                     </div>
                   )
                 })}
@@ -1251,30 +1356,30 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
               <button
                 onClick={handleSave}
                 disabled={saveState === 'saving' || !workoutName.trim()}
-                className="w-full py-3 rounded-xl border border-neon/30 bg-neon/8 text-neon font-semibold text-sm hover:bg-neon/15 transition-all disabled:opacity-40">
-                {saveState === 'saving' ? 'Saving...' : `Save "${workoutName || '...'}" →`}
+                className="w-full py-3 rounded-xl border border-neon-stroke/30 bg-neon/8 text-neon-ink font-semibold text-sm hover:bg-neon/15 transition-all disabled:opacity-40">
+                {saveState === 'saving' ? 'Saving...' : `Save "${workoutName || '...'}"`}
               </button>
             </>
           )}
         </Card>
       )}
 
-      <Card className="p-5 w-full text-left">
-        <div className="text-sm font-semibold text-gray-200 mb-3">Set log</div>
+      <Card pad="lg" className="w-full text-left">
+        <div className="text-lg leading-[1.3] font-semibold text-ink mb-3">Set log</div>
         <div className="space-y-1">
           {loggedSets.map((s, i) => (
-            <div key={i} className="flex justify-between items-center py-1.5 border-b border-[#1a1a1a] last:border-0">
+            <div key={i} className="flex justify-between items-center py-1.5 border-b border-line last:border-0">
               <div>
                 <span className="font-medium text-sm">{s.ex}</span>
-                <span className="text-gray-400 text-xs ml-2">Set {s.set}</span>
+                <span className="text-muted text-xs ml-2">Set {s.set}</span>
               </div>
-              <div className="text-sm font-bold text-neon">{s.weight}lb × {s.reps}</div>
+              <div className="text-sm font-bold text-neon-ink">{fmt(s.weight)} × {s.reps}</div>
             </div>
           ))}
         </div>
       </Card>
 
-      <NeonBtn onClick={onHome} className="w-full">Back to home</NeonBtn>
+      <Button full onClick={onHome}>Back to home</Button>
     </div>
   )
 }
@@ -1282,7 +1387,7 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
 // ─────────────────────────────────────────────────────────────────────────────
 // Session Detail Modal
 // ─────────────────────────────────────────────────────────────────────────────
-function generateAdvice(comparisons) {
+function generateAdvice(comparisons, unit) {
   const withPrev = comparisons.filter(c => c.pct !== null)
   if (!withPrev.length) return null
 
@@ -1294,27 +1399,28 @@ function generateAdvice(comparisons) {
 
   if (improved.length === withPrev.length) {
     parts.push(overallPct > 10
-      ? `You lifted heavier on every exercise — ${overallPct}% more weight on average. Outstanding!`
+      ? `You lifted heavier on every exercise — ${overallPct}% more weight on average. Strong session.`
       : `Weights up across every exercise. Consistent strength progression.`)
   } else if (declined.length === withPrev.length) {
     parts.push('Weights were lighter across the board — normal after a hard week. Focus on sleep and nutrition.')
   } else {
-    if (improved[0]) parts.push(`${improved[0].name} avg weight up ${improved[0].pct}% — ${improved[0].pct >= 15 ? 'excellent strength gain!' : 'keep building.'}`)
+    if (improved[0]) parts.push(`${improved[0].name} avg weight up ${improved[0].pct}% — ${improved[0].pct >= 15 ? 'a real strength gain.' : 'keep building.'}`)
     if (declined[0]) parts.push(`${declined[0].name} weights were down — hit it first next session when you're freshest.`)
   }
 
   if (overallPct > 15) {
     parts.push('Big load jump — prioritize 8h sleep and 30g+ protein tonight to lock in the gains.')
   } else if (overallPct < -10) {
-    parts.push('Drop 5–10 lb on lagging exercises and focus on clean reps before adding weight back.')
+    parts.push(`Drop ${unit === 'kg' ? '2.5–5 kg' : '5–10 lb'} on lagging exercises and focus on clean reps before adding weight back.`)
   } else if (improved.length > 0 && overallPct >= 0) {
-    parts.push('To keep progressing, try adding 5 lb to your best exercise next session.')
+    parts.push(`To keep progressing, try adding ${unit === 'kg' ? '2.5 kg' : '5 lb'} to your best exercise next session.`)
   }
 
   return parts.slice(0, 2).join(' ')
 }
 
 function SessionModal({ session, onClose, history }) {
+  const { unit, fromLb, fmt, fmtVolume } = useUnit()
   const sets = session.sets || []
 
   const byExercise = sets.reduce((acc, s) => {
@@ -1351,47 +1457,22 @@ function SessionModal({ session, onClose, history }) {
     return { name, curAvg, prevAvg, pct, setRows }
   })
 
-  const advice = generateAdvice(comparisons)
+  const advice = generateAdvice(comparisons, unit)
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center"
-      onClick={onClose}
-    >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-
-      {/* Sheet */}
-      <div
-        className="relative w-full max-w-lg bg-[#111] border border-[#222] rounded-t-3xl p-6 pb-10 max-h-[85vh] overflow-y-auto slide-up"
-        onClick={e => e.stopPropagation()}
-        style={{ scrollbarWidth: 'none' }}
-      >
-        {/* Handle */}
-        <div className="w-10 h-1 bg-[#333] rounded-full mx-auto mb-5" />
-
-        {/* Header */}
-        <div className="flex items-start justify-between mb-1">
-          <div>
-            <div className="font-bold text-lg">{session.name}</div>
-            <div className="text-xs text-gray-400 mt-0.5">{session.date} · {session.duration}</div>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors text-xl leading-none mt-0.5"
-          >×</button>
-        </div>
+    <Sheet title={session.name} onClose={onClose} bodyClassName="">
+        <div className="text-xs text-muted -mt-1">{session.date} · {session.duration}</div>
 
         {/* Stats row */}
         <div className="flex gap-3 mt-4 mb-5">
           {[
-            ['Volume', `${totalVolume} lb`],
+            ['Volume', fmtVolume(totalVolume)],
             ['Sets', sets.length],
             ['Exercises', Object.keys(byExercise).length],
           ].map(([label, val]) => (
-            <div key={label} className="flex-1 bg-[#0d0d0d] rounded-xl p-3 text-center">
-              <div className="font-bold text-xl text-neon">{val}</div>
-              <div className="text-xs text-gray-400">{label}</div>
+            <div key={label} className="flex-1 bg-inset rounded-xl p-3 text-center">
+              <div className="font-bold text-xl text-neon-ink">{val}</div>
+              <div className="text-xs text-muted">{label}</div>
             </div>
           ))}
         </div>
@@ -1399,7 +1480,7 @@ function SessionModal({ session, onClose, history }) {
         {/* Progress vs previous session */}
         {prevSession ? (
           <div className="mb-6">
-            <div className="text-xs text-gray-400 mb-3">
+            <div className="text-xs text-muted mb-3">
               vs {prevSession.date}
             </div>
             <div className="space-y-3">
@@ -1410,42 +1491,42 @@ function SessionModal({ session, onClose, history }) {
                 const isUp = (c.pct ?? 0) >= 0
                 const ex = EXERCISES.find(e => e.name === c.name)
                 return (
-                  <div key={c.name} className="bg-[#0d0d0d] rounded-xl overflow-hidden">
+                  <div key={c.name} className="bg-inset rounded-xl overflow-hidden">
                     {/* Exercise header + bar */}
                     <div className="flex items-center gap-2 px-3 pt-2.5 pb-1.5">
-                      <Icon icon={getExerciseIcon(ex)} width={15} className="flex-shrink-0 text-gray-400" />
+                      <Icon icon={getExerciseIcon(ex)} width={15} className="flex-shrink-0 text-muted" />
                       <div className="font-semibold text-xs flex-1 truncate">{c.name}</div>
                       {c.pct !== null ? (
-                        <div className={`text-xs font-bold flex-shrink-0 ${c.pct > 0 ? 'text-neon' : c.pct < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                        <div className={`text-xs font-bold flex-shrink-0 ${c.pct > 0 ? 'text-neon-ink' : c.pct < 0 ? 'text-danger' : 'text-muted'}`}>
                           {c.pct > 0 ? '+' : ''}{c.pct}%
                         </div>
                       ) : (
-                        <div className="text-[11px] text-gray-400 flex-shrink-0">new</div>
+                        <div className="text-2xs text-muted flex-shrink-0">new</div>
                       )}
                     </div>
-                    <div className="h-1 bg-[#1a1a1a] mx-3 rounded-full overflow-hidden relative mb-1.5">
-                      <div className="h-full rounded-full" style={{ width: `${curBarPct}%`, background: isUp ? '#C8F135' : '#ef4444' }} />
+                    <div className="h-1 bg-raised mx-3 rounded-full overflow-hidden relative mb-1.5">
+                      <div className="h-full rounded-full" style={{ width: `${curBarPct}%`, background: isUp ? tok('neon-stroke') : tok('danger') }} />
                       {prevBarPct != null && (
-                        <div className="absolute top-0 bottom-0 w-0.5 bg-white/40" style={{ left: `${prevBarPct}%` }} />
+                        <div className="absolute top-0 bottom-0 w-0.5 bg-ink/40" style={{ left: `${prevBarPct}%` }} />
                       )}
                     </div>
                     {/* Per-set rows */}
-                    <div className="grid grid-cols-[1.8rem_1fr_3rem] gap-1 px-3 pb-1 border-t border-[#1a1a1a]">
-                      <span className="text-[11px] text-gray-500 pt-1.5">#</span>
-                      <span className="text-[11px] text-gray-500 pt-1.5">Prev → Now</span>
-                      <span className="text-[11px] text-gray-500 pt-1.5 text-right">Δ</span>
+                    <div className="grid grid-cols-[1.8rem_1fr_3rem] gap-1 px-3 pb-1 border-t border-line">
+                      <span className="text-2xs text-muted pt-1.5">#</span>
+                      <span className="text-2xs text-muted pt-1.5 flex items-center gap-0.5">Prev <Icon icon="mdi:arrow-right" width={11} aria-hidden="true" /> now</span>
+                      <span className="text-2xs text-muted pt-1.5 text-right">Change</span>
                     </div>
                     {c.setRows.map(row => (
-                      <div key={row.set} className="grid grid-cols-[1.8rem_1fr_3rem] gap-1 items-center px-3 py-1 border-t border-[#141414] last:pb-2">
-                        <span className="text-[11px] text-gray-400">{row.set}</span>
+                      <div key={row.set} className="grid grid-cols-[1.8rem_1fr_3rem] gap-1 items-center px-3 py-1 border-t border-line last:pb-2">
+                        <span className="text-2xs text-muted">{row.set}</span>
                         <div className="flex items-center gap-1">
-                          <span className="text-xs text-gray-400">{row.prevWeight != null ? `${row.prevWeight}` : '—'}</span>
-                          <span className="text-[11px] text-gray-500">→</span>
-                          <span className="text-xs font-bold text-white">{row.curWeight}lb</span>
-                          <span className="text-[11px] text-gray-400">×{row.curReps}</span>
+                          <span className="text-xs text-muted">{row.prevWeight != null ? `${fromLb(row.prevWeight)}` : '—'}</span>
+                          <Icon icon="mdi:arrow-right" width={12} className="text-muted" aria-label="to" />
+                          <span className="text-xs font-bold text-ink">{fmt(row.curWeight)}</span>
+                          <span className="text-2xs text-muted">×{row.curReps}</span>
                         </div>
-                        <div className={`text-xs font-bold text-right ${row.delta > 0 ? 'text-neon' : row.delta < 0 ? 'text-red-400' : 'text-gray-400'}`}>
-                          {row.delta == null ? '' : row.delta === 0 ? '=' : `${row.delta > 0 ? '+' : ''}${row.delta}`}
+                        <div className={`text-xs font-bold text-right ${row.delta > 0 ? 'text-neon-ink' : row.delta < 0 ? 'text-danger' : 'text-muted'}`}>
+                          {row.delta == null ? '' : row.delta === 0 ? '=' : `${row.delta > 0 ? '+' : ''}${fromLb(row.delta)}`}
                         </div>
                       </div>
                     ))}
@@ -1455,55 +1536,43 @@ function SessionModal({ session, onClose, history }) {
             </div>
 
             {advice && (
-              <div className="mt-3 p-3 bg-[#0a0a0a] border border-neon/20 rounded-xl">
-                <div className="text-xs text-neon mb-1.5">Coach's tip</div>
-                <div className="text-xs text-gray-300 leading-relaxed">{advice}</div>
+              <div className="mt-3 p-3 bg-canvas border border-neon-stroke/20 rounded-xl">
+                <div className="text-xs text-neon-ink mb-1.5">Coach's tip</div>
+                <div className="text-xs text-ink-2 leading-relaxed">{advice}</div>
               </div>
             )}
           </div>
         ) : (
-          <div className="mb-5 p-3 bg-[#0d0d0d] rounded-xl text-center">
-            <div className="text-xs text-gray-400">No previous session to compare — complete this workout again to see progress.</div>
+          <div className="mb-5 p-3 bg-inset rounded-xl text-center">
+            <div className="text-xs text-muted">No previous session to compare — complete this workout again to see progress.</div>
           </div>
         )}
 
         {/* Set Details */}
-        <div className="text-sm font-semibold text-gray-200 mb-2">Set log</div>
-        <div className="bg-[#0d0d0d] rounded-xl overflow-hidden">
+        <div className="text-lg leading-[1.3] font-semibold text-ink mb-2">Set log</div>
+        <div className="bg-inset rounded-xl overflow-hidden">
           {/* Header */}
-          <div className="grid grid-cols-[1fr_3.5rem_3rem_3rem] gap-1 px-3 py-1.5 border-b border-[#1a1a1a]">
-            <span className="text-[11px] text-gray-500">Exercise</span>
-            <span className="text-[11px] text-gray-500 text-center">Set</span>
-            <span className="text-[11px] text-gray-500 text-right">lbs</span>
-            <span className="text-[11px] text-gray-500 text-right">Reps</span>
+          <div className="grid grid-cols-[1fr_3.5rem_3rem_3rem] gap-1 px-3 py-1.5 border-b border-line">
+            <span className="text-2xs text-muted">Exercise</span>
+            <span className="text-2xs text-muted text-center">Set</span>
+            <span className="text-2xs text-muted text-right">lbs</span>
+            <span className="text-2xs text-muted text-right">Reps</span>
           </div>
           {Object.entries(byExercise).map(([exName, exSets]) => (
             exSets.map((s, i) => (
-              <div key={`${exName}-${i}`} className="grid grid-cols-[1fr_3.5rem_3rem_3rem] gap-1 items-center px-3 py-1.5 border-b border-[#1a1a1a] last:border-0">
-                <span className="text-xs text-gray-400 truncate">{i === 0 ? exName : ''}</span>
-                <span className="text-xs text-gray-400 text-center">{i + 1}</span>
+              <div key={`${exName}-${i}`} className="grid grid-cols-[1fr_3.5rem_3rem_3rem] gap-1 items-center px-3 py-1.5 border-b border-line last:border-0">
+                <span className="text-xs text-muted truncate">{i === 0 ? exName : ''}</span>
+                <span className="text-xs text-muted text-center">{i + 1}</span>
                 <span className="text-xs font-bold text-right">{s.weight}</span>
-                <span className="text-xs font-bold text-neon text-right">{s.reps}</span>
+                <span className="text-xs font-bold text-neon-ink text-right">{s.reps}</span>
               </div>
             ))
           ))}
         </div>
-      </div>
-    </div>
+    </Sheet>
   )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Shared UI
-// ─────────────────────────────────────────────────────────────────────────────
-function Card({ children, className = '' }) {
-  return <div className={`bg-[#111] border border-[#222] rounded-2xl ${className}`}>{children}</div>
-}
-function NeonBtn({ children, onClick, disabled = false, className = '' }) {
-  return (
-    <button onClick={onClick} disabled={disabled}
-      className={`bg-neon text-black font-bold py-3 rounded-xl text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed ${className}`}>
-      {children}
-    </button>
-  )
+function asPending(entry) {
+  return { ...entry, pending: true }
 }

@@ -9,7 +9,7 @@ const fmtHour = h => new Date(2000, 0, 1, h).toLocaleTimeString(undefined, { hou
 function Toggle({ on, onChange, label }) {
   return (
     <button role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)}
-      className={`w-11 h-6 rounded-full relative transition-colors flex-shrink-0 ${on ? 'bg-neon' : 'bg-[#2a2a2a]'}`}>
+      className={`w-11 h-6 rounded-full relative transition-colors flex-shrink-0 ${on ? 'bg-neon' : 'bg-line-strong'}`}>
       <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${on ? 'left-[22px]' : 'left-0.5'}`} />
     </button>
   )
@@ -70,44 +70,44 @@ export default function ReminderSettings() {
   }
 
   return (
-    <div className="bg-[#141414] border border-[#1e1e1e] rounded-2xl p-4 space-y-3">
+    <div className="bg-surface border border-line rounded-2xl p-4 space-y-3">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          <Icon icon="mdi:bell-ring-outline" width={20} className="text-neon flex-shrink-0" />
+          <Icon icon="mdi:bell-ring-outline" width={20} className="text-neon-ink flex-shrink-0" />
           <div>
-            <div className="text-sm font-semibold text-white">Workout reminders</div>
-            <div className="text-xs text-gray-400">Training-day nudges and streak warnings</div>
+            <div className="text-sm font-semibold text-ink">Workout reminders</div>
+            <div className="text-xs text-muted">Training-day nudges and streak warnings</div>
           </div>
         </div>
         <Toggle on={active} onChange={toggle} label="Workout reminders" />
       </div>
 
-      {!pushSupported() && <p className="text-xs text-gray-400">This browser doesn't support notifications.</p>}
+      {!pushSupported() && <p className="text-xs text-muted">This browser doesn't support notifications.</p>}
       {pushSupported() && needsHomeScreenInstall() && (
-        <p className="text-xs text-gray-400">On iPhone, add ATHRION to your Home Screen first (Share → Add to Home Screen), then turn reminders on from there.</p>
+        <p className="text-xs text-muted">On iPhone, add ATHRION to your Home Screen first (Share, then Add to Home Screen), then turn reminders on from there.</p>
       )}
 
       {active && (
         <div className="space-y-3 pt-1">
           <label className="flex items-center justify-between gap-3">
-            <span className="text-xs text-gray-400">Remind me at</span>
+            <span className="text-xs text-muted">Remind me at</span>
             <select value={settings.reminder_hour} onChange={e => update({ reminder_hour: Number(e.target.value) })}
-              className="bg-[#1a1a1a] border border-[#262626] rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none">
+              className="bg-raised border border-line rounded-lg px-2 py-1.5 text-xs text-ink focus:outline-none">
               {HOURS.map(h => <option key={h} value={h}>{fmtHour(h)}</option>)}
             </select>
           </label>
           <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-gray-400">Warn me before I lose my streak</span>
+            <span className="text-xs text-muted">Warn me before I lose my streak</span>
             <Toggle on={settings.streak_warnings} onChange={v => update({ streak_warnings: v })} label="Streak warnings" />
           </div>
           <button onClick={sendTest} disabled={busy}
-            className="w-full py-2 rounded-xl border border-[#2a2a2a] text-xs font-semibold text-gray-300 hover:text-neon hover:border-neon/40 disabled:opacity-50 transition-colors">
+            className="w-full py-2 rounded-xl border border-line-strong text-xs font-semibold text-ink-2 hover:text-neon-ink hover:border-neon-stroke/40 disabled:opacity-50 transition-colors">
             Send test notification
           </button>
         </div>
       )}
-      {busy && <p className="text-xs text-gray-400">Working...</p>}
-      {msg && <p className="text-xs text-gray-400">{msg}</p>}
+      {busy && <p className="text-xs text-muted">Working...</p>}
+      {msg && <p className="text-xs text-muted">{msg}</p>}
     </div>
   )
 }

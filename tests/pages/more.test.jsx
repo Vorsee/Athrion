@@ -66,7 +66,7 @@ describe('Group', () => {
     sb.set('group_sessions', { data: { id: 's1', code: 'ABC234', host_id: USER.id, status: 'lobby', exercises: [], total_sets: 3, rest_secs: 60 }, error: null })
     sb.set('group_participants', q => q.ops.some(o => o[0] === 'insert') ? { data: null, error: null } : { data: [{ user_id: USER.id, display_name: 'Sam' }], error: null })
     render(<Group session={{ name: 'Sam', email: USER.email }} />)
-    await userEvent.click(screen.getByText('+ Create a room'))
+    await userEvent.click(screen.getByText('Create a room'))
     expect(await screen.findByText('Room code')).toBeInTheDocument()
     expect(screen.getByText('ABC234')).toBeInTheDocument()
     expect(sb.op(sb.queriesFor('group_sessions')[0], 'insert')[0]).toMatchObject({ host_id: USER.id, status: 'lobby' })

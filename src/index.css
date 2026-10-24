@@ -2,15 +2,69 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Design tokens ─────────────────────────────────────────────────────────
+   RGB channels so Tailwind can apply opacity: rgb(var(--x) / <alpha-value>).
+   Dark is the default; .light (on <html> and the app root) redefines them. */
 :root {
-  --neon: #C8F135;
-  --dark: #0A0A0A;
-  --card: #111111;
-  --border: #222222;
-  --muted: #555555;
+  --canvas:      11 11 10;    /* #0B0B0A page */
+  --surface:     20 20 18;    /* #141412 cards, bars */
+  --raised:      28 28 25;    /* #1C1C19 rows, inputs, chips inside a surface */
+  --overlay:     34 34 30;    /* #22221E sheets, toasts */
+  --inset:       15 15 13;    /* #0F0F0D recessed areas */
+  --line:        38 38 31;    /* #26261F hairlines */
+  --line-strong: 52 52 44;    /* #34342C input borders */
+  --ink:         244 242 236; /* #F4F2EC primary text */
+  --ink-2:       207 204 194; /* #CFCCC2 secondary text */
+  --muted:       163 160 150; /* #A3A096 meta, the floor for text */
+  --placeholder: 142 139 129; /* #8E8B81 input placeholders only */
+  --neon:        200 241 53;  /* #C8F135 fills */
+  --neon-press:  180 219 42;  /* #B4DB2A pressed primary */
+  --on-neon:     11 11 10;    /* text on neon fills */
+  --neon-ink:    200 241 53;  /* neon-coloured text and thin strokes */
+  --neon-stroke: 200 241 53;  /* thick progress fills, rings, neon borders */
+  --neon-tint:   34 38 21;    /* neon at 8% on surface */
+  --warn:        245 184 65;  /* #F5B841 */
+  --danger:      255 123 107; /* #FF7B6B */
+  --info:        125 185 240; /* #7DB9F0 */
+  --lilac:       179 157 245; /* #B39DF5 */
+  --rose:        242 139 176; /* #F28BB0 */
+  --ember:       255 169 94;  /* #FFA95E streak warmth only */
+
+  --scrim: rgb(5 5 4 / 0.72);
+  --sheet-shadow: 0 -12px 32px rgb(0 0 0 / 0.45);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
 
   /* Header height — matches Nav.jsx h-[56px] xs:h-[64px] */
   --header-h: 56px;
+}
+
+.light {
+  color-scheme: light;
+  --canvas:      245 239 230; /* #F5EFE6 */
+  --surface:     253 250 245; /* #FDFAF5 */
+  --raised:      237 231 220; /* #EDE7DC */
+  --overlay:     255 253 249; /* #FFFDF9 */
+  --inset:       233 226 214; /* #E9E2D6 */
+  --line:        226 217 206; /* #E2D9CE */
+  --line-strong: 204 197 186; /* #CCC5BA */
+  --ink:         28 25 23;    /* #1C1917 */
+  --ink-2:       58 51 48;    /* #3A3330 */
+  --muted:       87 83 78;    /* #57534E */
+  --placeholder: 107 100 94;  /* #6B645E */
+  --neon-press:  180 219 42;
+  --on-neon:     28 25 23;
+  --neon-ink:    79 106 0;    /* #4F6A00 */
+  --neon-stroke: 110 148 0;   /* #6E9400 */
+  --neon-tint:   240 249 216; /* #F0F9D8 */
+  --warn:        138 86 0;    /* #8A5600 */
+  --danger:      179 38 30;   /* #B3261E */
+  --info:        31 94 150;   /* #1F5E96 */
+  --lilac:       91 63 184;   /* #5B3FB8 */
+  --rose:        163 51 95;   /* #A3335F */
+  --ember:       154 74 11;   /* #9A4A0B */
+
+  --scrim: rgb(30 20 10 / 0.45);
+  --sheet-shadow: 0 -12px 32px rgb(60 40 20 / 0.12);
 }
 
 @media (min-width: 390px) {
@@ -25,8 +79,8 @@ html {
 }
 
 body {
-  background: #0A0A0A;
-  color: #fff;
+  background: rgb(var(--canvas));
+  color: rgb(var(--ink));
   font-family: 'DM Sans', sans-serif;
   margin: 0;
   /* dvh accounts for browser URL bar appearing/disappearing on scroll */
@@ -37,21 +91,13 @@ body {
 }
 
 @layer utilities {
-  .font-bebas { font-family: 'Bebas Neue', sans-serif; }
   .font-dm    { font-family: 'DM Sans', sans-serif; }
 }
 
 /* Scrollbars */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
-
-/* Ring animation */
-@keyframes pulseRing {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(200,241,53,0.4); }
-  50%       { box-shadow: 0 0 0 14px rgba(200,241,53,0); }
-}
-.ring-pulse { animation: pulseRing 1.5s ease-in-out infinite; }
+::-webkit-scrollbar-thumb { background: rgb(var(--line-strong)); border-radius: 2px; }
 
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(24px); }
@@ -81,7 +127,18 @@ body {
   from { transform: translateY(100%); }
   to   { transform: translateY(0); }
 }
-.modal-up { animation: modalUp 0.3s ease forwards; }
+.modal-up { animation: modalUp 0.28s var(--ease) forwards; }
+.scrim-in { animation: fadeIn 0.2s var(--ease) forwards; }
+
+/* Press feedback: 120ms, scale 0.98 */
+.press { transition: transform 120ms var(--ease), background-color 120ms var(--ease), opacity 120ms var(--ease); }
+.press:active:not(:disabled) { transform: scale(0.98); }
+
+/* Visible keyboard focus on every interactive element */
+:where(button, a, input, select, textarea, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid rgb(var(--neon-ink));
+  outline-offset: 2px;
+}
 
 @keyframes slideFromRight {
   from { opacity: 0; transform: translateX(48px); }
@@ -95,9 +152,21 @@ body {
 }
 .slide-from-left { animation: slideFromLeft 0.32s cubic-bezier(0.22,1,0.36,1) forwards; }
 
-/* ── Light / Cream theme ─────────────────────────────────────────────────── */
+/* Reduced motion: no slides, pulses or count-ups; fades stay short */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .fade-in, .scrim-in { animation-duration: 120ms !important; }
+  .animate-pulse { animation: none !important; }
+}
 
-.light { color-scheme: light; }
+/* ── Light / Cream theme: legacy hex remaps ──────────────────────────────────
+   Tokens above handle anything that uses bg-surface, text-ink and so on. These
+   remaps only cover raw hex classes that pages haven't moved off yet. */
 
 /* Fixed chrome */
 .light header  { background-color: #FDFAF5 !important; border-color: #E2D9CE !important; }
@@ -112,6 +181,8 @@ body {
 .light .bg-\[\#111111\]  { background-color: #FDFAF5 !important; }
 .light .bg-\[\#0d0d0d\]  { background-color: #EDE7DC !important; }
 .light .bg-\[\#161616\]  { background-color: #EDE7DC !important; }
+.light .bg-\[\#141414\]  { background-color: #FDFAF5 !important; }
+.light .bg-\[\#262626\]  { background-color: #DAD3C8 !important; }
 .light .bg-\[\#1a1a1a\]  { background-color: #E4DDD3 !important; }
 .light .bg-\[\#1e1e1e\]  { background-color: #DDD6CB !important; }
 .light .bg-\[\#222\]     { background-color: #D5CEC3 !important; }
@@ -147,12 +218,12 @@ body {
 .light .text-gray-200 { color: #292524 !important; }
 .light .text-gray-300 { color: #3A3330 !important; }
 .light .text-gray-400 { color: #57534E !important; }
-.light .text-gray-500 { color: #78716C !important; }
+.light .text-gray-500 { color: #57534E !important; }
 .light .text-gray-600 { color: #9C9189 !important; }
 .light .text-gray-700 { color: #A8A098 !important; }
 
 /* Neon text → dark olive so it's readable on cream */
-.light .text-neon { color: #5C7A00 !important; }
+.light .text-neon { color: #4F6A00 !important; }
 
 /* Restore correct text on neon-bg buttons (they already use text-black — just a safeguard) */
 .light .bg-neon { color: #0A0A0A !important; }
@@ -160,10 +231,13 @@ body {
 /* Inputs */
 .light input, .light textarea {
   color: #1C1917 !important;
-  caret-color: #5C7A00;
+  caret-color: #4F6A00;
 }
-.light .placeholder-\[\#444\]::placeholder { color: #A8A098 !important; }
-.light input::placeholder { color: #A8A098 !important; }
+.light .placeholder-\[\#444\]::placeholder { color: #6B645E !important; }
+.light input::placeholder { color: #6B645E !important; }
 
 /* Scrollbar */
 .light ::-webkit-scrollbar-thumb { background: #C8BFB5 !important; }
+
+/* Primary neon buttons need an edge on cream (fill vs cream is only 1.14) */
+.light .bg-neon { box-shadow: inset 0 0 0 1px #6E9400; }

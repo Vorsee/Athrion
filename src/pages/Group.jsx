@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Icon } from '@iconify/react'
+import { Button, BackLink, Card, Chip, Segmented } from '../components/ui/index.js'
+import { tok } from '../lib/tokens.js'
 import { EXERCISES, MUSCLES, getExerciseIcon, todayKey } from '../lib/data.js'
 import {
   createGroupSession,
@@ -15,6 +17,7 @@ import {
   subscribeToGroupSession,
 } from '../lib/groupApi.js'
 import { saveWorkoutEntry } from '../lib/api.js'
+import { useUnit } from '../lib/units.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -47,6 +50,7 @@ function buildOverallLeaderboard(allSets) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function Group({ session }) {
+  const { toLb } = useUnit()
   const [screen, setScreen] = useState('home')
   const [joinCode, setJoinCode] = useState('')
   const [joinError, setJoinError] = useState('')
@@ -284,7 +288,7 @@ export default function Group({ session }) {
   }
 
   async function handleLogSet() {
-    const w = parseFloat(weight)
+    const w = toLb(parseFloat(weight)) // typed in the person's unit, stored in lb
     const r = parseInt(reps)
     if (!w || !r || w < 0 || r < 1) return
     try {
@@ -417,28 +421,28 @@ function HomeScreen({ joinCode, setJoinCode, joinError, loading, onCreate, onJoi
   return (
     <div className="space-y-6 py-4 slide-up">
       <div className="text-center pt-4">
-        <div className="font-bold text-2xl text-white mb-1">Group workout</div>
-        <div className="text-gray-400 text-sm">Train together. Compete in real time.</div>
+        <div className="font-bold text-2xl text-ink mb-1">Group workout</div>
+        <div className="text-muted text-sm">Train together. Compete in real time.</div>
       </div>
 
-      <Card className="p-6 space-y-4">
-        <div className="text-sm font-semibold text-gray-200">Host a session</div>
-        <p className="text-sm text-gray-400">Create a room, pick exercises, and invite friends with a code.</p>
-        <NeonBtn onClick={onCreate} disabled={loading} className="w-full">
-          {loading ? 'Creating...' : '+ Create a room'}
-        </NeonBtn>
+      <Card pad="none" className="p-6 space-y-4">
+        <div className="text-lg leading-[1.3] font-semibold text-ink">Host a session</div>
+        <p className="text-sm text-muted">Create a room, pick exercises, and invite friends with a code.</p>
+        <Button full onClick={onCreate} disabled={loading}>
+          {loading ? 'Creating...' : <span className="inline-flex items-center gap-1.5"><Icon icon="mdi:plus" width={18} />Create a room</span>}
+        </Button>
       </Card>
 
       <div className="flex items-center gap-3">
-        <div className="flex-1 h-px bg-[#222]" />
-        <span className="text-xs text-gray-400">or join with a code</span>
-        <div className="flex-1 h-px bg-[#222]" />
+        <div className="flex-1 h-px bg-line" />
+        <span className="text-xs text-muted">or join with a code</span>
+        <div className="flex-1 h-px bg-line" />
       </div>
 
-      <Card className="p-6 space-y-4">
-        <div className="text-sm font-semibold text-gray-200">Join a room</div>
+      <Card pad="none" className="p-6 space-y-4">
+        <div className="text-lg leading-[1.3] font-semibold text-ink">Join a room</div>
         <input
-          className="w-full bg-[#0d0d0d] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-4 py-3 text-sm outline-none transition-colors font-bold text-lg text-center"
+          className="w-full bg-inset border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-sm outline-none transition-colors font-bold text-lg text-center"
           placeholder="ABC123"
           maxLength={6}
           value={joinCode}
@@ -446,15 +450,11 @@ function HomeScreen({ joinCode, setJoinCode, joinError, loading, onCreate, onJoi
           onKeyDown={e => e.key === 'Enter' && onJoin()}
         />
         {joinError && (
-          <div className="text-red-400 text-xs text-center">{joinError}</div>
+          <div className="text-danger text-xs text-center">{joinError}</div>
         )}
-        <button
-          onClick={onJoin}
-          disabled={loading || joinCode.length < 2}
-          className="w-full py-3 rounded-xl border border-[#333] bg-[#1a1a1a] text-white font-semibold text-sm hover:border-neon/40 hover:text-neon transition-all disabled:opacity-40"
-        >
-          {loading ? 'Joining...' : 'Join →'}
-        </button>
+        <Button variant="secondary" full onClick={onJoin} disabled={loading || joinCode.length < 2}>
+          {loading ? 'Joining...' : 'Join'}
+        </Button>
       </Card>
     </div>
   )
@@ -483,75 +483,61 @@ function LobbyScreen({ groupSession, participants, isHost, exercises, onAddExerc
 
   return (
     <div className="space-y-4 py-4 slide-up">
-      <button onClick={onBack} className="text-gray-400 text-sm hover:text-white transition-colors">← Back</button>
+      <BackLink onClick={onBack} />
 
       {/* Room code */}
-      <Card className="p-6 text-center">
-        <div className="text-sm font-semibold text-gray-200 mb-2">Room code</div>
-        <div className="font-bold text-5xl text-neon mb-3">{groupSession?.code}</div>
+      <Card pad="none" className="p-6 text-center">
+        <div className="text-sm font-semibold text-ink-2 mb-2">Room code</div>
+        <div className="font-bold text-5xl text-neon-ink mb-3 tracking-[0.15em] tabular-nums">{groupSession?.code}</div>
         <button onClick={copyCode}
-          className="text-xs text-gray-400 hover:text-white border border-[#333] hover:border-neon/40 px-4 py-1.5 rounded-lg transition-all">
-          {copied ? '✓ Copied!' : 'Copy code'}
+          className="press text-xs font-semibold text-ink-2 hover:text-ink border border-line-strong px-4 min-h-[36px] rounded-md transition-all">
+          {copied ? <span className="inline-flex items-center gap-1"><Icon icon="mdi:check" width={14} />Copied</span> : <span className="inline-flex items-center gap-1"><Icon icon="mdi:content-copy" width={14} />Copy code</span>}
         </button>
-        <div className="text-xs text-gray-400 mt-2">Share this code with friends to join</div>
+        <div className="text-xs text-muted mt-2">Share this code with friends to join</div>
       </Card>
 
       {/* Participants */}
-      <Card className="p-4">
-        <div className="text-xs text-gray-400 mb-3">Participants · {participants.length}</div>
+      <Card pad="md">
+        <div className="text-xs text-muted mb-3">Participants · {participants.length}</div>
         <div className="space-y-2">
           {participants.map((p, i) => (
-            <div key={i} className="flex items-center gap-3 bg-[#0d0d0d] rounded-xl px-3 py-2.5">
-              <div className="w-7 h-7 rounded-lg bg-neon/15 border border-neon/20 flex items-center justify-center flex-shrink-0">
-                <span className="font-bold text-xs text-neon leading-none">{(p.display_name || '?')[0].toUpperCase()}</span>
+            <div key={i} className="flex items-center gap-3 bg-inset rounded-xl px-3 py-2.5">
+              <div className="w-7 h-7 rounded-lg bg-neon/15 border border-neon-stroke/20 flex items-center justify-center flex-shrink-0">
+                <span className="font-bold text-xs text-neon-ink leading-none">{(p.display_name || '?')[0].toUpperCase()}</span>
               </div>
               <span className="text-sm font-medium flex-1">{p.display_name}</span>
-              {p.user_id === groupSession?.host_id && <span className="text-xs text-neon">Host</span>}
+              {p.user_id === groupSession?.host_id && <span className="text-xs text-neon-ink">Host</span>}
             </div>
           ))}
           {participants.length === 0 && (
-            <div className="text-xs text-gray-400 text-center py-2">Waiting for participants...</div>
+            <div className="text-xs text-muted text-center py-2">Waiting for participants...</div>
           )}
         </div>
       </Card>
 
       {/* Host-only config */}
       {isHost && (
-        <Card className="p-4">
-          <div className="text-sm font-semibold text-gray-200 mb-3">Sets per Exercise</div>
-          <div className="flex gap-2 mb-4">
-            {[1,2,3,4,5].map(n => (
-              <button key={n} onClick={() => setTotalSets(n)}
-                className={`flex-1 py-2.5 rounded-xl font-bold text-lg transition-all ${totalSets === n ? 'bg-neon text-black' : 'bg-[#1a1a1a] text-white border border-[#2a2a2a]'}`}>
-                {n}
-              </button>
-            ))}
-          </div>
-          <div className="text-sm font-semibold text-gray-200 mb-3">Rest duration</div>
-          <div className="flex gap-2">
-            {[30,45,60,90,120].map(s => (
-              <button key={s} onClick={() => setRestSecs(s)}
-                className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${restSecs === s ? 'bg-neon text-black' : 'bg-[#1a1a1a] text-white border border-[#2a2a2a]'}`}>
-                {s}s
-              </button>
-            ))}
-          </div>
+        <Card pad="md">
+          <div className="text-lg leading-[1.3] font-semibold text-ink mb-3">Sets per exercise</div>
+          <Segmented options={[1,2,3,4,5].map(n => [n, String(n)])} value={totalSets} onChange={setTotalSets} label="Sets per exercise" kind="choice" className="mb-4" scroll={false} />
+          <div className="text-lg leading-[1.3] font-semibold text-ink mb-3">Rest duration</div>
+          <Segmented options={[30,45,60,90,120].map(s => [s, `${s}s`])} value={restSecs} onChange={setRestSecs} label="Rest duration" kind="choice" scroll={false} />
         </Card>
       )}
 
       {/* Exercise list — all participants can edit */}
       {exercises.length > 0 && (
-        <Card className="p-4">
-          <div className="text-xs text-gray-400 mb-3">Selected · {exercises.length}</div>
+        <Card pad="md">
+          <div className="text-xs text-muted mb-3">Selected · {exercises.length}</div>
           <div className="space-y-2">
             {exercises.map((ex, i) => (
-              <div key={i} className="flex items-center gap-3 bg-[#0d0d0d] rounded-xl p-3">
-                <Icon icon={getExerciseIcon(ex)} width={20} className="flex-shrink-0 text-gray-400" />
+              <div key={i} className="flex items-center gap-3 bg-inset rounded-xl p-3">
+                <Icon icon={getExerciseIcon(ex)} width={20} className="flex-shrink-0 text-muted" />
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm truncate">{ex.name}</div>
-                  <div className="text-xs text-gray-400">{ex.muscle}</div>
+                  <div className="text-xs text-muted">{ex.muscle}</div>
                 </div>
-                <button onClick={() => onRemoveExercise(i)} className="text-red-400 hover:text-red-300 text-lg leading-none transition-colors">×</button>
+                <button onClick={() => onRemoveExercise(i)} aria-label={`Remove ${ex.name}`} className="press w-9 h-9 flex items-center justify-center rounded-md text-danger hover:bg-danger/12 transition-colors"><Icon icon="mdi:close" width={18} /></button>
               </div>
             ))}
           </div>
@@ -559,35 +545,32 @@ function LobbyScreen({ groupSession, participants, isHost, exercises, onAddExerc
       )}
 
       {/* Exercise picker — open to everyone */}
-      <Card className="p-4">
-        <div className="text-sm font-semibold text-gray-200 mb-3">Add exercises</div>
+      <Card pad="md">
+        <div className="text-lg leading-[1.3] font-semibold text-ink mb-3">Add exercises</div>
         <input
-          className="w-full bg-[#0d0d0d] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-3 py-2.5 text-sm outline-none transition-colors mb-3"
+          className="w-full bg-inset border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-3 py-2.5 text-sm outline-none transition-colors mb-3"
           placeholder="Search exercises..."
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
         <div className="flex gap-1.5 overflow-x-auto pb-2 mb-3" style={{ scrollbarWidth: 'none' }}>
           {['All', ...MUSCLES.filter(m => m !== 'All')].map(m => (
-            <button key={m} onClick={() => setFilter(m)}
-              className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-all ${filter === m ? 'bg-neon text-black' : 'bg-[#1a1a1a] text-gray-400 border border-[#2a2a2a]'}`}>
-              {m}
-            </button>
+            <Chip key={m} selected={filter === m} onClick={() => setFilter(m)}>{m}</Chip>
           ))}
         </div>
         <div className="space-y-2 max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
           {filtered.map((ex, i) => {
             const added = exercises.some(e => e.name === ex.name)
             return (
-              <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-[#0d0d0d]">
-                <Icon icon={getExerciseIcon(ex)} width={20} className="flex-shrink-0 text-gray-400" />
+              <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-inset">
+                <Icon icon={getExerciseIcon(ex)} width={20} className="flex-shrink-0 text-muted" />
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm truncate">{ex.name}</div>
-                  <div className="text-xs text-gray-400">{ex.muscle}</div>
+                  <div className="text-xs text-muted">{ex.muscle}</div>
                 </div>
                 <button onClick={() => onAddExercise(ex)} disabled={added}
-                  className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${added ? 'bg-[#1a1a1a] text-gray-400 border border-[#2a2a2a] cursor-default' : 'bg-neon text-black'}`}>
-                  {added ? '✓' : '+ Add'}
+                  className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${added ? 'bg-raised text-muted border border-line-strong cursor-default' : 'bg-neon text-on-neon'}`}>
+                  {added ? <Icon icon="mdi:check" width={16} aria-label="Added" /> : <span className="inline-flex items-center gap-1"><Icon icon="mdi:plus" width={14} />Add</span>}
                 </button>
               </div>
             )
@@ -599,16 +582,16 @@ function LobbyScreen({ groupSession, participants, isHost, exercises, onAddExerc
       {isHost ? (
         <>
           {participants.length < 2 && (
-            <div className="text-xs text-gray-400 text-center">Invite friends — or test solo</div>
+            <div className="text-xs text-muted text-center">Invite friends — or test solo</div>
           )}
-          <NeonBtn onClick={onStart} disabled={exercises.length === 0} className="w-full">
-            Start workout →
-          </NeonBtn>
+          <Button full onClick={onStart} disabled={exercises.length === 0}>
+            Start workout
+          </Button>
         </>
       ) : (
         <div className="flex items-center justify-center gap-2 py-2">
           <div className="w-2 h-2 rounded-full bg-neon animate-pulse" />
-          <span className="text-sm text-gray-400">Waiting for host to start...</span>
+          <span className="text-sm text-muted">Waiting for host to start...</span>
         </div>
       )}
     </div>
@@ -620,6 +603,7 @@ function LobbyScreen({ groupSession, participants, isHost, exercises, onAddExerc
 // ─────────────────────────────────────────────────────────────────────────────
 
 function TrainingScreen({ exercises, exIdx, setIdx, totalSets, participants, allSets, displayName, weight, setWeight, reps, setReps, onLog, onEnd, confirmEnd, setConfirmEnd }) {
+  const { unit } = useUnit()
   const ex = exercises[exIdx]
   if (!ex) return null
 
@@ -630,11 +614,11 @@ function TrainingScreen({ exercises, exIdx, setIdx, totalSets, participants, all
     <div className="space-y-4 py-4 slide-in">
       {/* Progress header */}
       <div>
-        <div className="flex justify-between text-xs text-gray-400 mb-2">
+        <div className="flex justify-between text-xs text-muted mb-2">
           <span>Exercise {exIdx + 1}/{exercises.length} · {ex.name}</span>
           <span>Set {setIdx + 1} of {totalSets}</span>
         </div>
-        <div className="h-1 bg-[#1e1e1e] rounded-full overflow-hidden">
+        <div className="h-1 bg-raised rounded-full overflow-hidden">
           <div
             className="h-full bg-neon rounded-full transition-all duration-500"
             style={{ width: `${((exIdx * totalSets + setIdx) / (exercises.length * totalSets)) * 100}%` }}
@@ -644,19 +628,19 @@ function TrainingScreen({ exercises, exIdx, setIdx, totalSets, participants, all
 
       {/* Participants strip */}
       {participants.length > 0 && (
-        <Card className="p-3">
-          <div className="text-sm font-semibold text-gray-200 mb-2">Participants</div>
+        <Card pad="sm">
+          <div className="text-lg leading-[1.3] font-semibold text-ink mb-2">Participants</div>
           <div className="flex flex-wrap gap-3">
             {participants.map((p, i) => {
               const done = setsForThisExByPerson(p.display_name)
               return (
                 <div key={i} className="flex items-center gap-1.5">
-                  <span className={`text-xs font-medium ${p.display_name === displayName ? 'text-white' : 'text-gray-400'}`}>
+                  <span className={`text-xs font-medium ${p.display_name === displayName ? 'text-ink' : 'text-muted'}`}>
                     {p.display_name.split(' ')[0]}
                   </span>
                   <div className="flex gap-0.5">
                     {Array.from({ length: totalSets }, (_, si) => (
-                      <div key={si} className={`w-2 h-2 rounded-full ${si < done ? 'bg-neon' : 'bg-[#333]'}`} />
+                      <div key={si} className={`w-2 h-2 rounded-full ${si < done ? 'bg-neon' : 'bg-line-strong'}`} />
                     ))}
                   </div>
                 </div>
@@ -667,57 +651,51 @@ function TrainingScreen({ exercises, exIdx, setIdx, totalSets, participants, all
       )}
 
       {/* Exercise card */}
-      <div className="bg-[#0b0f00] border border-neon/30 rounded-2xl p-6 text-center">
+      <div className="bg-neon-tint border border-neon-stroke/30 rounded-2xl p-6 text-center">
         <div className="flex justify-center mb-3">
-          <Icon icon={getExerciseIcon(ex)} width={56} className="text-neon/80" />
+          <Icon icon={getExerciseIcon(ex)} width={56} className="text-neon-ink/80" />
         </div>
         <div className="font-bold text-3xl mb-1">{ex.name}</div>
-        <div className="text-gray-400 text-sm">{ex.muscle}</div>
+        <div className="text-muted text-sm">{ex.muscle}</div>
       </div>
 
       {/* Set log */}
-      <Card className="p-5">
-        <div className="text-xs text-gray-400 mb-3">Set {setIdx + 1} of {totalSets}</div>
+      <Card pad="lg">
+        <div className="text-xs text-muted mb-3">Set {setIdx + 1} of {totalSets}</div>
         <div className="flex gap-2 mb-4">
           {Array.from({ length: totalSets }, (_, i) => (
-            <div key={i} className={`flex-1 h-2 rounded-full transition-all duration-300 ${i < setIdx ? 'bg-neon' : i === setIdx ? 'bg-neon ring-pulse' : 'bg-[#222]'}`} />
+            <div key={i} className={`flex-1 h-2 rounded-full transition-all duration-300 ${i < setIdx ? 'bg-neon' : i === setIdx ? 'bg-neon ring-2 ring-inset ring-ink' : 'bg-line'}`} />
           ))}
         </div>
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
-            <label className="text-xs text-gray-400 block mb-1">Weight (lb)</label>
+            <label className="text-xs text-muted block mb-1">Weight ({unit})</label>
             <input
               type="number" placeholder="0" value={weight}
-              onChange={e => setWeight(e.target.value)} min="0" step="0.5"
-              className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-4 py-3 text-sm outline-none transition-colors"
+              onChange={e => setWeight(e.target.value)} min="0" step={unit === 'kg' ? 0.25 : 0.5}
+              className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-sm outline-none transition-colors"
             />
           </div>
           <div>
-            <label className="text-xs text-gray-400 block mb-1">Reps</label>
+            <label className="text-xs text-muted block mb-1">Reps</label>
             <input
               type="number" placeholder="0" value={reps}
               onChange={e => setReps(e.target.value)} min="1"
-              className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-4 py-3 text-sm outline-none transition-colors"
+              className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-sm outline-none transition-colors"
             />
           </div>
         </div>
-        <NeonBtn onClick={onLog} className="w-full">Log set →</NeonBtn>
+        <Button full onClick={onLog}>Log set</Button>
       </Card>
 
       {confirmEnd ? (
         <div className="flex gap-3">
-          <button onClick={() => setConfirmEnd(false)}
-            className="flex-1 py-3 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] text-gray-300 font-semibold text-sm transition-all hover:border-[#444]">
-            Keep going
-          </button>
-          <button onClick={onEnd}
-            className="flex-1 py-3 rounded-xl bg-red-500/20 border border-red-500/40 text-red-400 font-semibold text-sm transition-all hover:bg-red-500/30">
-            End workout
-          </button>
+          <Button variant="secondary" className="flex-1" onClick={() => setConfirmEnd(false)}>Keep going</Button>
+          <Button variant="danger" className="flex-1" onClick={onEnd}>End workout</Button>
         </div>
       ) : (
         <button onClick={() => setConfirmEnd(true)}
-          className="w-full text-center text-xs text-gray-400 hover:text-gray-400 py-2 transition-colors">
+          className="w-full text-center text-xs text-muted hover:text-ink-2 py-2 min-h-[44px] transition-colors">
           End workout early
         </button>
       )}
@@ -730,6 +708,7 @@ function TrainingScreen({ exercises, exIdx, setIdx, totalSets, participants, all
 // ─────────────────────────────────────────────────────────────────────────────
 
 function RestScreen({ exercises, exIdx, setIdx, totalSets, restLeft, restSecs, allSets, participants, displayName, onSkip, onEnd }) {
+  const { fmt, fmtVolume } = useUnit()
   const [confirmEnd, setConfirmEnd] = useState(false)
   const ex = exercises[exIdx]
   const leaderboard = buildExerciseLeaderboard(allSets, ex?.name || '')
@@ -740,7 +719,6 @@ function RestScreen({ exercises, exIdx, setIdx, totalSets, restLeft, restSecs, a
   const r = 70
   const circ = 2 * Math.PI * r
 
-  const medals = ['🥇', '🥈', '🥉']
 
   function fmtTime(s) {
     return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
@@ -750,64 +728,59 @@ function RestScreen({ exercises, exIdx, setIdx, totalSets, restLeft, restSecs, a
     <div className="space-y-6 py-4 fade-in">
       {/* Timer */}
       <div className="flex flex-col items-center">
-        <div className="text-xs text-gray-400 mb-1">
-          {ex?.name} — Set {setIdx + 1} complete ✓
+        <div className="text-xs text-muted mb-1">
+          <span className="inline-flex items-center gap-1.5"><Icon icon="mdi:check-circle-outline" width={16} className="text-neon-ink" />{ex?.name}, set {setIdx + 1} done</span>
         </div>
         <div className="relative w-44 h-44 my-2">
           <svg className="w-44 h-44 -rotate-90" viewBox="0 0 180 180">
-            <circle cx="90" cy="90" r={r} fill="none" stroke="#1e1e1e" strokeWidth="8" />
+            <circle cx="90" cy="90" r={r} fill="none" className="stroke-line" strokeWidth="8" />
             <circle
-              cx="90" cy="90" r={r} fill="none" stroke="#C8F135" strokeWidth="8"
+              cx="90" cy="90" r={r} fill="none" className="stroke-neon-stroke" strokeWidth="8"
               strokeDasharray={`${circ * pct / 100} ${circ}`}
               strokeLinecap="round"
               style={{ transition: 'stroke-dasharray 0.5s linear' }}
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className="font-bold text-4xl text-neon leading-none">{fmtTime(restLeft)}</div>
-            <div className="text-sm font-semibold text-gray-200">rest</div>
+            <div className="font-bold text-4xl text-neon-ink leading-none tabular-nums">{fmtTime(restLeft)}</div>
+            <div className="text-xs font-medium text-muted">rest</div>
           </div>
         </div>
-        <button
-          onClick={onSkip}
-          className="bg-[#1a1a1a] border border-[#2a2a2a] text-gray-400 hover:text-white hover:border-[#444] transition-all px-6 py-2 rounded-xl text-sm font-medium"
-        >
-          SKIP →
-        </button>
+        <Button variant="secondary" onClick={onSkip}>Skip rest</Button>
       </div>
 
       {/* Live Leaderboard */}
-      <Card className="p-5">
+      <Card pad="lg">
         <div className="flex items-center gap-2 mb-4">
-          <span className="text-neon text-sm font-bold">Live standings</span>
+          <span className="text-neon-ink text-sm font-bold">Live standings</span>
           <div className="flex-1 h-px bg-neon/20" />
-          <span className="text-xs text-gray-400">{ex?.name}</span>
+          <span className="text-xs text-muted">{ex?.name}</span>
         </div>
 
         {leaderboard.length === 0 ? (
-          <div className="text-center py-4 text-gray-400 text-sm">No sets logged yet — be the first!</div>
+          <div className="text-center py-4 text-muted text-sm">No sets logged yet. Yours could be first.</div>
         ) : (
           <div className="space-y-3">
             {leaderboard.map((entry, i) => {
               const barWidth = maxVolume > 0 ? (entry.volume / maxVolume) * 100 : 0
-              const barColor = i === 0 ? '#C8F135' : i === 1 ? '#f59e0b' : '#555'
-              const textColor = i === 0 ? 'text-neon' : i === 1 ? 'text-amber-400' : 'text-gray-400'
+              const barColor = i === 0 ? tok('neon-stroke') : i === 1 ? tok('ink-2') : i === 2 ? tok('ember') : tok('line-strong')
+              const textColor = i === 0 ? 'text-neon-ink' : i === 1 ? 'text-ink-2' : i === 2 ? 'text-ember' : 'text-muted'
               const isMe = entry.name === displayName
               return (
-                <div key={i} className="bg-[#0d0d0d] rounded-xl p-3">
+                <div key={i} className="bg-inset rounded-xl p-3">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-lg w-6 flex-shrink-0">{medals[i] || `${i + 1}.`}</span>
-                    <span className={`text-sm flex-1 ${isMe ? 'font-bold text-white' : 'font-medium text-gray-300'}`}>
+                    <RankChip rank={i + 1} />
+                    <span className={`text-sm flex-1 ${isMe ? 'font-bold text-ink' : 'font-medium text-ink-2'}`}>
                       {entry.name}{isMe ? ' (you)' : ''}
                     </span>
                     <div className="text-right">
                       <div className={`text-xs font-bold ${textColor}`}>
-                        {entry.latestSet ? `${entry.latestSet.weight}lb × ${entry.latestSet.reps}` : ''}
+                        {entry.latestSet ? `${fmt(entry.latestSet.weight)} × ${entry.latestSet.reps}` : ''}
                       </div>
-                      <div className="text-xs text-gray-400">{entry.volume}lb vol</div>
+                      <div className="text-xs text-muted">{fmtVolume(entry.volume)} vol</div>
                     </div>
                   </div>
-                  <div className="h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden">
+                  <div className="h-1.5 bg-raised rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-500"
                       style={{ width: `${barWidth}%`, background: barColor }}
@@ -820,24 +793,18 @@ function RestScreen({ exercises, exIdx, setIdx, totalSets, restLeft, restSecs, a
         )}
 
         {!myEntry && leaderboard.length > 0 && (
-          <div className="mt-3 text-xs text-gray-400 text-center">You haven't logged this exercise yet</div>
+          <div className="mt-3 text-xs text-muted text-center">You haven't logged this exercise yet</div>
         )}
       </Card>
 
       {confirmEnd ? (
         <div className="flex gap-3">
-          <button onClick={() => setConfirmEnd(false)}
-            className="flex-1 py-3 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] text-gray-300 font-semibold text-sm transition-all hover:border-[#444]">
-            Keep going
-          </button>
-          <button onClick={onEnd}
-            className="flex-1 py-3 rounded-xl bg-red-500/20 border border-red-500/40 text-red-400 font-semibold text-sm transition-all hover:bg-red-500/30">
-            End workout
-          </button>
+          <Button variant="secondary" className="flex-1" onClick={() => setConfirmEnd(false)}>Keep going</Button>
+          <Button variant="danger" className="flex-1" onClick={onEnd}>End workout</Button>
         </div>
       ) : (
         <button onClick={() => setConfirmEnd(true)}
-          className="w-full text-center text-xs text-gray-400 hover:text-gray-400 py-2 transition-colors">
+          className="w-full text-center text-xs text-muted hover:text-ink-2 py-2 min-h-[44px] transition-colors">
           End workout early
         </button>
       )}
@@ -850,44 +817,44 @@ function RestScreen({ exercises, exIdx, setIdx, totalSets, restLeft, restSecs, a
 // ─────────────────────────────────────────────────────────────────────────────
 
 function DoneScreen({ allSets, exercises, participants, displayName, startTime, onHome }) {
+  const { fmtVolume } = useUnit()
   const duration = startTime ? Math.round((Date.now() - startTime) / 60000) : 0
   const overall = buildOverallLeaderboard(allSets)
   const champion = overall[0]
-  const medals = ['🥇', '🥈', '🥉']
 
   return (
     <div className="space-y-5 py-4 slide-up">
       <div className="text-center">
-        <Icon icon="mdi:trophy-outline" width={48} className="mx-auto mb-3 text-neon" />
-        <div className="font-bold text-3xl text-neon">GROUP WORKOUT COMPLETE!</div>
-        {duration > 0 && <div className="text-gray-400 mt-1 text-sm">Duration: {duration}min</div>}
+        <Icon icon="mdi:trophy-outline" width={48} className="mx-auto mb-3 text-neon-ink" />
+        <div className="font-bold text-3xl text-neon-ink">Group workout complete</div>
+        {duration > 0 && <div className="text-muted mt-1 text-sm">Duration: {duration}min</div>}
       </div>
 
       {/* Champion */}
       {champion && (
-        <Card className="p-5 text-center border-neon/30">
-          <Icon icon="mdi:crown-outline" width={28} className="mx-auto mb-1 text-neon" />
-          <div className="font-bold text-2xl text-neon">{champion.name}</div>
-          <div className="text-gray-400 text-sm">{champion.volume}lb total volume</div>
+        <Card pad="lg" tone="neon" className="text-center">
+          <Icon icon="mdi:crown-outline" width={28} className="mx-auto mb-1 text-neon-ink" />
+          <div className="font-bold text-2xl text-neon-ink">{champion.name}</div>
+          <div className="text-muted text-sm">{fmtVolume(champion.volume)} total volume</div>
           {champion.name === displayName && (
-            <div className="mt-2 text-xs text-neon/70">That's you!</div>
+            <div className="mt-2 text-xs text-neon-ink">That's you.</div>
           )}
         </Card>
       )}
 
       {/* Final rankings */}
       {overall.length > 1 && (
-        <Card className="p-4">
-          <div className="text-sm font-semibold text-gray-200 mb-3">Final rankings</div>
+        <Card pad="md">
+          <div className="text-lg leading-[1.3] font-semibold text-ink mb-3">Final rankings</div>
           <div className="space-y-2">
             {overall.map((entry, i) => (
-              <div key={i} className="flex items-center gap-3 bg-[#0d0d0d] rounded-xl px-3 py-2.5">
-                <span className="text-lg w-6">{medals[i] || `${i + 1}.`}</span>
-                <span className={`flex-1 text-sm font-medium ${entry.name === displayName ? 'text-white' : 'text-gray-300'}`}>
+              <div key={i} className="flex items-center gap-3 bg-inset rounded-xl px-3 py-2.5">
+                <RankChip rank={i + 1} />
+                <span className={`flex-1 text-sm font-medium ${entry.name === displayName ? 'text-ink' : 'text-ink-2'}`}>
                   {entry.name}
                 </span>
-                <span className="text-sm font-bold text-neon">{entry.volume}lb</span>
-                <span className="text-xs text-gray-400">{entry.setCount} sets</span>
+                <span className="text-sm font-bold text-neon-ink">{fmtVolume(entry.volume)}</span>
+                <span className="text-xs text-muted">{entry.setCount} sets</span>
               </div>
             ))}
           </div>
@@ -896,26 +863,26 @@ function DoneScreen({ allSets, exercises, participants, displayName, startTime, 
 
       {/* Per-exercise breakdown */}
       {exercises.length > 0 && (
-        <Card className="p-4">
-          <div className="text-sm font-semibold text-gray-200 mb-3">Exercise breakdown</div>
+        <Card pad="md">
+          <div className="text-lg leading-[1.3] font-semibold text-ink mb-3">Exercise breakdown</div>
           <div className="space-y-3">
             {exercises.map((ex, ei) => {
               const lb = buildExerciseLeaderboard(allSets, ex.name)
               if (lb.length === 0) return null
               return (
-                <div key={ei} className="bg-[#0d0d0d] rounded-xl p-3">
+                <div key={ei} className="bg-inset rounded-xl p-3">
                   <div className="flex items-center gap-2 mb-2">
-                    <Icon icon={getExerciseIcon(ex)} width={16} className="text-gray-400 flex-shrink-0" />
-                    <span className="text-xs font-semibold text-gray-300">{ex.name}</span>
+                    <Icon icon={getExerciseIcon(ex)} width={16} className="text-muted flex-shrink-0" />
+                    <span className="text-xs font-semibold text-ink-2">{ex.name}</span>
                   </div>
                   <div className="space-y-1.5">
                     {lb.map((entry, i) => (
                       <div key={i} className="flex items-center gap-2">
-                        <span className="text-xs w-4">{medals[i] || `${i + 1}.`}</span>
-                        <span className={`text-xs flex-1 ${entry.name === displayName ? 'font-bold text-white' : 'text-gray-400'}`}>
+                        <RankChip rank={i + 1} small />
+                        <span className={`text-xs flex-1 ${entry.name === displayName ? 'font-bold text-ink' : 'text-muted'}`}>
                           {entry.name}
                         </span>
-                        <span className="text-xs font-bold text-neon">{entry.volume}lb</span>
+                        <span className="text-xs font-bold text-neon-ink">{fmtVolume(entry.volume)}</span>
                       </div>
                     ))}
                   </div>
@@ -926,7 +893,7 @@ function DoneScreen({ allSets, exercises, participants, displayName, startTime, 
         </Card>
       )}
 
-      <NeonBtn onClick={onHome} className="w-full">Back to home</NeonBtn>
+      <Button full onClick={onHome}>Back to home</Button>
     </div>
   )
 }
@@ -935,18 +902,19 @@ function DoneScreen({ allSets, exercises, participants, displayName, startTime, 
 // Shared UI
 // ─────────────────────────────────────────────────────────────────────────────
 
-function Card({ children, className = '' }) {
-  return <div className={`bg-[#111] border border-[#222] rounded-2xl ${className}`}>{children}</div>
-}
 
-function NeonBtn({ children, onClick, disabled = false, className = '' }) {
+// Rank 1-3 get a medal icon and a coloured chip (neon, ink-2, ember); the rest a plain number
+function RankChip({ rank, small = false }) {
+  const tone = rank === 1 ? 'bg-neon text-on-neon'
+    : rank === 2 ? 'bg-raised text-ink-2 border border-line-strong'
+    : rank === 3 ? 'bg-ember/12 text-ember'
+    : 'text-muted'
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`bg-neon text-black font-bold py-3 rounded-xl text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
-    >
-      {children}
-    </button>
+    <span aria-label={`Rank ${rank}`}
+      className={`inline-flex items-center justify-center gap-0.5 rounded-full font-bold tabular-nums flex-shrink-0 ${small ? 'h-5 min-w-[1.25rem] px-1 text-2xs' : 'h-6 min-w-[1.75rem] px-1.5 text-xs'} ${tone}`}>
+      {rank <= 3 && !small && <Icon icon="mdi:medal-outline" width={12} aria-hidden="true" />}
+      {rank}
+    </span>
   )
 }
+

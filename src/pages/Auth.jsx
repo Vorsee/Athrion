@@ -1,10 +1,15 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { Icon } from '@iconify/react'
+import { Segmented, BackLink } from '../components/ui/index.js'
 
-export default function Auth() {
-  const [tab, setTab] = useState('login')
-  const [screen, setScreen] = useState('form') // form | check-email
+const INPUT = 'w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-sm outline-none transition-colors'
+const PRIMARY = 'press w-full h-12 bg-neon active:bg-neon-press text-on-neon font-semibold rounded-xl text-sm transition-colors disabled:opacity-40'
+
+// mode: 'register' | 'login'; onBack returns to the landing page
+export default function Auth({ initialMode = 'login', onBack }) {
+  const [tab, setTab] = useState(initialMode)
+  const [screen, setScreen] = useState('form') // form | check-email | forgot | reset-sent
   const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -12,7 +17,7 @@ export default function Auth() {
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); setError('') }
 
   async function handleLogin() {
-    if (!form.email || !form.password) return setError('All fields required.')
+    if (!form.email || !form.password) return setError('Enter your email and password.')
     setLoading(true); setError('')
     const { error } = await supabase.auth.signInWithPassword({
       email: form.email,
@@ -23,7 +28,7 @@ export default function Auth() {
   }
 
   async function handleRegister() {
-    if (!form.name || !form.email || !form.password) return setError('All fields required.')
+    if (!form.name || !form.email || !form.password) return setError('Fill in every field to continue.')
     if (form.password.length < 6) return setError('Password must be at least 6 characters.')
     if (form.password !== form.confirm) return setError('Passwords do not match.')
     setLoading(true); setError('')
@@ -37,97 +42,112 @@ export default function Auth() {
     setLoading(false)
   }
 
+  async function handleForgot() {
+    if (!form.email) return setError('Enter the email you signed up with.')
+    setLoading(true); setError('')
+    // The link signs them in and App asks for a new password (PASSWORD_RECOVERY)
+    const { error } = await supabase.auth.resetPasswordForEmail(form.email, { redirectTo: window.location.origin })
+    if (error) setError(error.message)
+    else setScreen('reset-sent')
+    setLoading(false)
+  }
+
+  function submit(e) {
+    e.preventDefault()
+    if (screen === 'forgot') return handleForgot()
+    return tab === 'login' ? handleLogin() : handleRegister()
+  }
+
   return (
-    <div className="min-h-screen bg-[#0A0A0A] flex flex-col items-center justify-center px-4 relative overflow-hidden">
+    <div className="min-h-screen bg-canvas flex flex-col items-center justify-center px-4 py-10 relative overflow-hidden">
 
       <div className="relative z-10 w-full max-w-sm slide-up">
+        {onBack && <BackLink onClick={onBack} className="mb-4">About ATHRION</BackLink>}
         <div className="text-center mb-10">
-          <div className="font-bold text-4xl tracking-tight text-white">Athrion</div>
-          <div className="text-sm text-gray-400 mt-2">Your training, food and progress in one place</div>
+          <div className="font-bold text-4xl tracking-tight text-ink">ATHRION</div>
+          <div className="text-sm text-muted mt-2">Your training plan and calories, adjusted every week</div>
         </div>
 
-        <div className="bg-[#111] border border-[#222] rounded-2xl p-8">
-          {screen === 'check-email' ? (
-            <div className="text-center space-y-4">
-              <Icon icon="mdi:email-check-outline" width={44} className="mx-auto text-neon" />
-              <div className="text-white font-semibold">Check your email</div>
-              <div className="text-sm text-gray-400">
-                We sent a confirmation link to <span className="text-gray-300">{form.email}</span>.
-                Click it to activate your account, then come back and sign in.
+        <div className="bg-surface border border-line rounded-2xl p-6 xs:p-8">
+          {screen === 'check-email' || screen === 'reset-sent' ? (
+            <div className="text-center space-y-4" role="status">
+              <Icon icon="mdi:email-check-outline" width={44} className="mx-auto text-neon-ink" />
+              <div className="text-ink font-semibold">Check your email</div>
+              <div className="text-sm text-muted">
+                {screen === 'check-email'
+                  ? <>We sent a confirmation link to <span className="text-ink-2">{form.email}</span>. Click it to activate your account, then come back and sign in.</>
+                  : <>If <span className="text-ink-2">{form.email}</span> has an account, we sent it a link to set a new password.</>}
               </div>
-              <button
+              <div className="text-xs text-muted">Can't find it? Check spam or promotions.</div>
+              <button type="button"
                 onClick={() => { setScreen('form'); setTab('login') }}
-                className="w-full bg-neon text-black font-bold py-3 rounded-xl text-sm transition-all"
+                className={PRIMARY}
               >
                 Go to sign in
               </button>
             </div>
+          ) : screen === 'forgot' ? (
+            <form onSubmit={submit} className="space-y-3" noValidate>
+              <div>
+                <div className="text-ink font-semibold">Reset your password</div>
+                <div className="text-sm text-muted mt-1">We'll email you a link to set a new one.</div>
+              </div>
+              <input className={INPUT} type="email" name="email" autoComplete="email" inputMode="email"
+                placeholder="Email address" aria-label="Email address"
+                value={form.email} onChange={e => set('email', e.target.value)} />
+              {error && <p role="alert" className="text-danger text-xs">{error}</p>}
+              <button type="submit" disabled={loading} className={`${PRIMARY} mt-1`}>
+                {loading ? 'Sending…' : 'Send reset link'}
+              </button>
+              <button type="button" onClick={() => { setScreen('form'); setError('') }}
+                className="press w-full min-h-[44px] text-sm font-semibold text-ink-2 hover:text-ink">
+                Back to sign in
+              </button>
+            </form>
           ) : (
             <>
-              <div className="flex gap-1 bg-[#161616] p-1 rounded-xl mb-7">
-                {['login', 'register'].map(t => (
-                  <button
-                    key={t}
-                    onClick={() => { setTab(t); setError('') }}
-                    className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${tab === t ? 'bg-neon text-black' : 'text-gray-400'}`}
-                  >
-                    {t === 'login' ? 'Sign in' : 'Create account'}
-                  </button>
-                ))}
-              </div>
+              <Segmented className="mb-7" label="Account"
+                options={[['register', 'Create account'], ['login', 'Sign in']]} value={tab}
+                onChange={t => { setTab(t); setError('') }} />
 
-              <div className="space-y-3">
+              <form onSubmit={submit} className="space-y-3" noValidate>
                 {tab === 'register' && (
-                  <input
-                    className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-4 py-3 text-sm outline-none transition-colors"
-                    placeholder="Full name"
-                    value={form.name}
-                    onChange={e => set('name', e.target.value)}
-                  />
+                  <input className={INPUT} name="name" autoComplete="name"
+                    placeholder="Full name" aria-label="Full name"
+                    value={form.name} onChange={e => set('name', e.target.value)} />
                 )}
-                <input
-                  className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-4 py-3 text-sm outline-none transition-colors"
-                  type="email"
-                  placeholder="Email address"
-                  value={form.email}
-                  onChange={e => set('email', e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && tab === 'login' && handleLogin()}
-                />
-                <input
-                  className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-4 py-3 text-sm outline-none transition-colors"
-                  type="password"
-                  placeholder="Password"
-                  value={form.password}
-                  onChange={e => set('password', e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && tab === 'login' && handleLogin()}
-                />
+                <input className={INPUT} type="email" name="email" autoComplete="email" inputMode="email"
+                  placeholder="Email address" aria-label="Email address"
+                  value={form.email} onChange={e => set('email', e.target.value)} />
+                <input className={INPUT} type="password" name="password"
+                  autoComplete={tab === 'login' ? 'current-password' : 'new-password'}
+                  placeholder="Password" aria-label="Password"
+                  value={form.password} onChange={e => set('password', e.target.value)} />
                 {tab === 'register' && (
-                  <input
-                    className="w-full bg-[#161616] border border-[#222] focus:border-neon text-white placeholder-gray-500 rounded-xl px-4 py-3 text-sm outline-none transition-colors"
-                    type="password"
-                    placeholder="Confirm password"
-                    value={form.confirm}
-                    onChange={e => set('confirm', e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleRegister()}
-                  />
+                  <input className={INPUT} type="password" name="confirm" autoComplete="new-password"
+                    placeholder="Confirm password" aria-label="Confirm password"
+                    value={form.confirm} onChange={e => set('confirm', e.target.value)} />
                 )}
 
-                {error && <p className="text-red-400 text-xs">{error}</p>}
+                {error && <p role="alert" className="text-danger text-xs">{error}</p>}
 
-                <button
-                  onClick={tab === 'login' ? handleLogin : handleRegister}
-                  disabled={loading}
-                  className="w-full bg-neon text-black font-bold py-3 rounded-xl text-sm transition-all mt-1 disabled:opacity-50"
-                >
-                  {loading ? '...' : tab === 'login' ? 'Sign in' : 'Create account'}
+                <button type="submit" disabled={loading} className={`${PRIMARY} mt-1`}>
+                  {loading ? (tab === 'login' ? 'Signing in…' : 'Creating account…') : tab === 'login' ? 'Sign in' : 'Create free account'}
                 </button>
-              </div>
+                {tab === 'login' && (
+                  <button type="button" onClick={() => { setScreen('forgot'); setError('') }}
+                    className="press w-full min-h-[44px] text-sm font-semibold text-ink-2 hover:text-ink">
+                    Forgot password?
+                  </button>
+                )}
+              </form>
             </>
           )}
         </div>
 
-        <p className="text-center text-gray-500 text-xs mt-6">
-          Powered by Supabase · Your data is yours
+        <p className="text-center text-muted text-xs mt-6">
+          Your photos and logs are private to your account.{' '}
+          <a href="/privacypolicy.html" className="underline underline-offset-2 hover:text-ink-2">Privacy policy</a>
         </p>
       </div>
     </div>

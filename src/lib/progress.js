@@ -1,4 +1,6 @@
 // Per-exercise progress built from workout_logs.sets ({ ex, set, weight, reps }).
+// Weights are lb; unit only changes the wording and the size of a weight jump.
+import { fromLb, toLb, fmtWeight } from './units.js'
 
 // Epley estimated one-rep max
 export function e1rm(weight, reps) {
@@ -48,7 +50,7 @@ export function getRecords(sessions) {
 
 // Double progression: build reps across the range, then add weight and drop back
 // to the bottom of the range. Bodyweight moves progress by reps only.
-export function suggestNext(sessions, { minReps = 8, maxReps = 12 } = {}) {
+export function suggestNext(sessions, { minReps = 8, maxReps = 12, unit = 'lb' } = {}) {
   const last = sessions?.[sessions.length - 1]
   if (!last?.sets.length) return null
 
@@ -60,11 +62,16 @@ export function suggestNext(sessions, { minReps = 8, maxReps = 12 } = {}) {
     return { weight: 0, reps: top.reps + 1, reason: 'Bodyweight — aim for one more rep than last time' }
   }
   if (allHitTop) {
+    if (unit === 'kg') {
+      const kg = fromLb(top.weight, 'kg')
+      const jump = kg < 20 ? 1.25 : 2.5
+      return { weight: toLb(round(kg + jump, 0.25), 'kg'), reps: minReps, reason: `You hit ${maxReps}+ reps on every set — add ${jump} kg` }
+    }
     const jump = top.weight < 40 ? 2.5 : 5
     return { weight: round(top.weight + jump), reps: minReps, reason: `You hit ${maxReps}+ reps on every set — add ${jump} lb` }
   }
   if (anyBelowMin) {
-    return { weight: top.weight, reps: minReps, reason: `Stay at ${top.weight} lb until every set reaches ${minReps} reps` }
+    return { weight: top.weight, reps: minReps, reason: `Stay at ${fmtWeight(top.weight, unit)} until every set reaches ${minReps} reps` }
   }
   return { weight: top.weight, reps: Math.min(top.reps + 1, maxReps), reason: 'Same weight — add a rep' }
 }
@@ -79,7 +86,7 @@ export function parseRepRange(reps) {
 }
 
 // PRs set in a just-finished workout compared with all earlier history
-export function findNewPRs(loggedSets, history) {
+export function findNewPRs(loggedSets, history, unit = 'lb') {
   const before = buildExerciseHistory(history)
   const grouped = {}
   for (const s of loggedSets || []) (grouped[s.ex] ??= []).push({ weight: Number(s.weight) || 0, reps: Number(s.reps) || 0 })
@@ -90,8 +97,8 @@ export function findNewPRs(loggedSets, history) {
     if (!past?.length) continue // first time doing it isn't a PR
     const rec = getRecords(past)
     const now = getRecords([{ sets }])
-    if (now.maxWeight > rec.maxWeight) prs.push({ name, type: 'Heaviest weight', value: `${now.maxWeight} lb × ${now.maxWeightReps}` })
-    else if (now.bestE1rm > rec.bestE1rm + 0.5) prs.push({ name, type: 'Estimated 1RM', value: `${Math.round(now.bestE1rm)} lb` })
+    if (now.maxWeight > rec.maxWeight) prs.push({ name, type: 'Heaviest weight', value: `${fmtWeight(now.maxWeight, unit)} × ${now.maxWeightReps}` })
+    else if (now.bestE1rm > rec.bestE1rm + 0.5) prs.push({ name, type: 'Estimated 1RM', value: `${Math.round(fromLb(now.bestE1rm, unit))} ${unit}` })
     else if (now.maxWeight === 0 && now.maxReps > rec.maxReps) prs.push({ name, type: 'Most reps', value: `${now.maxReps} reps` })
   }
   return prs

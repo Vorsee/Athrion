@@ -8,6 +8,7 @@ coverage/
 # Local tool state and old copies; never commit
 .vercel/
 .claude/
+.design/
 supabase/.temp/
 bin/
 ._*

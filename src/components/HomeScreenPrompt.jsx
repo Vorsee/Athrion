@@ -35,45 +35,46 @@ export default function HomeScreenPrompt() {
 
   return (
     <div
-      className="fixed z-50 bottom-[100px] right-3 w-[220px] rounded-2xl border border-[#2a2a2a] bg-[#141414] p-4 slide-up"
-      style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px #2a2a2a' }}
+      className="fixed z-50 bottom-[100px] right-3 w-[220px] rounded-2xl border border-line-strong bg-overlay p-4 slide-up"
+      style={{ boxShadow: 'var(--sheet-shadow)' }}
     >
       <button
         onClick={dismiss}
-        className="absolute top-2.5 right-2.5 text-gray-400 hover:text-white text-sm leading-none transition-colors"
+        aria-label="Close"
+        className="absolute top-1 right-1 w-9 h-9 flex items-center justify-center rounded-full text-muted hover:text-ink transition-colors"
       >
-        ✕
+        <Icon icon="mdi:close" width={18} />
       </button>
 
       <div className="flex items-center gap-2.5 mb-3">
-        <div className="w-9 h-9 rounded-xl bg-neon/10 border border-neon/20 flex items-center justify-center flex-shrink-0">
-          <Icon icon="mdi:cellphone-arrow-down" width={18} className="text-neon" />
+        <div className="w-9 h-9 rounded-xl bg-neon/10 border border-neon-stroke/20 flex items-center justify-center flex-shrink-0">
+          <Icon icon="mdi:cellphone-arrow-down" width={18} className="text-neon-ink" />
         </div>
         <div>
-          <div className="text-xs font-bold text-white leading-tight">Add to Home Screen</div>
-          <div className="text-xs text-gray-400">Quick access anytime</div>
+          <div className="text-xs font-bold text-ink leading-tight">Add to Home Screen</div>
+          <div className="text-xs text-muted">Quick access anytime</div>
         </div>
       </div>
 
       <div className="space-y-2">
         {ios ? (
           <>
-            <Step n={1} text={<>Tap the <span className="text-neon font-semibold">Share</span> button below ↑</>} />
-            <Step n={2} text={<>Tap <span className="text-neon font-semibold">Add to Home Screen</span></>} />
-            <Step n={3} text="Tap Add — you're set!" />
+            <Step n={1} text={<>Tap the <span className="text-neon-ink font-semibold">Share</span> button below</>} />
+            <Step n={2} text={<>Tap <span className="text-neon-ink font-semibold">Add to Home Screen</span></>} />
+            <Step n={3} text="Tap Add, and you're set." />
           </>
         ) : (
           <>
-            <Step n={1} text={<>Tap the <span className="text-neon font-semibold">⋮ menu</span> in your browser</>} />
-            <Step n={2} text={<>Tap <span className="text-neon font-semibold">Add to Home Screen</span></>} />
-            <Step n={3} text="Tap Add — you're set!" />
+            <Step n={1} text={<>Tap the <span className="text-neon-ink font-semibold">menu</span> (<Icon icon="mdi:dots-vertical" width={14} className="inline -mt-0.5" aria-hidden="true" />) in your browser</>} />
+            <Step n={2} text={<>Tap <span className="text-neon-ink font-semibold">Add to Home Screen</span></>} />
+            <Step n={3} text="Tap Add, and you're set." />
           </>
         )}
       </div>
 
       <button
         onClick={dismiss}
-        className="mt-3 w-full text-xs text-gray-500 hover:text-gray-400 transition-colors"
+        className="mt-3 w-full text-xs text-muted hover:text-ink transition-colors"
       >
         Don't show again
       </button>
@@ -84,10 +85,10 @@ export default function HomeScreenPrompt() {
 function Step({ n, text }) {
   return (
     <div className="flex items-start gap-2">
-      <div className="w-4 h-4 rounded-full bg-neon/20 text-neon text-[11px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+      <div className="w-4 h-4 rounded-full bg-neon/20 text-neon-ink text-2xs font-bold tabular-nums flex items-center justify-center flex-shrink-0 mt-0.5">
         {n}
       </div>
-      <div className="text-xs text-gray-400 leading-tight">{text}</div>
+      <div className="text-xs text-muted leading-tight">{text}</div>
     </div>
   )
 }

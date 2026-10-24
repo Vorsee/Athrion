@@ -11,12 +11,12 @@ export async function fetchUserProfile() {
   return data
 }
 
-export async function saveUserProfile({ sex, height_cm, weight_lb, age }) {
+export async function saveUserProfile({ sex, height_cm, weight_lb, age, weight_unit }) {
   const { data: { user } } = await supabase.auth.getUser()
   const { data, error } = await supabase
     .from('user_profiles')
     .upsert(
-      { user_id: user.id, sex, height_cm, weight_lb, age, updated_at: new Date().toISOString() },
+      { user_id: user.id, sex, height_cm, weight_lb, age, ...(weight_unit && { weight_unit }), updated_at: new Date().toISOString() },
       { onConflict: 'user_id' }
     )
     .select()
@@ -117,6 +117,19 @@ export async function fetchSubscriptionStatus() {
     return data?.status === 'pro'
   } catch {
     return false
+  }
+}
+
+// One free trial per person: anyone who has been through checkout already has a Stripe customer
+export async function fetchTrialEligible() {
+  try {
+    const { data } = await supabase
+      .from('subscriptions')
+      .select('stripe_customer_id')
+      .maybeSingle()
+    return !data?.stripe_customer_id
+  } catch {
+    return true // the server makes the real decision at checkout
   }
 }
 

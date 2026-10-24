@@ -30,7 +30,8 @@ beforeEach(async () => {
   vi.clearAllMocks()
   process.env.STRIPE_SECRET_KEY = 'sk_test_x'
   process.env.STRIPE_WEBHOOK_SECRET = 'whsec_x'
-  process.env.STRIPE_PRICE_ID = 'price_pro'
+  process.env.STRIPE_PRICE_MONTHLY = 'price_monthly'
+  process.env.STRIPE_PRICE_ANNUAL = 'price_annual'
   process.env.SUPABASE_URL = 'https://test.supabase.co'
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'service'
   checkout = (await import('../../api/create-checkout.js')).default
@@ -43,18 +44,36 @@ describe('POST /api/create-checkout', () => {
   it('creates a Pro checkout for the signed-in user, taken from the token', async () => {
     stripe.checkout.sessions.create.mockResolvedValue({ url: 'https://checkout.stripe.com/s' })
     const r = res()
-    await checkout(req({ body: { user_id: 'someone-else', price_id: 'price_pro' }, headers: auth }), r)
-    expect(r.body).toEqual({ url: 'https://checkout.stripe.com/s' })
+    await checkout(req({ body: { user_id: 'someone-else', plan: 'monthly' }, headers: auth }), r)
+    expect(r.body).toEqual({ url: 'https://checkout.stripe.com/s', trial: true })
     expect(sb.supabase.auth.getUser).toHaveBeenCalledWith('jwt-token')
     expect(stripe.checkout.sessions.create.mock.calls[0][0]).toMatchObject({
-      mode: 'subscription', client_reference_id: 'user-1', metadata: { user_id: 'user-1' }, customer_email: 'sam@example.com',
-      line_items: [{ price: 'price_pro', quantity: 1 }],
+      mode: 'subscription', client_reference_id: 'user-1', metadata: { user_id: 'user-1', plan: 'monthly' }, customer_email: 'sam@example.com',
+      line_items: [{ price: 'price_monthly', quantity: 1 }], allow_promotion_codes: true,
     })
   })
-  it('uses the configured price when none is sent', async () => {
+  it('sells monthly when no plan is sent, and annual when asked', async () => {
     stripe.checkout.sessions.create.mockResolvedValue({ url: 'x' })
-    const r = res(); await checkout(req({ headers: auth }), r)
-    expect(stripe.checkout.sessions.create.mock.calls[0][0].line_items[0].price).toBe('price_pro')
+    await checkout(req({ headers: auth }), res())
+    expect(stripe.checkout.sessions.create.mock.calls[0][0].line_items[0].price).toBe('price_monthly')
+    await checkout(req({ body: { plan: 'annual' }, headers: auth }), res())
+    expect(stripe.checkout.sessions.create.mock.calls[1][0].line_items[0].price).toBe('price_annual')
+  })
+  it('gives first-time subscribers a 7-day trial', async () => {
+    sb.set('subscriptions', { data: { stripe_customer_id: null } })
+    stripe.checkout.sessions.create.mockResolvedValue({ url: 'x' })
+    await checkout(req({ body: { plan: 'annual' }, headers: auth }), res())
+    expect(stripe.checkout.sessions.create.mock.calls[0][0].subscription_data).toMatchObject({ trial_period_days: 7 })
+  })
+  it('gives no second trial and reuses the Stripe customer for returning subscribers', async () => {
+    sb.set('subscriptions', { data: { stripe_customer_id: 'cus_1' } })
+    stripe.checkout.sessions.create.mockResolvedValue({ url: 'x' })
+    const r = res(); await checkout(req({ body: { plan: 'monthly' }, headers: auth }), r)
+    const args = stripe.checkout.sessions.create.mock.calls[0][0]
+    expect(args.customer).toBe('cus_1')
+    expect(args.subscription_data).toBeUndefined()
+    expect(args.customer_email).toBeUndefined()
+    expect(r.body.trial).toBe(false)
   })
   it('rejects other methods and bad JSON', async () => {
     let r = res(); await checkout(req({ method: 'GET' }), r); expect(r.statusCode).toBe(405)
@@ -65,20 +84,33 @@ describe('POST /api/create-checkout', () => {
     const r = res(); await checkout(req({ body: {}, headers: auth }), r)
     expect(r.statusCode).toBe(500)
   })
+  it('returns 500 instead of selling the wrong price when a plan is not configured', async () => {
+    delete process.env.STRIPE_PRICE_ANNUAL
+    vi.resetModules()
+    const fresh = (await import('../../api/create-checkout.js')).default
+    const r = res(); await fresh(req({ body: { plan: 'annual' }, headers: auth }), r)
+    expect(r.statusCode).toBe(500)
+    expect(stripe.checkout.sessions.create).not.toHaveBeenCalled()
+  })
 
   describe('regression: fixed in the October 2026 review', () => {
     it('requires the caller to be signed in', async () => {
-      let r = res(); await checkout(req({ body: { user_id: 'someone-else', price_id: 'price_pro' } }), r)
+      let r = res(); await checkout(req({ body: { user_id: 'someone-else', plan: 'monthly' } }), r)
       expect(r.statusCode).toBe(401)
       sb.supabase.auth.getUser.mockResolvedValueOnce({ data: { user: null }, error: { message: 'bad jwt' } })
       r = res(); await checkout(req({ body: {}, headers: { authorization: 'Bearer forged' } }), r)
       expect(r.statusCode).toBe(401)
       expect(stripe.checkout.sessions.create).not.toHaveBeenCalled()
     })
-    it('only accepts the configured Pro price', async () => {
-      const r = res(); await checkout(req({ body: { price_id: 'price_cheap' }, headers: auth }), r)
+    it('only sells the configured plans; a price sent by the browser is ignored', async () => {
+      let r = res(); await checkout(req({ body: { plan: 'cheap' }, headers: auth }), r)
+      expect(r.statusCode).toBe(400)
+      r = res(); await checkout(req({ body: { plan: 'toString' }, headers: auth }), r)
       expect(r.statusCode).toBe(400)
       expect(stripe.checkout.sessions.create).not.toHaveBeenCalled()
+      stripe.checkout.sessions.create.mockResolvedValue({ url: 'x' })
+      await checkout(req({ body: { price_id: 'price_cheap' }, headers: auth }), res())
+      expect(stripe.checkout.sessions.create.mock.calls[0][0].line_items[0].price).toBe('price_monthly')
     })
   })
 })

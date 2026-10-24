@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react'
+import { Icon } from '@iconify/react'
+import { Button } from './ui/index.js'
 import { estimateAdaptiveTargets } from '../lib/adaptiveNutrition.js'
 import { fetchMeasurements, fetchCheckinWeights } from '../lib/progressApi.js'
 import { fetchFitnessProfile, saveNutritionTarget } from '../lib/fitnessApi.js'
 import { saveGoals } from '../lib/api.js'
+import { useUnit } from '../lib/units.js'
 
 // Shows the real-expenditure estimate and offers to update the calorie target.
 export default function AdaptiveNutritionCard({ calorieLogs, current, profile, onApplied }) {
+  const { unit, fromLb } = useUnit()
   const [weights, setWeights] = useState(null)
   const [goal, setGoal]       = useState(null)
   const [saving, setSaving]   = useState(false)
@@ -48,9 +52,9 @@ export default function AdaptiveNutritionCard({ calorieLogs, current, profile, o
   if (!est.ready) {
     const p = est.progress
     return (
-      <div className="bg-[#111] border border-[#222] rounded-2xl p-4">
-        <div className="text-sm font-semibold text-gray-200 mb-1">Adaptive targets</div>
-        <p className="text-xs text-gray-400 leading-relaxed">
+      <div className="bg-surface border border-line rounded-2xl p-4">
+        <div className="text-lg leading-[1.3] font-semibold text-ink mb-1">Adaptive targets</div>
+        <p className="text-xs text-muted leading-relaxed">
           Log food and weigh in regularly and your targets will adjust to how your body actually responds.
         </p>
         <div className="grid grid-cols-2 gap-2 mt-3 text-center">
@@ -58,44 +62,43 @@ export default function AdaptiveNutritionCard({ calorieLogs, current, profile, o
             ['Days logged', p.loggedDays, p.neededDays],
             ['Weigh-ins', p.weighIns, p.neededWeighIns],
           ].map(([label, have, need]) => (
-            <div key={label} className="bg-[#161616] rounded-xl py-2">
-              <div className="font-bold text-lg text-white">{Math.min(have, need)}<span className="text-gray-400 text-sm">/{need}</span></div>
-              <div className="text-xs text-gray-400">{label}</div>
+            <div key={label} className="bg-raised rounded-xl py-2">
+              <div className="font-bold text-lg text-ink">{Math.min(have, need)}<span className="text-muted text-sm">/{need}</span></div>
+              <div className="text-xs text-muted">{label}</div>
             </div>
           ))}
         </div>
-        <p className="text-xs text-gray-500 mt-2">Weigh-ins need to span at least {p.neededSpan} days. Add them in the Progress tab.</p>
+        <p className="text-xs text-muted mt-2">Weigh-ins need to span at least {p.neededSpan} days. Add them in the Progress tab.</p>
       </div>
     )
   }
 
-  const trend = est.weeklyChangeLb === 0 ? 'stable' : `${est.weeklyChangeLb > 0 ? '+' : ''}${est.weeklyChangeLb} lb/week`
+  const trend = est.weeklyChangeLb === 0 ? 'stable' : `${est.weeklyChangeLb > 0 ? '+' : ''}${fromLb(est.weeklyChangeLb)} ${unit}/week`
 
   return (
-    <div className="bg-[#111] border border-neon/20 rounded-2xl p-4">
-      <div className="text-xs text-neon mb-2">Adaptive targets</div>
+    <div className="bg-surface border border-neon-stroke/20 rounded-2xl p-4">
+      <div className="text-xs text-neon-ink mb-2">Adaptive targets</div>
       <div className="grid grid-cols-3 gap-2 text-center">
-        <div><div className="font-bold text-lg text-white">{est.avgIntake}</div><div className="text-sm font-semibold text-gray-200">Avg eaten</div></div>
-        <div><div className="font-bold text-lg text-white">{trend}</div><div className="text-sm font-semibold text-gray-200">Weight</div></div>
-        <div><div className="font-bold text-lg text-neon">{est.estimatedTdee}</div><div className="text-sm font-semibold text-gray-200">Real burn</div></div>
+        <div><div className="font-bold text-lg text-ink">{est.avgIntake}</div><div className="text-sm font-semibold text-ink-2">Avg eaten</div></div>
+        <div><div className="font-bold text-lg text-ink">{trend}</div><div className="text-sm font-semibold text-ink-2">Weight</div></div>
+        <div><div className="font-bold text-lg text-neon-ink">{est.estimatedTdee}</div><div className="text-sm font-semibold text-ink-2">Real burn</div></div>
       </div>
       {est.formulaTdee && (
-        <p className="text-xs text-gray-400 mt-2">Your current target assumed {Math.round(est.formulaTdee)} kcal/day; your data says {est.estimatedTdee}.</p>
+        <p className="text-xs text-muted mt-2">Your current target assumed {Math.round(est.formulaTdee)} kcal/day; your data says {est.estimatedTdee}.</p>
       )}
       {est.suggestion ? (
         <>
-          <p className="text-xs text-gray-400 mt-3">
-            Suggested target: <span className="text-white font-semibold">{est.suggestion.calorieTarget} kcal</span>
+          <p className="text-xs text-muted mt-3">
+            Suggested target: <span className="text-ink font-semibold">{est.suggestion.calorieTarget} kcal</span>
             {' '}({est.diff > 0 ? '+' : ''}{est.diff}) · P {est.suggestion.proteinGrams}g · C {est.suggestion.carbGrams}g · F {est.suggestion.fatGrams}g
           </p>
-          {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
-          <button onClick={apply} disabled={saving}
-            className="mt-3 w-full bg-neon text-black font-bold py-2.5 rounded-xl text-xs disabled:opacity-50">
+          {error && <p className="text-xs text-danger mt-2">{error}</p>}
+          <Button full onClick={apply} disabled={saving} className="mt-3">
             {saving ? 'Updating...' : 'Apply new targets'}
-          </button>
+          </Button>
         </>
       ) : (
-        <p className="text-xs text-gray-400 mt-3">Your current target already matches your real burn. ✓</p>
+        <p className="text-xs text-muted mt-3 flex items-center gap-1.5"><Icon icon="mdi:check-circle-outline" width={14} className="text-neon-ink flex-shrink-0" />Your current target already matches your real burn.</p>
       )}
     </div>
   )

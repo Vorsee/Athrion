@@ -24,9 +24,9 @@ describe('stripe.js', () => {
     const loc = { href: '' }
     vi.stubGlobal('location', loc)
     Object.defineProperty(window, 'location', { value: loc, configurable: true })
-    await createCheckoutSession()
-    // The server takes the user from the token; the body only names the price
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ price_id: 'price_test' })
+    await createCheckoutSession('annual')
+    // The server takes the user from the token and the price from the plan name
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ plan: 'annual' })
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer jwt-token')
     expect(loc.href).toBe('https://checkout.stripe.com/x')
   })

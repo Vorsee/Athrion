@@ -33,12 +33,12 @@ describe('Plan — Pro lock', () => {
   it('shows free users the real page with a sample plan behind a dark overlay and an upgrade button', async () => {
     const onUpgrade = vi.fn()
     render(<P.Plan isPro={false} onUpgrade={onUpgrade} profile={profile} onGoToWorkout={() => {}} onProfileChange={() => {}} />)
-    expect(screen.getByText('Unlock with Pro')).toBeInTheDocument()
+    expect(screen.getByText('Get a plan built for your goal')).toBeInTheDocument()
     expect(screen.getByText('Muscle Builder')).toBeInTheDocument() // sample plan rendered underneath
     expect(screen.getByText('Weekly schedule')).toBeInTheDocument()
     expect(screen.getByText('Muscle Builder').closest('[inert]')).toHaveAttribute('aria-hidden', 'true')
     expect(sb.queriesFor('fitness_plans')).toHaveLength(0) // no data loaded for free users
-    await userEvent.click(screen.getByText('Get Pro →'))
+    await userEvent.click(screen.getByText('Get Pro'))
     expect(onUpgrade).toHaveBeenCalled()
   })
 })
@@ -59,7 +59,7 @@ describe('Plan', () => {
     render(<P.Plan isPro profile={profile} onGoToWorkout={go} onProfileChange={() => {}} />)
     expect(await screen.findByText('Weekly schedule')).toBeInTheDocument()
     expect(screen.getByText('Today · Friday')).toBeInTheDocument()
-    await userEvent.click(screen.getByText('Train anyway →'))
+    await userEvent.click(screen.getByText('Train anyway'))
     expect(go).toHaveBeenCalled()
     expect(screen.getByText('Daily nutrition targets')).toBeInTheDocument()
   })
@@ -67,11 +67,11 @@ describe('Plan', () => {
 
 describe('Calories', () => {
   async function addFood(name, kcal) {
-    if (!screen.queryByPlaceholderText('Food name')) await userEvent.click((await screen.findAllByText('+ Add'))[0])
+    if (!screen.queryByPlaceholderText('Food name')) await userEvent.click((await screen.findAllByText('Add'))[0])
     await userEvent.type(screen.getByPlaceholderText('Food name'), name)
     await userEvent.type(screen.getByPlaceholderText('Calories'), String(kcal))
     const form = screen.getByPlaceholderText('Fat (g)').parentElement
-    await userEvent.click([...form.querySelectorAll('button')].find(b => b.textContent.includes('+ Add')))
+    await userEvent.click([...form.querySelectorAll('button')].find(b => b.textContent.trim() === 'Add'))
   }
   const upserts = () => sb.queriesFor('calorie_logs').filter(q => sb.op(q, 'upsert')).map(q => sb.op(q, 'upsert'))
 
@@ -96,16 +96,16 @@ describe('Calories', () => {
     await addFood('Oats', 300)
     expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't save your food log")
   })
-  it('shows free users the real page with a sample day behind a dark overlay', async () => {
+  it('lets free users log food; the AI photo scanner asks for Pro', async () => {
+    sb.set('nutrition_targets', { data: null, error: null })
+    sb.set('calorie_logs', q => sb.op(q, 'upsert') ? { data: { id: 'c1' }, error: null } : { data: sb.op(q, 'eq') ? null : [], error: null })
     const onUpgrade = vi.fn()
     render(<P.Calories profile={profile} isPro={false} onUpgrade={onUpgrade} onGoToPlan={() => {}} />)
-    expect(await screen.findByText('Unlock with Pro')).toBeInTheDocument()
-    const sample = screen.getByText('Chicken rice bowl')
-    expect(sample.closest('[inert]')).toHaveAttribute('aria-hidden', 'true')
-    expect(screen.getByText("Today's intake")).toBeInTheDocument()
-    expect(sb.queriesFor('calorie_logs')).toHaveLength(0) // nothing loaded or saved
-    expect(sb.queriesFor('nutrition_targets')).toHaveLength(0)
-    await userEvent.click(screen.getByText('Get Pro →'))
+    expect(screen.queryByText('Get Pro')).toBeNull() // no lock over the page
+    await addFood('Oats', 300)
+    await waitFor(() => expect(upserts()).toHaveLength(1))
+    expect(screen.getByText('Scan barcode')).toBeInTheDocument()
+    await userEvent.click(screen.getByText('Take or upload a photo of your meal'))
     expect(onUpgrade).toHaveBeenCalled()
   })
 })
@@ -119,45 +119,72 @@ describe('Auth', () => {
     expect(sb.supabase.auth.signInWithPassword).toHaveBeenCalledWith({ email: 'sam@example.com', password: 'secret12' })
   })
   it('validates registration before calling Supabase', async () => {
-    render(<P.Auth />)
-    if (!screen.queryByPlaceholderText('Email address')) await userEvent.click(screen.getAllByRole('button')[0])
-    await userEvent.click(screen.getAllByText('Create account')[0])
+    render(<P.Auth initialMode="register" />)
     await userEvent.type(screen.getByPlaceholderText('Full name'), 'Sam')
     await userEvent.type(screen.getByPlaceholderText('Email address'), 'sam@example.com')
     await userEvent.type(screen.getByPlaceholderText('Password'), 'secret12')
     await userEvent.type(screen.getByPlaceholderText('Confirm password'), 'different')
-    await userEvent.click(screen.getAllByText('Create account').at(-1))
+    await userEvent.click(screen.getByText('Create free account'))
     expect(screen.getByText('Passwords do not match.')).toBeInTheDocument()
     expect(sb.supabase.auth.signUp).not.toHaveBeenCalled()
   })
+  it('submits with Enter from any field and fills from password managers', async () => {
+    render(<P.Auth />)
+    expect(screen.getByPlaceholderText('Email address')).toHaveAttribute('autocomplete', 'email')
+    expect(screen.getByPlaceholderText('Password')).toHaveAttribute('autocomplete', 'current-password')
+    await userEvent.type(screen.getByPlaceholderText('Email address'), 'sam@example.com')
+    await userEvent.type(screen.getByPlaceholderText('Password'), 'secret12{Enter}')
+    expect(sb.supabase.auth.signInWithPassword).toHaveBeenCalled()
+  })
+  it('sends a password reset link', async () => {
+    render(<P.Auth />)
+    await userEvent.click(screen.getByText('Forgot password?'))
+    await userEvent.type(screen.getByPlaceholderText('Email address'), 'sam@example.com')
+    await userEvent.click(screen.getByText('Send reset link'))
+    expect(sb.supabase.auth.resetPasswordForEmail).toHaveBeenCalledWith('sam@example.com', expect.objectContaining({ redirectTo: expect.any(String) }))
+    expect(await screen.findByText('Check your email')).toBeInTheDocument()
+  })
 })
 
-describe('Upgrade in one tap', () => {
-  it('Get Pro on a locked tab goes straight to Stripe checkout', async () => {
+describe('Upgrade sheet before Stripe', () => {
+  function signInFree(sub = { status: 'free', stripe_customer_id: null }) {
     sb.supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: 't' } } })
     sb.set('user_profiles', { data: profile, error: null })
     sb.set('fitness_profiles', { data: fitnessProfile, error: null })
-    sb.set('subscriptions', { data: { status: 'free' }, error: null })
+    sb.set('subscriptions', { data: sub, error: null })
     sb.set('fitness_plans', { data: null, error: null })
+  }
+  it('Get Pro opens the plans, then the chosen plan goes to Stripe checkout', async () => {
+    signInFree()
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ url: '#checkout' }) }))
     vi.stubGlobal('fetch', fetchMock)
     render(<P.App />)
-    await userEvent.click(await screen.findByText('Calories'))
-    await userEvent.click(await screen.findByText('Get Pro →'))
+    await userEvent.click(await screen.findByText('Plan'))
+    await userEvent.click(await screen.findByText('Get Pro'))
+    expect(await screen.findByRole('radio', { name: /Yearly · \$59\.99/ })).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('radio', { name: /Monthly/ }))
+    await userEvent.click(await screen.findByText('Start 7-day free trial'))
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/create-checkout', expect.anything()))
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer t')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ plan: 'monthly' })
     vi.unstubAllGlobals()
   })
+  it('offers no trial to someone who has subscribed before', async () => {
+    signInFree({ status: 'free', stripe_customer_id: 'cus_1' })
+    render(<P.App />)
+    await userEvent.click(await screen.findByText('Plan'))
+    await userEvent.click(await screen.findByText('Get Pro'))
+    expect(await screen.findByText('Continue to payment')).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'ATHRION Pro' })).not.toHaveTextContent(/free trial/i)
+  })
   it('shows an error if checkout cannot open', async () => {
-    sb.supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: 't' } } })
-    sb.set('user_profiles', { data: profile, error: null })
-    sb.set('fitness_profiles', { data: fitnessProfile, error: null })
-    sb.set('subscriptions', { data: { status: 'free' }, error: null })
-    sb.set('fitness_plans', { data: null, error: null })
+    signInFree()
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, json: async () => ({ error: 'Stripe is down' }) })))
     render(<P.App />)
     await userEvent.click(await screen.findByText('Plan'))
-    await userEvent.click(await screen.findByText('Get Pro →'))
+    await userEvent.click(await screen.findByText('Get Pro'))
+    await userEvent.click(await screen.findByText('Start 7-day free trial'))
     expect(await screen.findByRole('alert')).toHaveTextContent('Stripe is down')
     vi.unstubAllGlobals()
   })
@@ -217,11 +244,32 @@ describe('Progress', () => {
 describe('Onboarding', () => {
   it('renders the body-stats step', () => {
     render(<P.Onboarding initialValues={null} onComplete={() => {}} />)
-    expect(screen.getAllByText('Athrion').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('ATHRION').length).toBeGreaterThan(0)
   })
   it('renders fitness setup', () => {
     render(<P.FitnessOnboarding existingProfile={profile} onComplete={() => {}} />)
     expect(screen.getByText('Fitness setup')).toBeInTheDocument()
+  })
+  it('lets a free user save their answers and targets, then offers the trial instead of generating', async () => {
+    sb.set('fitness_profiles', { data: {}, error: null })
+    sb.set('nutrition_targets', { data: {}, error: null })
+    sb.set('user_profiles', { data: {}, error: null })
+    const onUpgrade = vi.fn(); const onCancel = vi.fn()
+    const fetchMock = vi.fn(); vi.stubGlobal('fetch', fetchMock)
+    const saved = { primary_goal: 'build_muscle', activity_level: 'moderately_active', experience_level: 'beginner', workout_days_per_week: 3 }
+    render(<P.FitnessOnboarding existingProfile={profile} saved={saved} isPro={false} onUpgrade={onUpgrade} onCancel={onCancel} />)
+    expect(screen.getByText(/not medical advice/)).toBeInTheDocument()
+    await userEvent.click(screen.getByText('Start 7-day free trial'))
+    await waitFor(() => expect(onUpgrade).toHaveBeenCalled())
+    const upsert = sb.op(sb.queriesFor('fitness_profiles').find(q => sb.op(q, 'upsert')), 'upsert')[0]
+    expect(upsert).toMatchObject({ primary_goal: 'build_muscle', onboarding_completed: false })
+    expect(fetchMock).not.toHaveBeenCalled() // no plan generation for free users
+    expect(onCancel).toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+  it('takes a new Pro member with saved answers straight to building the plan', () => {
+    render(<P.FitnessOnboarding existingProfile={profile} saved={{ primary_goal: 'lose_fat' }} onComplete={() => {}} />)
+    expect(screen.getByText('Build my plan')).toBeInTheDocument()
   })
 })
 
@@ -252,11 +300,23 @@ describe('App shell', () => {
     sb.set('subscriptions', { data: { status: 'free' }, error: null })
     sb.set('fitness_plans', { data: planRow, error: null })
   }
-  it('shows sign-in when logged out', async () => {
+  it('shows new visitors the landing page, then create account', async () => {
+    localStorage.clear()
+    sb.supabase.auth.getSession.mockResolvedValue({ data: { session: null } })
+    render(<P.App />)
+    expect(await screen.findByText('A training plan and calorie targets that adjust every week')).toBeInTheDocument()
+    expect(screen.getByText('$7.99')).toBeInTheDocument()
+    await userEvent.click(screen.getAllByText('Create free account')[0])
+    expect(await screen.findByPlaceholderText('Full name')).toBeInTheDocument()
+    expect(sb.supabase.from).not.toHaveBeenCalledWith('user_profiles')
+  })
+  it('takes someone who has signed in here before straight to sign in', async () => {
+    localStorage.setItem('athrion_signed_in_before', '1')
     sb.supabase.auth.getSession.mockResolvedValue({ data: { session: null } })
     render(<P.App />)
     expect(await screen.findByPlaceholderText('Email address')).toBeInTheDocument()
-    expect(sb.supabase.from).not.toHaveBeenCalledWith('user_profiles')
+    expect(screen.queryByPlaceholderText('Full name')).toBeNull()
+    localStorage.clear()
   })
   it('loads the profile and lands on the Workout tab when signed in', async () => {
     signedIn()

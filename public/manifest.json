@@ -2,7 +2,7 @@
   "id": "/",
   "name": "ATHRION",
   "short_name": "ATHRION",
-  "description": "Your personal AI fitness tracker",
+  "description": "Training plan, workout log and calorie targets that adjust every week",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
