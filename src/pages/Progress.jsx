@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Icon } from '@iconify/react'
 import { useBackHandler, useHeaderAction } from '../lib/shell.js'
-import { Button, Card, SectionTitle, Segmented, EmptyState, Skeleton, SkeletonRows, Sheet } from '../components/ui/index.js'
+import { Button, Card, SectionTitle, Segmented, EmptyState, Skeleton, SkeletonRows, Sheet, PageHeader, Fact, InfoButton, BigNumber, StatTiles } from '../components/ui/index.js'
 import LineChart from '../components/LineChart.jsx'
 import { fetchWorkoutHistory } from '../lib/api.js'
 import {
@@ -41,22 +41,26 @@ function Overview({ history, badges }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          ['Week streak', streak, 'mdi:fire'],
-          ['This week', thisWeek, 'mdi:calendar-check'],
-          ['Workouts', history.length, 'mdi:dumbbell'],
-        ].map(([label, val, icon]) => (
-          <Card key={label} pad="sm" className="text-center">
-            <Icon icon={icon} width={20} className="mx-auto text-neon-ink mb-1" />
-            <div className="font-bold text-2xl text-ink leading-none">{val}</div>
-            <div className="text-xs text-muted mt-1">{label}</div>
-          </Card>
-        ))}
-      </div>
+      <Card hero>
+        <div className="text-xs font-semibold text-neon-ink mb-1">Week streak</div>
+        <BigNumber value={streak} unit={streak === 1 ? 'week' : 'weeks'} />
+        <StatTiles className="mt-4" items={[['This week', thisWeek], ['Workouts', history.length]]} />
+      </Card>
 
       <Card>
-        <SectionTitle>Badges · {earnedIds.size}/{BADGES.length}</SectionTitle>
+        <SectionTitle action={<>
+          <Fact icon="mdi:trophy-outline">{earnedIds.size}/{BADGES.length}</Fact>
+          <InfoButton title="How to earn badges">
+            <ul className="space-y-2.5">
+              {BADGES.map(b => (
+                <li key={b.id} className="flex items-start gap-3">
+                  <Icon icon={b.icon} width={20} className={`mt-0.5 flex-shrink-0 ${earnedIds.has(b.id) ? 'text-neon-ink' : 'text-muted'}`} aria-hidden="true" />
+                  <div><div className="text-sm font-semibold text-ink">{b.name}</div><div className="text-sm text-ink-2">{b.desc}</div></div>
+                </li>
+              ))}
+            </ul>
+          </InfoButton>
+        </>}>Badges</SectionTitle>
         <div className="grid grid-cols-3 gap-2">
           {BADGES.map(b => {
             const earned = earnedIds.has(b.id)
@@ -64,7 +68,6 @@ function Overview({ history, badges }) {
               <div key={b.id} className={`rounded-xl p-2.5 text-center border ${earned ? 'border-neon-stroke/30 bg-neon-tint' : 'border-line border-dashed'}`}>
                 <Icon icon={earned ? b.icon : 'mdi:lock-outline'} width={26} className={`mx-auto ${earned ? 'text-neon-ink' : 'text-muted'}`} />
                 <div className={`text-xs font-semibold mt-1 leading-tight ${earned ? 'text-ink' : 'text-ink-2'}`}>{b.name}</div>
-                <div className="text-2xs text-muted mt-0.5 leading-tight">{b.desc}</div>
               </div>
             )
           })}
@@ -335,15 +338,10 @@ function Health({ health, onChanged }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-3">
-        {[['Avg steps', avg('steps'), 'mdi:shoe-print'], ['Avg sleep', avg('sleep_hours'), 'mdi:sleep'], ['Resting HR', avg('resting_hr'), 'mdi:heart-pulse']].map(([l, v, icon]) => (
-          <Card key={l} pad="sm" className="text-center">
-            <Icon icon={icon} width={20} className="mx-auto text-neon-ink mb-1" />
-            <div className="font-bold text-xl text-ink leading-none">{v}</div>
-            <div className="text-xs text-muted mt-1">{l} · 7d</div>
-          </Card>
-        ))}
-      </div>
+      <Card>
+        <SectionTitle action={<Fact icon="mdi:calendar-range">7 days</Fact>}>Averages</SectionTitle>
+        <StatTiles items={[['Steps', avg('steps')], ['Sleep (h)', avg('sleep_hours')], ['Resting HR', avg('resting_hr')]]} />
+      </Card>
 
       {canSync && (
         <Button variant="secondary" full icon="mdi:heart-plus-outline" onClick={sync} disabled={syncing}>
@@ -407,17 +405,9 @@ function Lifts({ history }) {
           <Icon icon={getExerciseIcon({ name: selected })} width={28} className="text-neon-ink flex-shrink-0" />
           <div className="font-bold text-xl text-ink leading-tight break-words">{selected}</div>
         </div>
-        <div className="grid grid-cols-3 gap-3">
-          {(weighted
-            ? [['Heaviest', `${fromLb(rec.maxWeight)}×${rec.maxWeightReps}`], ['Est. 1RM', Math.round(fromLb(rec.bestE1rm))], ['Best volume', Math.round(fromLb(rec.bestVolume))]]
-            : [['Most reps', rec.maxReps], ['Sessions', sessions.length], ['Best volume', '–']]
-          ).map(([l, v]) => (
-            <Card key={l} pad="sm" className="text-center">
-              <div className="font-bold text-xl text-ink leading-none">{v}</div>
-              <div className="text-xs text-muted mt-1">{l}</div>
-            </Card>
-          ))}
-        </div>
+        <StatTiles items={weighted
+          ? [['Heaviest', `${fromLb(rec.maxWeight)}×${rec.maxWeightReps}`], ['Est. 1RM', Math.round(fromLb(rec.bestE1rm))], ['Best volume', Math.round(fromLb(rec.bestVolume))]]
+          : [['Most reps', rec.maxReps], ['Sessions', sessions.length], ['Best volume', '–']]} />
         <Card>
           <SectionTitle>{weighted ? 'Estimated 1-rep max' : 'Best set (reps)'}</SectionTitle>
           <LineChart data={series} unit={weighted ? unit : 'reps'} label={weighted ? 'Est. 1RM' : 'Reps'} />
@@ -510,7 +500,7 @@ export default function Progress() {
 
   return (
     <div className="space-y-4 pt-2 pb-4">
-      <div className="font-bold text-2xl text-ink">Progress</div>
+      <PageHeader icon="mdi:chart-line" title="Progress" />
       <Segmented options={TABS} value={tab} onChange={setTab} label="Progress sections" />
 
       {loading ? (

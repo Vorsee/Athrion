@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
-import { Button, Card, SectionTitle, PageSkeleton, InlineError, InfoButton, Fact } from '../components/ui/index.js'
+import { Button, Card, SectionTitle, PageSkeleton, InlineError, InfoButton, Fact, PageHeader, IconButton, ExerciseRow, ActionRow, BigNumber, StatTiles } from '../components/ui/index.js'
 import { getExerciseIcon } from '../lib/data.js'
 import Sheet from '../components/Sheet.jsx'
 import { DemoButton, SwapSheet } from '../components/ExerciseDemo.jsx'
@@ -31,14 +31,7 @@ function PlanExerciseCard({ ex, onSwap }) {
   const [swapping, setSwapping] = useState(false)
   const notes = [ex.intensityNote, ex.formTip, ex.easierVersion && `Easier: ${ex.easierVersion}`, ex.swappedFrom && `Swapped from ${ex.swappedFrom}`].filter(Boolean)
   return (
-    <div className="flex items-center gap-3 bg-raised rounded-xl px-3 py-2.5">
-      <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-neon-ink" aria-hidden="true" />
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold text-ink leading-snug break-words">{ex.name}</div>
-        {ex.restSeconds > 0 && <div className="text-xs text-muted">{ex.restSeconds}s rest</div>}
-      </div>
-      <span className="text-sm font-bold text-neon-ink tabular-nums flex-shrink-0">{formatVolume(ex)}</span>
-      <div className="flex items-center gap-1 flex-shrink-0">
+    <ExerciseRow icon={getExerciseIcon(ex)} name={ex.name} meta={ex.restSeconds > 0 && `${ex.restSeconds}s rest`} value={formatVolume(ex)}>
         {notes.length > 0 && (
           <InfoButton title={ex.name} label={`Notes for ${ex.name}`}>
             <ul className="space-y-2 text-sm text-ink-2">{notes.map((n, i) => <li key={i}>{n}</li>)}</ul>
@@ -51,12 +44,11 @@ function PlanExerciseCard({ ex, onSwap }) {
             <Icon icon="mdi:swap-horizontal" width={18} />
           </button>
         )}
-      </div>
       {swapping && (
         <SwapSheet exercise={ex} onClose={() => setSwapping(false)}
           onSwap={name => { setSwapping(false); onSwap(name) }} />
       )}
-    </div>
+    </ExerciseRow>
   )
 }
 
@@ -166,18 +158,8 @@ function NutritionCard({ planNutrition, dbNutrition }) {
       <SectionTitle action={hydration && <InfoButton title="Hydration">{<p className="text-sm text-ink-2">{hydration}</p>}</InfoButton>}>
         Daily targets
       </SectionTitle>
-      <div className="flex items-baseline gap-1.5">
-        <span className="font-bold text-4xl text-neon-ink tabular-nums leading-none">{cals}</span>
-        <span className="text-sm text-muted">kcal</span>
-      </div>
-      <div className="grid grid-cols-3 gap-2 mt-3">
-        {[['Protein', protein], ['Carbs', carbs], ['Fat', fat]].map(([label, val]) => (
-          <div key={label} className="bg-raised rounded-xl px-3 py-2">
-            <div className="font-bold text-lg text-ink tabular-nums leading-tight">{val}g</div>
-            <div className="text-xs text-muted">{label}</div>
-          </div>
-        ))}
-      </div>
+      <BigNumber value={cals} unit="kcal" />
+      <StatTiles className="mt-3" items={[['Protein', `${protein}g`], ['Carbs', `${carbs}g`], ['Fat', `${fat}g`]]} />
     </Card>
   )
 }
@@ -296,13 +278,8 @@ function CoachNotes({ advice, progression }) {
   if (!tips.length && !advice?.sleepAdvice && !progression?.weeklyStrategy) return null
   return (
     <>
-      <button onClick={() => setOpen(true)}
-        className="press w-full flex items-center gap-3 bg-surface border border-line hover:border-neon-stroke/30 rounded-2xl px-4 py-3.5 text-left transition-colors">
-        <Icon icon="mdi:lightbulb-on-outline" width={22} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
-        <span className="flex-1 text-sm font-semibold text-ink">Coach notes</span>
-        {tips.length > 0 && <Fact>{tips.length} priorities</Fact>}
-        <Icon icon="mdi:chevron-right" width={20} className="text-muted" aria-hidden="true" />
-      </button>
+      <ActionRow icon="mdi:lightbulb-on-outline" title="Coach notes" onClick={() => setOpen(true)}
+        badge={tips.length > 0 && <Fact>{tips.length} priorities</Fact>} />
       {open && (
         <Sheet title="Coach notes" onClose={() => setOpen(false)}>
           {tips.length > 0 && (
@@ -342,12 +319,7 @@ function SafetyCard({ safety }) {
   if (!items.length) return null
   return (
     <>
-      <button onClick={() => setOpen(true)}
-        className="press w-full flex items-center gap-3 bg-warn/10 border border-warn/30 rounded-2xl px-4 py-3.5 text-left">
-        <Icon icon="mdi:alert-outline" width={22} className="text-warn flex-shrink-0" aria-hidden="true" />
-        <span className="flex-1 text-sm font-semibold text-warn">Safety notes · {items.length}</span>
-        <Icon icon="mdi:chevron-right" width={20} className="text-warn" aria-hidden="true" />
-      </button>
+      <ActionRow tone="warn" icon="mdi:alert-outline" title={`Safety notes · ${items.length}`} onClick={() => setOpen(true)} />
       {open && (
         <Sheet title="Safety notes" onClose={() => setOpen(false)}>
           <ul className="space-y-2">{items.map((w, i) => <li key={i} className="text-sm text-ink-2">{w}</li>)}</ul>
@@ -491,15 +463,12 @@ function LockedPlan({ onUpgrade, onStartSetup }) {
       secondary={onStartSetup && { label: 'Answer the questions first, free', onClick: onStartSetup }}
       description="Your week of workouts, sets and reps from a few questions about you. It adapts every week from your check-ins.">
       <div className="space-y-4 pt-2">
-        <div>
-          <div className="flex items-center gap-2 mb-0.5">
-            <Icon icon={GOAL_ICONS[plan.primary_goal]} width={22} className="text-neon-ink" />
-            <div className="font-bold text-xl text-ink leading-none">{planData.summary.planName}</div>
-          </div>
-          <div className="text-xs text-muted">
-            {plan.duration_weeks} weeks · {workoutDays(planData, plan)} days a week · {GOAL_LABELS[plan.primary_goal]}
-          </div>
-        </div>
+        <PageHeader icon={GOAL_ICONS[plan.primary_goal]} title={planData.summary.planName}
+          facts={<>
+            <Fact icon="mdi:calendar-range">{plan.duration_weeks} weeks</Fact>
+            <Fact icon="mdi:calendar-check-outline">{workoutDays(planData, plan)} days a week</Fact>
+            <Fact icon="mdi:target">{GOAL_LABELS[plan.primary_goal]}</Fact>
+          </>} />
         {todayData && <TodayWorkout dayData={todayData} />}
         <NutritionCard planNutrition={planData.nutrition} dbNutrition={null} />
         <WeeklySchedule schedule={planData.weeklySchedule} onSwap={noop} />
@@ -651,27 +620,16 @@ function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
   return (
     <div className="space-y-4 pt-2">
       {/* Plan header: name, key facts, one menu for rebuilding */}
-      <div>
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <Icon icon={goalIcon} width={26} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
-            <h1 className="font-bold text-2xl text-ink leading-tight break-words">{summary.planName ?? goalLabel}</h1>
-          </div>
-          <button onClick={() => setShowGoal(true)} disabled={generating} aria-label="Change goal or rebuild plan"
-            className="press w-10 h-10 -mr-1 rounded-full flex items-center justify-center text-ink-2 hover:text-neon-ink hover:bg-raised disabled:opacity-40 flex-shrink-0">
-            {generating
-              ? <span className="inline-block w-4 h-4 border-2 border-neon-stroke/30 border-t-neon-stroke rounded-full animate-spin" />
-              : <Icon icon="mdi:dots-horizontal" width={24} />}
-          </button>
-        </div>
-        <div className="flex flex-wrap gap-1.5 mt-2">
+      <PageHeader icon={goalIcon} title={summary.planName ?? goalLabel}
+        action={<IconButton icon="mdi:dots-horizontal" label="Change goal or rebuild plan" onClick={() => setShowGoal(true)} disabled={generating} className="-mr-1" />}
+        facts={<>
           <Fact icon="mdi:calendar-range">{summary.durationWeeks ?? plan.duration_weeks} weeks</Fact>
           <Fact icon="mdi:calendar-check-outline">{workoutDays(plan.plan_data, plan)} days a week</Fact>
           <Fact icon="mdi:target">{goalLabel}</Fact>
-        </div>
+        </>}>
         {generating && <p role="status" className="text-sm font-semibold text-neon-ink mt-2">Rebuilding your plan…</p>}
         {genError && <InlineError className="mt-2">{genError}</InlineError>}
-      </div>
+      </PageHeader>
 
       {/* Today */}
       {todayData && <TodayWorkout dayData={todayData} onGoToWorkout={onGoToWorkout} onStartWorkout={onStartWorkout} onSwap={handleSwap} />}

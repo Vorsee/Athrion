@@ -114,7 +114,7 @@ describe('Calories', () => {
     await addFood('Oats', 300)
     await waitFor(() => expect(upserts()).toHaveLength(1))
     expect(screen.getByText('Scan barcode')).toBeInTheDocument()
-    await userEvent.click(screen.getByText('Take or upload a photo of your meal'))
+    await userEvent.click(screen.getByText('Snap a meal'))
     expect(onUpgrade).toHaveBeenCalled()
   })
 })

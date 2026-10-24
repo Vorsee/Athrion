@@ -50,7 +50,7 @@ describe('Progress', () => {
     await userEvent.click(await screen.findByText('Photos'))
     expect(await screen.findByText('Add a photo')).toBeInTheDocument()
     await userEvent.click(screen.getByText('Health'))
-    expect(await screen.findByText('Steps')).toBeInTheDocument()
+    expect(await screen.findByText('Averages')).toBeInTheDocument()
   })
   it('awards badges earned from history', async () => {
     sb.set('workout_logs', { data: history, error: null })

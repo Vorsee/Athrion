@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Icon } from '@iconify/react'
 import { useBackHandler } from '../lib/shell.js'
-import { Button, Card, Chip, Segmented } from '../components/ui/index.js'
+import { Button, Card, Chip, Segmented, PageHeader, SectionTitle, Fact, IconButton, ExerciseRow } from '../components/ui/index.js'
 import { tok } from '../lib/tokens.js'
 import { EXERCISES, MUSCLES, getExerciseIcon, todayKey } from '../lib/data.js'
 import {
@@ -422,30 +422,21 @@ export default function Group({ session }) {
 
 function HomeScreen({ joinCode, setJoinCode, joinError, loading, onCreate, onJoin }) {
   return (
-    <div className="space-y-6 py-4 slide-up">
-      <div className="text-center pt-4">
-        <div className="font-bold text-2xl text-ink mb-1">Group workout</div>
-        <div className="text-muted text-sm">Train together. Compete in real time.</div>
-      </div>
+    <div className="space-y-4 py-4 slide-up">
+      <PageHeader icon="mdi:account-group-outline" title="Group workout"
+        facts={<Fact icon="mdi:trophy-outline">Live standings</Fact>} />
 
-      <Card pad="none" className="p-6 space-y-4">
-        <div className="text-lg leading-[1.3] font-semibold text-ink">Host a session</div>
-        <p className="text-sm text-muted">Create a room, pick exercises, and invite friends with a code.</p>
-        <Button full onClick={onCreate} disabled={loading}>
-          {loading ? 'Creating...' : <span className="inline-flex items-center gap-1.5"><Icon icon="mdi:plus" width={18} />Create a room</span>}
+      <Card hero className="space-y-3">
+        <SectionTitle className="mb-0">Host a session</SectionTitle>
+        <Button full icon="mdi:plus" onClick={onCreate} disabled={loading}>
+          {loading ? 'Creating...' : 'Create a room'}
         </Button>
       </Card>
 
-      <div className="flex items-center gap-3">
-        <div className="flex-1 h-px bg-line" />
-        <span className="text-xs text-muted">or join with a code</span>
-        <div className="flex-1 h-px bg-line" />
-      </div>
-
-      <Card pad="none" className="p-6 space-y-4">
-        <div className="text-lg leading-[1.3] font-semibold text-ink">Join a room</div>
+      <Card className="space-y-3">
+        <SectionTitle className="mb-0">Join a room</SectionTitle>
         <input
-          className="w-full bg-inset border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-sm outline-none transition-colors font-bold text-lg text-center"
+          className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-sm outline-none transition-colors font-bold text-lg text-center"
           placeholder="ABC123"
           maxLength={6}
           value={joinCode}
@@ -488,27 +479,26 @@ function LobbyScreen({ groupSession, participants, isHost, exercises, onAddExerc
     <div className="space-y-4 py-4 slide-up">
 
       {/* Room code */}
-      <Card pad="none" className="p-6 text-center">
-        <div className="text-sm font-semibold text-ink-2 mb-2">Room code</div>
+      <Card hero className="text-center">
+        <div className="text-xs font-semibold text-neon-ink mb-2">Room code</div>
         <div className="font-bold text-5xl text-neon-ink mb-3 tracking-[0.15em] tabular-nums">{groupSession?.code}</div>
         <button onClick={copyCode}
           className="press text-xs font-semibold text-ink-2 hover:text-ink border border-line-strong px-4 min-h-[36px] rounded-md transition-all">
           {copied ? <span className="inline-flex items-center gap-1"><Icon icon="mdi:check" width={14} />Copied</span> : <span className="inline-flex items-center gap-1"><Icon icon="mdi:content-copy" width={14} />Copy code</span>}
         </button>
-        <div className="text-xs text-muted mt-2">Share this code with friends to join</div>
       </Card>
 
       {/* Participants */}
-      <Card pad="md">
-        <div className="text-xs text-muted mb-3">Participants · {participants.length}</div>
+      <Card>
+        <SectionTitle action={<Fact icon="mdi:account-multiple">{participants.length}</Fact>}>Participants</SectionTitle>
         <div className="space-y-2">
           {participants.map((p, i) => (
-            <div key={i} className="flex items-center gap-3 bg-inset rounded-xl px-3 py-2.5">
+            <div key={i} className="flex items-center gap-3 bg-raised rounded-xl px-3 py-2.5">
               <div className="w-7 h-7 rounded-lg bg-neon/15 border border-neon-stroke/20 flex items-center justify-center flex-shrink-0">
                 <span className="font-bold text-xs text-neon-ink leading-none">{(p.display_name || '?')[0].toUpperCase()}</span>
               </div>
-              <span className="text-sm font-medium flex-1">{p.display_name}</span>
-              {p.user_id === groupSession?.host_id && <span className="text-xs text-neon-ink">Host</span>}
+              <span className="text-sm font-semibold text-ink flex-1">{p.display_name}</span>
+              {p.user_id === groupSession?.host_id && <Fact>Host</Fact>}
             </div>
           ))}
           {participants.length === 0 && (
@@ -519,39 +509,34 @@ function LobbyScreen({ groupSession, participants, isHost, exercises, onAddExerc
 
       {/* Host-only config */}
       {isHost && (
-        <Card pad="md">
-          <div className="text-lg leading-[1.3] font-semibold text-ink mb-3">Sets per exercise</div>
+        <Card>
+          <SectionTitle>Sets per exercise</SectionTitle>
           <Segmented options={[1,2,3,4,5].map(n => [n, String(n)])} value={totalSets} onChange={setTotalSets} label="Sets per exercise" kind="choice" className="mb-4" scroll={false} />
-          <div className="text-lg leading-[1.3] font-semibold text-ink mb-3">Rest duration</div>
+          <div className="text-lg leading-[1.3] font-semibold text-ink mb-3">Rest</div>
           <Segmented options={[30,45,60,90,120].map(s => [s, `${s}s`])} value={restSecs} onChange={setRestSecs} label="Rest duration" kind="choice" scroll={false} />
         </Card>
       )}
 
       {/* Exercise list — all participants can edit */}
       {exercises.length > 0 && (
-        <Card pad="md">
-          <div className="text-xs text-muted mb-3">Selected · {exercises.length}</div>
+        <Card>
+          <SectionTitle action={<Fact icon="mdi:dumbbell">{exercises.length}</Fact>}>Workout</SectionTitle>
           <div className="space-y-2">
             {exercises.map((ex, i) => (
-              <div key={i} className="flex items-center gap-3 bg-inset rounded-xl p-3">
-                <Icon icon={getExerciseIcon(ex)} width={20} className="flex-shrink-0 text-muted" />
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm truncate">{ex.name}</div>
-                  <div className="text-xs text-muted">{ex.muscle}</div>
-                </div>
-                <button onClick={() => onRemoveExercise(i)} aria-label={`Remove ${ex.name}`} className="press w-9 h-9 flex items-center justify-center rounded-md text-danger hover:bg-danger/12 transition-colors"><Icon icon="mdi:close" width={18} /></button>
-              </div>
+              <ExerciseRow key={i} icon={getExerciseIcon(ex)} name={ex.name} value={`${totalSets} sets`}>
+                <IconButton icon="mdi:close" label={`Remove ${ex.name}`} tone="danger" onClick={() => onRemoveExercise(i)} className="w-9 h-9" />
+              </ExerciseRow>
             ))}
           </div>
         </Card>
       )}
 
       {/* Exercise picker — open to everyone */}
-      <Card pad="md">
-        <div className="text-lg leading-[1.3] font-semibold text-ink mb-3">Add exercises</div>
+      <Card>
+        <SectionTitle>Add exercises</SectionTitle>
         <input
-          className="w-full bg-inset border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-3 py-2.5 text-sm outline-none transition-colors mb-3"
-          placeholder="Search exercises..."
+          className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-3 py-2.5 text-sm outline-none transition-colors mb-3"
+          placeholder="Search exercises"
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
@@ -564,17 +549,11 @@ function LobbyScreen({ groupSession, participants, isHost, exercises, onAddExerc
           {filtered.map((ex, i) => {
             const added = exercises.some(e => e.name === ex.name)
             return (
-              <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-inset">
-                <Icon icon={getExerciseIcon(ex)} width={20} className="flex-shrink-0 text-muted" />
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm truncate">{ex.name}</div>
-                  <div className="text-xs text-muted">{ex.muscle}</div>
-                </div>
-                <button onClick={() => onAddExercise(ex)} disabled={added}
-                  className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${added ? 'bg-raised text-muted border border-line-strong cursor-default' : 'bg-neon text-on-neon'}`}>
-                  {added ? <Icon icon="mdi:check" width={16} aria-label="Added" /> : <span className="inline-flex items-center gap-1"><Icon icon="mdi:plus" width={14} />Add</span>}
-                </button>
-              </div>
+              <ExerciseRow key={i} icon={getExerciseIcon(ex)} name={ex.name} meta={ex.muscle}>
+                {added
+                  ? <span className="w-9 h-9 flex items-center justify-center text-neon-ink"><Icon icon="mdi:check" width={20} aria-label="Added" /></span>
+                  : <Button size="sm" icon="mdi:plus" onClick={() => onAddExercise(ex)}>Add</Button>}
+              </ExerciseRow>
             )
           })}
         </div>
@@ -583,10 +562,7 @@ function LobbyScreen({ groupSession, participants, isHost, exercises, onAddExerc
       {/* Host starts; participants wait */}
       {isHost ? (
         <>
-          {participants.length < 2 && (
-            <div className="text-xs text-muted text-center">Invite friends — or test solo</div>
-          )}
-          <Button full onClick={onStart} disabled={exercises.length === 0}>
+          <Button full icon="mdi:play" onClick={onStart} disabled={exercises.length === 0}>
             Start workout
           </Button>
         </>
@@ -616,11 +592,11 @@ function TrainingScreen({ exercises, exIdx, setIdx, totalSets, participants, all
     <div className="space-y-4 py-4 slide-in">
       {/* Progress header */}
       <div>
-        <div className="flex justify-between text-xs text-muted mb-2">
-          <span>Exercise {exIdx + 1}/{exercises.length} · {ex.name}</span>
-          <span>Set {setIdx + 1} of {totalSets}</span>
+        <div className="flex justify-between text-xs mb-2">
+          <span className="font-semibold text-ink-2">Exercise {exIdx + 1} of {exercises.length}</span>
+          <span className="font-semibold text-neon-ink tabular-nums">{Math.round(((exIdx * totalSets + setIdx) / (exercises.length * totalSets)) * 100)}%</span>
         </div>
-        <div className="h-1 bg-raised rounded-full overflow-hidden">
+        <div className="h-1.5 bg-raised rounded-full overflow-hidden">
           <div
             className="h-full bg-neon rounded-full transition-all duration-500"
             style={{ width: `${((exIdx * totalSets + setIdx) / (exercises.length * totalSets)) * 100}%` }}
@@ -631,7 +607,7 @@ function TrainingScreen({ exercises, exIdx, setIdx, totalSets, participants, all
       {/* Participants strip */}
       {participants.length > 0 && (
         <Card pad="sm">
-          <div className="text-lg leading-[1.3] font-semibold text-ink mb-2">Participants</div>
+          <SectionTitle className="mb-2">Participants</SectionTitle>
           <div className="flex flex-wrap gap-3">
             {participants.map((p, i) => {
               const done = setsForThisExByPerson(p.display_name)
@@ -653,41 +629,42 @@ function TrainingScreen({ exercises, exIdx, setIdx, totalSets, participants, all
       )}
 
       {/* Exercise card */}
-      <div className="bg-neon-tint border border-neon-stroke/30 rounded-2xl p-6 text-center">
-        <div className="flex justify-center mb-3">
-          <Icon icon={getExerciseIcon(ex)} width={56} className="text-neon-ink/80" />
+      <Card hero>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Icon icon={getExerciseIcon(ex)} width={30} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
+          <div className="font-bold text-2xl text-ink leading-tight break-words">{ex.name}</div>
         </div>
-        <div className="font-bold text-3xl mb-1">{ex.name}</div>
-        <div className="text-muted text-sm">{ex.muscle}</div>
-      </div>
-
-      {/* Set log */}
-      <Card pad="lg">
-        <div className="text-xs text-muted mb-3">Set {setIdx + 1} of {totalSets}</div>
-        <div className="flex gap-2 mb-4">
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          <Fact icon="mdi:repeat">Set {setIdx + 1} of {totalSets}</Fact>
+        </div>
+        <div className="flex gap-1.5 mt-4" aria-hidden="true">
           {Array.from({ length: totalSets }, (_, i) => (
-            <div key={i} className={`flex-1 h-2 rounded-full transition-all duration-300 ${i < setIdx ? 'bg-neon' : i === setIdx ? 'bg-neon ring-2 ring-inset ring-ink' : 'bg-line'}`} />
+            <div key={i} className={`flex-1 h-2 rounded-full transition-colors duration-300 ${i < setIdx ? 'bg-neon' : i === setIdx ? 'bg-neon/40' : 'bg-line'}`} />
           ))}
         </div>
+      </Card>
+
+      {/* Set log */}
+      <Card>
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
-            <label className="text-xs text-muted block mb-1">Weight ({unit})</label>
+            <label className="text-sm font-semibold text-ink-2 block mb-1">Weight ({unit})</label>
             <input
               type="number" placeholder="0" aria-label={`Weight in ${unit}`} value={weight}
-              onChange={e => setWeight(e.target.value)} min="0" step={unit === 'kg' ? 0.25 : 0.5}
-              className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-sm outline-none transition-colors"
+              onChange={e => setWeight(e.target.value)} min="0" step={unit === 'kg' ? 0.25 : 0.5} inputMode="decimal"
+              className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-2xl font-bold tabular-nums text-center outline-none transition-colors"
             />
           </div>
           <div>
-            <label className="text-xs text-muted block mb-1">Reps</label>
+            <label className="text-sm font-semibold text-ink-2 block mb-1">Reps</label>
             <input
               type="number" placeholder="0" aria-label="Reps" value={reps}
-              onChange={e => setReps(e.target.value)} min="1"
-              className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-sm outline-none transition-colors"
+              onChange={e => setReps(e.target.value)} min="1" inputMode="numeric"
+              className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-2xl font-bold tabular-nums text-center outline-none transition-colors"
             />
           </div>
         </div>
-        <Button full onClick={onLog}>Log set</Button>
+        <Button full icon="mdi:check" onClick={onLog}>Log set {setIdx + 1}</Button>
       </Card>
 
       {confirmEnd ? (
@@ -847,10 +824,10 @@ function DoneScreen({ allSets, exercises, participants, displayName, startTime, 
       {/* Final rankings */}
       {overall.length > 1 && (
         <Card pad="md">
-          <div className="text-lg leading-[1.3] font-semibold text-ink mb-3">Final rankings</div>
+          <SectionTitle>Final rankings</SectionTitle>
           <div className="space-y-2">
             {overall.map((entry, i) => (
-              <div key={i} className="flex items-center gap-3 bg-inset rounded-xl px-3 py-2.5">
+              <div key={i} className="flex items-center gap-3 bg-raised rounded-xl px-3 py-2.5">
                 <RankChip rank={i + 1} />
                 <span className={`flex-1 text-sm font-medium ${entry.name === displayName ? 'text-ink' : 'text-ink-2'}`}>
                   {entry.name}
@@ -866,7 +843,7 @@ function DoneScreen({ allSets, exercises, participants, displayName, startTime, 
       {/* Per-exercise breakdown */}
       {exercises.length > 0 && (
         <Card pad="md">
-          <div className="text-lg leading-[1.3] font-semibold text-ink mb-3">Exercise breakdown</div>
+          <SectionTitle>Exercise breakdown</SectionTitle>
           <div className="space-y-3">
             {exercises.map((ex, ei) => {
               const lb = buildExerciseLeaderboard(allSets, ex.name)

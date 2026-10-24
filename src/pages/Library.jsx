@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Icon } from '@iconify/react'
 import { useBackHandler } from '../lib/shell.js'
-import { Button, Segmented, Chip, Sheet, EmptyState } from '../components/ui/index.js'
+import { Button, Segmented, Chip, Sheet, EmptyState, PageHeader, Fact, InfoButton, SectionTitle } from '../components/ui/index.js'
 import { EXERCISES, MUSCLES, getExerciseIcon } from '../lib/data.js'
 import { WORKOUT_LIBRARY } from '../lib/library.js'
 import { saveCustomWorkout } from '../lib/api.js'
@@ -55,14 +55,10 @@ export default function Library({ onStartWorkout }) {
   return (
     <div className="space-y-4 py-4 slide-up">
       {/* Header */}
-      <div>
-        <div className="font-bold text-2xl">Library</div>
-        <div className="text-muted text-sm">
-          {tab === 'routines'
-            ? `${WORKOUT_LIBRARY.length} pre-built routines`
-            : `${EXERCISES.length} exercises · ${filtered.length} shown`}
-        </div>
-      </div>
+      <PageHeader icon="mdi:book-open-variant" title="Library"
+        facts={tab === 'routines'
+          ? <Fact icon="mdi:clipboard-list-outline">{WORKOUT_LIBRARY.length} routines</Fact>
+          : <Fact icon="mdi:dumbbell">{filtered.length} exercises</Fact>} />
 
       {/* Tab switcher */}
       <Segmented options={[['routines', 'Full routines'], ['exercises', 'Exercises']]} value={tab} onChange={setTab} label="Library view" />
@@ -80,18 +76,14 @@ export default function Library({ onStartWorkout }) {
           <div className="grid grid-cols-2 gap-3">
             {visibleRoutines.map(w => (
               <button key={w.id} onClick={() => setSelectedRoutine(w)}
-                className="bg-surface border border-line rounded-2xl p-4 text-left hover:border-line-strong hover:-translate-y-0.5 transition-all duration-200">
-                <Icon icon={w.icon} width={28} className="mb-2 text-ink-2" />
-                <div className="font-bold text-sm mb-1.5 leading-tight">{w.name}</div>
-                <span className="text-2xs px-2 py-0.5 rounded-full font-bold"
+                className="press bg-surface border border-line rounded-2xl p-4 text-left hover:border-neon-stroke/30 transition-colors">
+                <Icon icon={w.icon} width={28} className="mb-2 text-neon-ink" aria-hidden="true" />
+                <div className="font-bold text-base text-ink leading-tight">{w.name}</div>
+                <div className="text-xs text-muted mt-1">{w.duration} · {w.exercises.length} exercises</div>
+                <span className="inline-block mt-2 text-xs px-2 py-0.5 rounded-md font-semibold"
                   style={{ background: tok(w.color, 0.12), color: tok(w.color) }}>
                   {w.tag}
                 </span>
-                <div className="mt-2 space-y-0.5">
-                  <div className="text-xs text-muted">{w.exercises.length} exercises</div>
-                  <div className="text-xs text-muted flex items-center gap-1"><Icon icon="mdi:clock-outline" width={14} aria-hidden="true" />{w.duration}</div>
-                  <div className="text-xs text-muted">{w.difficulty}</div>
-                </div>
               </button>
             ))}
           </div>
@@ -116,9 +108,9 @@ export default function Library({ onStartWorkout }) {
               const dc = DIFF_COLORS[ex.difficulty]
               return (
                 <button key={i} onClick={() => setSelectedEx(ex)}
-                  className="bg-surface border border-line hover:border-line-strong hover:-translate-y-0.5 rounded-2xl p-4 text-left transition-all duration-200">
-                  <div className="mb-2"><Icon icon={getExerciseIcon(ex)} width={32} className="text-muted" /></div>
-                  <div className="font-bold text-sm mb-0.5">{ex.name}</div>
+                  className="press bg-surface border border-line hover:border-neon-stroke/30 rounded-2xl p-4 text-left transition-colors">
+                  <div className="mb-2"><Icon icon={getExerciseIcon(ex)} width={28} className="text-neon-ink" aria-hidden="true" /></div>
+                  <div className="font-bold text-sm text-ink mb-0.5">{ex.name}</div>
                   <div className="text-xs text-muted mb-2">{ex.muscle}</div>
                   <span className="px-2 py-0.5 rounded-full text-xs font-bold" style={dc}>
                     {ex.difficulty}
@@ -201,33 +193,24 @@ function RoutineDetail({ workout, onBack, onStartWorkout }) {
   return (
     <div className="space-y-4 py-4 slide-up">
       {/* Header */}
-      <div>
-        <div className="flex items-start gap-3">
-          <Icon icon={workout.icon} width={44} className="text-ink-2" />
-          <div className="flex-1">
-            <div className="font-bold text-2xl leading-tight">{workout.name}</div>
-            <span className="text-xs px-2 py-0.5 rounded-full font-bold mt-1 inline-block"
-              style={{ background: tok(workout.color, 0.12), color: tok(workout.color) }}>
-              {workout.tag}
-            </span>
-          </div>
-        </div>
-        <p className="text-sm text-muted mt-3 leading-relaxed">{workout.description}</p>
-      </div>
+      <PageHeader icon={workout.icon} title={workout.name}
+        action={workout.description && <InfoButton title={workout.name}><p className="text-sm text-ink-2">{workout.description}</p></InfoButton>}
+        facts={<>
+          <Fact icon="mdi:clock-outline">{workout.duration}</Fact>
+          <Fact icon="mdi:dumbbell">{workout.exercises.length} exercises</Fact>
+          <Fact icon="mdi:signal-cellular-2">{workout.difficulty}</Fact>
+        </>} />
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-2">
-        {[['Difficulty', workout.difficulty], ['Duration', workout.duration], ['Exercises', `${workout.exercises.length} moves`]].map(([l, v]) => (
-          <div key={l} className="bg-surface border border-line rounded-2xl p-3 text-center">
-            <div className="font-bold text-lg" style={{ color: tok(workout.color) }}>{v}</div>
-            <div className="text-2xs text-muted">{l}</div>
-          </div>
-        ))}
+      <div className="flex gap-2">
+        <Button className="flex-1" icon="mdi:play" onClick={handleStart}>Start now</Button>
+        <Button variant="secondary" icon={saved ? 'mdi:check' : 'mdi:plus'} onClick={handleSave} disabled={saving || saved}>
+          {saved ? 'Saved' : saving ? 'Saving…' : 'Save'}
+        </Button>
       </div>
 
       {/* Exercise list */}
       <div className="space-y-2">
-        <div className="text-lg leading-[1.3] font-semibold text-ink">Exercises</div>
+        <SectionTitle>Exercises</SectionTitle>
         {workout.exercises.map((libEx, i) => {
           const ex = EXERCISES.find(e => e.name === libEx.name)
           const isOpen = expanded === i
@@ -235,21 +218,15 @@ function RoutineDetail({ workout, onBack, onStartWorkout }) {
             <div key={i} className="bg-surface border border-line rounded-2xl overflow-hidden">
               <button
                 onClick={() => setExpanded(isOpen ? null : i)}
-                className="w-full flex items-center gap-3 p-4 text-left"
+                aria-expanded={isOpen}
+                className="w-full flex items-center gap-3 px-4 py-3 text-left"
               >
-                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                  style={{ background: tok(workout.color, 0.12), color: tok(workout.color) }}>
-                  {i + 1}
-                </div>
-                <Icon icon={getExerciseIcon(ex)} width={24} className="flex-shrink-0 text-muted" />
+                <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-neon-ink" aria-hidden="true" />
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-sm">{libEx.name}</div>
-                  <div className="text-xs text-muted">{ex?.muscle} · {ex?.equipment}</div>
-                </div>
-                <div className="text-right flex-shrink-0 mr-1">
-                  <div className="text-xs font-bold" style={{ color: tok(workout.color) }}>{libEx.sets} × {libEx.reps}</div>
+                  <div className="font-semibold text-sm text-ink break-words">{libEx.name}</div>
                   <div className="text-xs text-muted">Rest {libEx.rest}</div>
                 </div>
+                <span className="text-sm font-bold text-neon-ink tabular-nums flex-shrink-0">{libEx.sets} × {libEx.reps}</span>
                 <Icon icon={isOpen ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={18} className="text-muted flex-shrink-0" aria-hidden="true" />
               </button>
 
@@ -288,20 +265,6 @@ function RoutineDetail({ workout, onBack, onStartWorkout }) {
         })}
       </div>
 
-      {/* Actions */}
-      <div className="flex gap-3 pt-2 pb-6">
-        <Button className="flex-1" onClick={handleStart}>Start now</Button>
-        <button onClick={handleSave} disabled={saving || saved}
-          className={`flex-1 font-bold py-3.5 rounded-xl text-sm transition-all border ${
-            saved
-              ? 'border-neon-stroke/40 text-neon-ink bg-neon/10'
-              : 'border-neon-stroke/40 text-neon-ink hover:bg-neon/10 disabled:opacity-50'
-          }`}>
-          <span className="inline-flex items-center justify-center gap-1.5">
-            {saved ? <><Icon icon="mdi:check" width={16} />Saved</> : saving ? 'Saving…' : <><Icon icon="mdi:plus" width={16} />Save</>}
-          </span>
-        </button>
-      </div>
     </div>
   )
 }
@@ -315,7 +278,7 @@ function ExerciseModal({ ex, onClose }) {
     <Sheet ariaLabel={ex.name} onClose={onClose} bodyClassName="">
         <div className="mb-4">
           <div>
-            <div className="mb-2"><Icon icon={getExerciseIcon(ex)} width={40} className="text-muted" /></div>
+            <div className="mb-2"><Icon icon={getExerciseIcon(ex)} width={40} className="text-neon-ink" aria-hidden="true" /></div>
             <h2 className="font-bold text-[1.625rem] leading-[1.15] text-ink">{ex.name}</h2>
             <div className="flex gap-2 mt-1.5 flex-wrap">
               <span className="bg-neon/10 text-neon-ink text-xs font-bold px-2.5 py-0.5 rounded-full">{ex.muscle}</span>

@@ -8,7 +8,7 @@ import { fetchLatestNutritionTarget } from '../lib/fitnessApi.js'
 import AdaptiveNutritionCard from '../components/AdaptiveNutritionCard.jsx'
 import BarcodeScanner from '../components/BarcodeScanner.jsx'
 import { tok } from '../lib/tokens.js'
-import { Segmented, Sheet, Button, SectionTitle, ListRow } from '../components/ui/index.js'
+import { Segmented, Sheet, Button, Card, SectionTitle, SectionLink, ListRow, Fact, IconButton } from '../components/ui/index.js'
 import { useHeaderAction } from '../lib/shell.js'
 
 const MEALS = [
@@ -181,22 +181,12 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
       )}
 
       {/* Ring + macros */}
-      <div className="bg-surface border border-line rounded-2xl p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-lg leading-[1.3] font-semibold text-ink">Today's intake</div>
-          {planNutrition ? (
-            <button onClick={onGoToPlan}
-              className="text-xs text-neon-ink border border-neon-stroke/30 bg-neon/10 hover:bg-neon/20 px-2.5 py-1 rounded-lg font-semibold transition-all flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-neon inline-block" />
-              From plan <Icon icon="mdi:chevron-right" width={14} className="-mr-1" />
-            </button>
-          ) : (
-            <button onClick={() => setEditingGoals(true)}
-              className="text-xs text-neon-ink border border-neon-stroke/30 bg-neon/10 hover:bg-neon/20 px-2.5 py-1 rounded-lg font-semibold transition-all">
-              Edit targets
-            </button>
-          )}
-        </div>
+      <Card hero>
+        <SectionTitle action={planNutrition
+          ? <SectionLink icon="mdi:clipboard-text-outline" onClick={onGoToPlan}>From plan</SectionLink>
+          : <SectionLink icon="mdi:pencil-outline" onClick={() => setEditingGoals(true)}>Edit targets</SectionLink>}>
+          Today
+        </SectionTitle>
         <div className="flex items-center gap-5">
           <div className="relative w-36 h-36 flex-shrink-0">
             <svg className="w-36 h-36 -rotate-90" viewBox="0 0 160 160">
@@ -206,27 +196,21 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
                 style={{ stroke: ringColor, transition: 'stroke-dasharray 0.6s ease-out' }}/>
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <div className="font-bold text-3xl leading-none tabular-nums" style={{ color: ringText }}>{totals.kcal}</div>
-              <div className="text-xs font-medium text-muted">kcal</div>
+              <div className="font-bold text-3xl leading-none tabular-nums text-ink">{totals.kcal}</div>
+              <div className="text-xs font-medium text-muted">eaten</div>
             </div>
           </div>
-          <div className="flex-1 space-y-3">
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs">
-                <span className="text-muted">Goal</span>
-                <span className="font-semibold tabular-nums">{goals.calories} kcal</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-muted">Remaining</span>
-                <span style={{ color: ringText }} className="font-semibold tabular-nums">{remaining} kcal</span>
-              </div>
+          <div className="flex-1 min-w-0 space-y-3">
+            <div>
+              <div className="font-bold text-3xl tabular-nums leading-none" style={{ color: ringText }}>{remaining}</div>
+              <div className="text-xs text-muted mt-1">kcal left of <span className="font-semibold text-ink-2 tabular-nums">{goals.calories}</span></div>
             </div>
             <MacroBar label="Protein" val={totals.protein} goal={goals.protein} color="info"/>
             <MacroBar label="Carbs"   val={totals.carbs}   goal={goals.carbs}   color="warn"/>
             <MacroBar label="Fat"     val={totals.fat}      goal={fatGoal}       color="rose"/>
           </div>
         </div>
-      </div>
+      </Card>
 
       {planNutrition && (
         <AdaptiveNutritionCard calorieLogs={logs} current={planNutrition} profile={profile} onApplied={setPlanNutrition} />
@@ -237,30 +221,26 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
 
       {tab === 'today' ? (
         <>
-          {/* AI Scanner */}
-          <div className="bg-surface border border-line rounded-2xl p-5">
-            <div className="flex items-center justify-between gap-2 mb-3">
-              <div className="text-lg leading-[1.3] font-semibold text-ink">AI food scanner</div>
-              {!isPro && <span className="text-xs font-semibold text-neon-ink bg-neon-tint border border-neon-stroke/25 rounded-md px-2 py-0.5">Pro</span>}
+          {/* Quick add: photo and barcode */}
+          <div>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button"
+                onClick={() => (isPro ? fileRef.current?.click() : onUpgrade?.())}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => { e.preventDefault(); isPro ? analyzeImage(e.dataTransfer.files[0]) : onUpgrade?.() }}
+                className="press relative flex flex-col items-start gap-2 bg-surface border border-line hover:border-neon-stroke/40 rounded-2xl p-4 text-left transition-colors">
+                <Icon icon="mdi:camera-outline" width={26} className="text-neon-ink" aria-hidden="true" />
+                <span className="text-sm font-semibold text-ink">Snap a meal</span>
+                {!isPro && <span className="absolute top-3 right-3"><Fact>Pro</Fact></span>}
+              </button>
+              <button type="button" onClick={() => setScanning(true)}
+                className="press flex flex-col items-start gap-2 bg-surface border border-line hover:border-neon-stroke/40 rounded-2xl p-4 text-left transition-colors">
+                <Icon icon="mdi:barcode-scan" width={26} className="text-neon-ink" aria-hidden="true" />
+                <span className="text-sm font-semibold text-ink">Scan barcode</span>
+              </button>
             </div>
-            <div
-              role="button" tabIndex={0}
-              onClick={() => (isPro ? fileRef.current?.click() : onUpgrade?.())}
-              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); isPro ? fileRef.current?.click() : onUpgrade?.() } }}
-              onDragOver={e => e.preventDefault()}
-              onDrop={e => { e.preventDefault(); isPro ? analyzeImage(e.dataTransfer.files[0]) : onUpgrade?.() }}
-              className="border-2 border-dashed border-line-strong hover:border-neon-stroke hover:bg-neon-tint rounded-xl p-6 text-center cursor-pointer transition-all"
-            >
-              <Icon icon="mdi:camera-outline" width={32} className="mx-auto mb-2 text-neon-ink" />
-              <div className="font-medium text-sm mb-1">Take or upload a photo of your meal</div>
-              <div className="text-xs text-muted">{isPro ? 'AI will identify food and estimate macros' : 'Snap your plate, get calories and macros. Included with Pro.'}</div>
-              <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden"
-                onChange={e => { if (e.target.files[0]) analyzeImage(e.target.files[0]) }} />
-            </div>
-            <button onClick={() => setScanning(true)}
-              className="mt-3 w-full flex items-center justify-center gap-2 border border-line-strong hover:border-neon-stroke/40 text-ink-2 hover:text-neon-ink font-semibold py-3 rounded-xl text-xs transition-all">
-              <Icon icon="mdi:barcode-scan" width={18} /> Scan barcode
-            </button>
+            <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden"
+              onChange={e => { if (e.target.files[0]) analyzeImage(e.target.files[0]) }} />
             {scanning && (
               <BarcodeScanner meals={MEALS} defaultMeal={getCurrentMeal()} onClose={() => setScanning(false)}
                 onAdd={food => { saveFoods([...foods, food]); setScanning(false) }} />
@@ -279,8 +259,8 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
             {aiState === 'result' && aiResult && (
               <div className="mt-3 p-4 bg-neon-tint border border-neon-stroke/20 rounded-xl fade-in">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="text-sm font-medium text-neon-ink">AI found {aiResult.foods?.length} item(s)</div>
-                  <div className="text-xs text-muted">Confidence: {aiResult.confidence}</div>
+                  <div className="text-sm font-semibold text-neon-ink">Found {aiResult.foods?.length} {aiResult.foods?.length === 1 ? 'item' : 'items'}</div>
+                  {aiResult.confidence && <Fact>{aiResult.confidence} confidence</Fact>}
                 </div>
 
                 {/* Meal picker */}
@@ -378,8 +358,8 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
         </>
       ) : (
         /* Log tab */
-        <div className="bg-surface border border-line rounded-2xl p-5">
-          <div className="text-lg leading-[1.3] font-semibold text-ink mb-4">Food log</div>
+        <Card>
+          <SectionTitle>Food log</SectionTitle>
           {logs.length === 0 ? (
             <div className="text-muted text-sm text-center py-6">No logs yet</div>
           ) : (
@@ -419,16 +399,16 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
               })}
             </div>
           )}
-        </div>
+        </Card>
       )}
 
       {logFood && (
         <Sheet title="Log food" onClose={() => setLogFood(false)} bodyClassName="space-y-1 -mx-2">
           <ListRow icon="mdi:camera-outline" tile="neon-ink" title="Photo" chevron onClick={() => logBy('photo')}
-            meta={isPro ? 'Snap your plate and get calories and macros' : 'Snap your plate and get calories and macros. Included with Pro.'} />
-          <ListRow icon="mdi:barcode-scan" tile="info" title="Barcode" meta="Scan a packet" chevron onClick={() => logBy('barcode')} />
-          <ListRow icon="mdi:pencil-outline" tile="lilac" title="Search or type" chevron onClick={() => logBy('manual')}
-            meta={`Add to ${MEALS.find(m => m.id === getCurrentMeal())?.label.toLowerCase()} by hand`} />
+            trailing={!isPro && <Fact>Pro</Fact>} />
+          <ListRow icon="mdi:barcode-scan" tile="info" title="Barcode" chevron onClick={() => logBy('barcode')} />
+          <ListRow icon="mdi:pencil-outline" tile="lilac" title="Type it in" chevron onClick={() => logBy('manual')}
+            meta={MEALS.find(m => m.id === getCurrentMeal())?.label} />
         </Sheet>
       )}
 
@@ -483,18 +463,15 @@ function MealSection({ meal, foods, allFoods, isAdding, form, setForm, onToggleA
           <Icon icon={meal.icon} width={24} style={{ color: tok(meal.color) }} />
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-sm">{meal.label}</span>
+              <span className="font-semibold text-base text-ink">{meal.label}</span>
               {isCurrent && (
                 <span className="text-2xs px-2 py-0.5 rounded-full font-bold"
                   style={{ background: tok(meal.color, 0.12), color: tok(meal.color) }}>Now</span>
               )}
             </div>
-            <div className="text-xs text-muted mt-0.5">
-              {meal.hours ? `${meal.hours[0]}:00 – ${meal.hours[1]}:00` : 'Any time'}
-              {mealKcal > 0 && (
-                <span className="ml-2 font-bold" style={{ color: tok(meal.color) }}>{mealKcal} kcal</span>
-              )}
-            </div>
+            {mealKcal > 0 && (
+              <div className="text-sm font-bold tabular-nums mt-0.5" style={{ color: tok(meal.color) }}>{mealKcal} kcal</div>
+            )}
           </div>
         </div>
         <button onClick={onToggleAdd}
@@ -515,7 +492,7 @@ function MealSection({ meal, foods, allFoods, isAdding, form, setForm, onToggleA
             return (
               <div key={idx} className="flex items-center justify-between py-2.5 border-t border-line">
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium">{f.name}</div>
+                  <div className="text-sm font-semibold text-ink break-words">{f.name}</div>
                   <div className="flex gap-1.5 mt-0.5 flex-wrap">
                     <Tag color="info">P {f.protein}g</Tag>
                     <Tag color="warn">C {f.carbs}g</Tag>
@@ -527,10 +504,7 @@ function MealSection({ meal, foods, allFoods, isAdding, form, setForm, onToggleA
                     <div className="font-bold text-sm" style={{ color: tok(meal.color) }}>{f.kcal}</div>
                     <div className="text-xs font-medium text-muted">kcal</div>
                   </div>
-                  <button onClick={() => onRemove(idx)} aria-label={`Remove ${f.name}`}
-                    className="press w-9 h-9 flex items-center justify-center bg-danger/10 text-danger border border-danger/20 rounded-md hover:bg-danger/20 transition-colors">
-                    <Icon icon="mdi:close" width={16} />
-                  </button>
+                  <IconButton icon="mdi:trash-can-outline" label={`Remove ${f.name}`} tone="danger" onClick={() => onRemove(idx)} className="w-9 h-9" />
                 </div>
               </div>
             )
@@ -539,11 +513,6 @@ function MealSection({ meal, foods, allFoods, isAdding, form, setForm, onToggleA
       )}
 
       {/* Empty state */}
-      {foods.length === 0 && !isAdding && (
-        <div className="px-4 pb-4 pt-0 border-t border-line mt-0">
-          <div className="text-xs text-muted pt-3">Nothing logged yet</div>
-        </div>
-      )}
 
       {/* Inline add form */}
       {isAdding && (

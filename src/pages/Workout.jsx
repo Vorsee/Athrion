@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Icon } from '@iconify/react'
-import { Button, Card, SectionTitle, Skeleton, Chip, Sheet, Segmented, InlineError, InfoButton, Fact } from '../components/ui/index.js'
+import { Button, Card, SectionTitle, SectionLink, Skeleton, Chip, Sheet, Segmented, InlineError, InfoButton, Fact, PageHeader, IconButton, ExerciseRow, ActionRow, StatTiles } from '../components/ui/index.js'
 import { EXERCISES, getTodaysExercises, todayKey, fmtTime, getExerciseIcon } from '../lib/data.js'
 import { fetchWorkoutHistory, saveWorkoutEntry, fetchCustomWorkouts, saveCustomWorkout, deleteCustomWorkout } from '../lib/api.js'
 import { fetchActivePlan } from '../lib/fitnessApi.js'
@@ -627,8 +627,8 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
                 <>
                   <div className="flex flex-wrap gap-1.5">
                     {otherDays.map(d => (
-                      <button key={d.day} onClick={() => setPickedDay(d)}
-                        className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all text-left ${shownWorkout === d ? 'bg-neon/15 text-neon-ink border-neon-stroke/30' : 'bg-raised text-muted border-line-strong hover:text-ink'}`}>
+                      <button key={d.day} onClick={() => setPickedDay(d)} aria-pressed={shownWorkout === d}
+                        className={`press min-h-[36px] text-xs px-3 rounded-full border transition-colors text-left ${shownWorkout === d ? 'bg-neon text-on-neon border-neon font-semibold' : 'bg-raised text-ink-2 border-line hover:border-neon-stroke/30'}`}>
                         <span className="font-semibold">{d.day.slice(0, 3)}</span> · {d.title}
                       </button>
                     ))}
@@ -642,22 +642,17 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
           {shownWorkout ? (
             <div className="space-y-2 mb-5">
               {planExercises.map((ex, i) => (
-                <div key={i} className="flex items-center gap-3 bg-raised rounded-xl px-3 py-2.5">
-                  <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-neon-ink" aria-hidden="true" />
-                  <div className="flex-1 min-w-0 text-sm font-semibold text-ink leading-snug break-words">{ex.name}</div>
-                  <span className="text-sm font-bold text-neon-ink tabular-nums flex-shrink-0">{ex.sets > 1 ? `${ex.sets} × ${ex.reps}` : ex.reps}</span>
+                <ExerciseRow key={i} icon={getExerciseIcon(ex)} name={ex.name} value={ex.sets > 1 ? `${ex.sets} × ${ex.reps}` : ex.reps}>
                   <DemoButton name={ex.name} />
-                </div>
+                </ExerciseRow>
               ))}
             </div>
           ) : !isRestDay && (
             <div className="space-y-2 mb-5">
               {fallbackExs.map((ex, i) => (
-                <div key={i} className="flex items-center gap-3 bg-raised rounded-xl px-3 py-2.5">
-                  <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-neon-ink" aria-hidden="true" />
-                  <div className="flex-1 min-w-0 text-sm font-semibold text-ink truncate">{ex.name}</div>
+                <ExerciseRow key={i} icon={getExerciseIcon(ex)} name={ex.name}>
                   <DemoButton name={ex.name} />
-                </div>
+                </ExerciseRow>
               ))}
             </div>
           )}
@@ -671,68 +666,55 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
       </Card>
       )}
 
-      <TrainingCalendar history={history} planSchedule={planSchedule} onOpenSession={setSelectedSession} />
-
-      {/* ── More ways to train (live inside this tab) ── */}
+      {/* ── Train together: a headline feature, so it gets its own neon card ── */}
       {onOpenPage && (
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            { id: 'library', icon: 'mdi:book-open-variant', title: 'Exercise library' },
-            { id: 'group', icon: 'mdi:account-group-outline', title: 'Train together' },
-          ].map(l => (
-            <button key={l.id} onClick={() => onOpenPage(l.id)}
-              className="text-left bg-surface border border-line hover:border-neon-stroke/30 rounded-2xl p-4 transition-colors">
-              <Icon icon={l.icon} width={24} className="text-neon-ink mb-2" />
-              <div className="text-sm font-semibold text-ink">{l.title}</div>
-            </button>
-          ))}
-        </div>
+        <button type="button" onClick={() => onOpenPage('group')}
+          className="press w-full text-left rounded-2xl border border-neon-stroke/40 p-4 transition-colors hover:border-neon-stroke"
+          style={{ background: 'linear-gradient(135deg, rgb(var(--neon-tint)), rgb(var(--surface)))' }}>
+          <div className="flex items-center gap-3">
+            <span className="w-12 h-12 rounded-xl bg-neon text-on-neon flex items-center justify-center flex-shrink-0">
+              <Icon icon="mdi:account-group" width={26} aria-hidden="true" />
+            </span>
+            <div className="flex-1 min-w-0">
+              <div className="font-bold text-lg text-ink leading-tight">Train together</div>
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                <Fact icon="mdi:trophy-outline">Live standings</Fact>
+                <Fact icon="mdi:lightning-bolt">Real time</Fact>
+              </div>
+            </div>
+            <Icon icon="mdi:chevron-right" width={24} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
+          </div>
+          <div className="mt-3 h-11 rounded-xl border-2 border-neon-stroke text-neon-ink text-sm font-semibold flex items-center justify-center gap-2">
+            <Icon icon="mdi:plus" width={18} aria-hidden="true" />Start or join a room
+          </div>
+        </button>
       )}
 
+      <TrainingCalendar history={history} planSchedule={planSchedule} onOpenSession={setSelectedSession} />
+
+      {onOpenPage && <ActionRow icon="mdi:book-open-variant" title="Exercise library" onClick={() => onOpenPage('library')} />}
+
       {/* ── My Workouts ── */}
-      <Card pad="lg">
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-lg leading-[1.3] font-semibold text-ink">My workouts</div>
-          <div className="flex items-center gap-2">
-            {!isPro && (
-              <span className="text-xs text-muted font-semibold">{customWorkouts.length}/{FREE_WORKOUT_LIMIT}</span>
-            )}
-            <button
-              onClick={!isPro && customWorkouts.length >= FREE_WORKOUT_LIMIT ? onUpgrade : onCreateNew}
-              className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all ${
-                !isPro && customWorkouts.length >= FREE_WORKOUT_LIMIT
-                  ? 'text-muted border border-line-strong bg-raised hover:border-neon-stroke/30 hover:text-neon-ink'
-                  : 'text-neon-ink border border-neon-stroke/30 bg-neon/10 hover:bg-neon/20'
-              }`}
-            >
-              {!isPro && customWorkouts.length >= FREE_WORKOUT_LIMIT ? 'Get Pro' : <span className="inline-flex items-center gap-1"><Icon icon="mdi:plus" width={14} />New</span>}
-            </button>
-          </div>
-        </div>
+      <Card>
+        <SectionTitle action={<>
+          {!isPro && <Fact>{customWorkouts.length}/{FREE_WORKOUT_LIMIT}</Fact>}
+          {!isPro && customWorkouts.length >= FREE_WORKOUT_LIMIT
+            ? <SectionLink icon="mdi:lock-open-variant-outline" onClick={onUpgrade}>Get Pro</SectionLink>
+            : <SectionLink icon="mdi:plus" onClick={onCreateNew}>New</SectionLink>}
+        </>}>My workouts</SectionTitle>
 
         {customWorkouts.length === 0 ? (
-          <div className="text-center py-6">
-            <div className="text-muted text-sm mb-3">No custom workouts yet</div>
-            <button onClick={onCreateNew} className="text-xs text-neon-ink hover:text-ink transition-colors">
-              Create your first workout
-            </button>
-          </div>
+          <Button variant="secondary" full icon="mdi:plus" onClick={onCreateNew}>Create your first workout</Button>
         ) : (
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {customWorkouts.map(w => {
               const exs = (w.exercises || []).map(n => EXERCISES.find(e => e.name === n)).filter(Boolean)
               return (
-                <div key={w.id} className="flex items-center gap-3 bg-inset rounded-xl px-3 py-2.5">
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-xs truncate">{w.name}</div>
-                    <div className="text-xs text-muted">{exs.length} exercises</div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <button onClick={() => onEdit(w)} className="press min-h-[36px] px-1.5 text-xs font-semibold text-muted hover:text-ink transition-colors">Edit</button>
-                    <button onClick={() => onDelete(w.id)} className="press min-h-[36px] px-1.5 text-xs font-semibold text-danger hover:underline transition-colors">Del</button>
-                    <Button size="sm" onClick={() => onStart(exs, w.name)}>Start</Button>
-                  </div>
-                </div>
+                <ExerciseRow key={w.id} icon="mdi:dumbbell" name={w.name} meta={`${exs.length} exercises`}>
+                  <IconButton icon="mdi:pencil-outline" label={`Edit ${w.name}`} onClick={() => onEdit(w)} className="w-9 h-9" />
+                  <IconButton icon="mdi:trash-can-outline" label={`Delete ${w.name}`} tone="danger" onClick={() => onDelete(w.id)} className="w-9 h-9" />
+                  <Button size="sm" icon="mdi:play" onClick={() => onStart(exs, w.name)}>Start</Button>
+                </ExerciseRow>
               )
             })}
           </div>
@@ -741,21 +723,15 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
 
       {/* ── Recent Sessions ── */}
       {history.length > 0 && (
-        <Card pad="md">
-          <div className="text-lg leading-[1.3] font-semibold text-ink mb-2">Recent sessions</div>
-          <div>
-            {[...history].slice(0, 3).map((h, i) => (
-              <button
-                key={i}
-                onClick={() => setSelectedSession(h)}
-                className="w-full grid grid-cols-[1fr_4rem_4rem] gap-2 items-center px-2 py-1.5 hover:bg-raised rounded-lg transition-colors text-left border-b border-line last:border-0"
-              >
-                <div className="min-w-0">
-                  <div className="font-medium text-xs truncate">{h.name}</div>
-                  <div className="text-xs text-muted">{fmtDay(h.date)}</div>
-                </div>
-                <div className="text-right font-bold text-xs text-neon-ink">{h.volume ? fmtVolume(h.volume) : '—'}</div>
-                <div className="text-right text-xs text-muted">{h.duration}</div>
+        <Card>
+          <SectionTitle>Recent sessions</SectionTitle>
+          <div className="space-y-2">
+            {history.slice(0, 3).map((h, i) => (
+              <button key={i} onClick={() => setSelectedSession(h)} className="press w-full text-left">
+                <ExerciseRow icon="mdi:check-circle-outline" name={h.name} meta={[fmtDay(h.date), h.duration].filter(Boolean).join(' · ')}
+                  value={h.volume ? fmtVolume(h.volume) : null}>
+                  <Icon icon="mdi:chevron-right" width={20} className="text-muted" aria-hidden="true" />
+                </ExerciseRow>
               </button>
             ))}
           </div>
@@ -822,35 +798,17 @@ function BuilderScreen({ workout, onSave, onBack }) {
 
       {/* Selected exercises */}
       {selected.length > 0 && (
-        <Card pad="md">
-          <div className="text-xs text-muted mb-3">
-            Your workout · {selected.length} exercise{selected.length !== 1 ? 's' : ''}
-          </div>
+        <Card>
+          <SectionTitle action={<Fact icon="mdi:dumbbell">{selected.length}</Fact>}>Your workout</SectionTitle>
           <div className="space-y-2">
             {selected.map((exName, i) => {
               const ex = EXERCISES.find(e => e.name === exName)
               return (
-                <div key={i} className="flex items-center gap-2 bg-inset rounded-xl p-3">
-                  <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-muted" />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm truncate">{exName}</div>
-                    <div className="text-xs text-muted">{ex?.muscle}</div>
-                  </div>
-                  <div className="flex items-center gap-0.5 flex-shrink-0">
-                    <button
-                      onClick={() => moveUp(i)} disabled={i === 0} aria-label={`Move ${exName} up`}
-                      className="press w-9 h-9 rounded-md flex items-center justify-center text-muted hover:text-ink hover:bg-raised disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-                    ><Icon icon="mdi:chevron-up" width={20} /></button>
-                    <button
-                      onClick={() => moveDown(i)} disabled={i === selected.length - 1} aria-label={`Move ${exName} down`}
-                      className="press w-9 h-9 rounded-md flex items-center justify-center text-muted hover:text-ink hover:bg-raised disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-                    ><Icon icon="mdi:chevron-down" width={20} /></button>
-                    <button
-                      onClick={() => remove(i)} aria-label={`Remove ${exName}`}
-                      className="press w-9 h-9 rounded-md flex items-center justify-center text-danger hover:bg-danger/12 transition-colors"
-                    ><Icon icon="mdi:close" width={18} /></button>
-                  </div>
-                </div>
+                <ExerciseRow key={i} icon={getExerciseIcon(ex)} name={exName}>
+                  <IconButton icon="mdi:chevron-up" label={`Move ${exName} up`} onClick={() => moveUp(i)} disabled={i === 0} className="w-9 h-9" />
+                  <IconButton icon="mdi:chevron-down" label={`Move ${exName} down`} onClick={() => moveDown(i)} disabled={i === selected.length - 1} className="w-9 h-9" />
+                  <IconButton icon="mdi:close" label={`Remove ${exName}`} tone="danger" onClick={() => remove(i)} className="w-9 h-9" />
+                </ExerciseRow>
               )
             })}
           </div>
@@ -865,11 +823,11 @@ function BuilderScreen({ workout, onSave, onBack }) {
       )}
 
       {/* Exercise library */}
-      <Card pad="md">
-        <div className="text-lg leading-[1.3] font-semibold text-ink mb-3">Exercise library</div>
+      <Card>
+        <SectionTitle>Add exercises</SectionTitle>
         <input
-          className="w-full bg-inset border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-3 py-2.5 text-sm outline-none transition-colors mb-3"
-          placeholder="Search by name or muscle..."
+          className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-3 py-2.5 text-sm outline-none transition-colors mb-3"
+          placeholder="Search by name or muscle"
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
@@ -884,26 +842,11 @@ function BuilderScreen({ workout, onSave, onBack }) {
           {filtered.map((ex, i) => {
             const added = selected.includes(ex.name)
             return (
-              <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-inset">
-                <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-muted" />
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm truncate">{ex.name}</div>
-                  <div className="text-xs text-muted">{ex.muscle} · {ex.equipment}</div>
-                </div>
-                <button
-                  onClick={() => add(ex.name)}
-                  disabled={added}
-                  className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    added
-                      ? 'bg-raised text-muted border border-line-strong cursor-default'
-                      : 'bg-neon text-on-neon'
-                  }`}
-                >
-                  {added
-                    ? <Icon icon="mdi:check" width={16} aria-label="Added" />
-                    : <span className="inline-flex items-center gap-1"><Icon icon="mdi:plus" width={14} />Add</span>}
-                </button>
-              </div>
+              <ExerciseRow key={i} icon={getExerciseIcon(ex)} name={ex.name} meta={ex.muscle}>
+                {added
+                  ? <span className="w-9 h-9 flex items-center justify-center text-neon-ink"><Icon icon="mdi:check" width={20} aria-label="Added" /></span>
+                  : <Button size="sm" icon="mdi:plus" onClick={() => add(ex.name)}>Add</Button>}
+              </ExerciseRow>
             )
           })}
         </div>
@@ -918,39 +861,29 @@ function BuilderScreen({ workout, onSave, onBack }) {
 function ConfigScreen({ exercises, free, totalSets, setTotalSets, restDuration, setRestDuration, onBack, onBegin }) {
   return (
     <div className="space-y-4 py-4 slide-up">
-      <div>
-        <div className="font-bold text-3xl">{free ? 'Free workout' : 'Configure workout'}</div>
-        {free && <div className="text-sm text-muted mt-1">Pick exercises as you go</div>}
-      </div>
+      <PageHeader icon={free ? 'mdi:plus-circle-outline' : 'mdi:tune-variant'} title={free ? 'Free workout' : 'Set up workout'}
+        facts={<>
+          {!free && <Fact icon="mdi:dumbbell">{exercises.length} exercises</Fact>}
+          <Fact icon="mdi:repeat">{totalSets} sets</Fact>
+          <Fact icon="mdi:timer-outline">{restDuration}s rest</Fact>
+        </>} />
 
-      <Card pad="lg">
-        <div className="text-lg leading-[1.3] font-semibold text-ink mb-4">Sets per exercise</div>
+      <Card>
+        <SectionTitle>Sets per exercise</SectionTitle>
         <Segmented options={[2, 3, 4, 5].map(n => [n, String(n)])} value={totalSets} onChange={setTotalSets} label="Sets per exercise" kind="choice" scroll={false} />
-      </Card>
-
-      <Card pad="lg">
-        <div className="text-lg leading-[1.3] font-semibold text-ink mb-4">Rest duration</div>
+        <div className="text-lg leading-[1.3] font-semibold text-ink mt-5 mb-3">Rest</div>
         <Segmented options={[30, 60, 90, 120].map(s => [s, `${s}s`])} value={restDuration} onChange={setRestDuration} label="Rest duration" kind="choice" scroll={false} />
       </Card>
 
-      {!free && exercises.length > 0 && (
-        <Card pad="lg">
-          <div className="text-lg leading-[1.3] font-semibold text-ink mb-3">Exercises</div>
-          <div className="space-y-2">
-            {exercises.map((ex, i) => (
-              <div key={i} className="flex items-center gap-3 bg-inset rounded-xl p-3">
-                <Icon icon={getExerciseIcon(ex)} width={24} className="flex-shrink-0 text-muted" />
-                <div>
-                  <div className="font-medium text-sm">{ex.name}</div>
-                  <div className="text-xs text-muted">{ex.muscle} · {totalSets} sets</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+      <Button full icon="mdi:play" onClick={onBegin}>{free ? 'Pick first exercise' : 'Begin training'}</Button>
 
-      <Button full onClick={onBegin}>{free ? 'Pick first exercise' : 'Begin training'}</Button>
+      {!free && exercises.length > 0 && (
+        <div className="space-y-2">
+          {exercises.map((ex, i) => (
+            <ExerciseRow key={i} icon={getExerciseIcon(ex)} name={ex.name} value={`${totalSets} sets`} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -978,80 +911,74 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
   return (
     <div className="space-y-4 py-4 slide-in">
       {freeWorkout ? (
-        <div className="flex justify-between text-xs text-muted">
-          <span>Free workout</span>
-          <span>{setsDone} sets logged</span>
+        <div className="flex flex-wrap gap-1.5">
+          <Fact icon="mdi:plus-circle-outline">Free workout</Fact>
+          <Fact icon="mdi:check">{setsDone} sets logged</Fact>
         </div>
       ) : (
         <div>
-          <div className="flex justify-between text-xs text-muted mb-2">
-            <span>Exercise {exIdx + 1}/{exercises.length}</span>
-            <span>{Math.round(progress)}% done</span>
+          <div className="flex justify-between text-xs mb-2">
+            <span className="font-semibold text-ink-2">Exercise {exIdx + 1} of {exercises.length}</span>
+            <span className="font-semibold text-neon-ink tabular-nums">{Math.round(progress)}%</span>
           </div>
-          <div className="h-1 bg-raised rounded-full overflow-hidden">
+          <div className="h-1.5 bg-raised rounded-full overflow-hidden">
             <div className="h-full bg-neon rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
           </div>
         </div>
       )}
 
-      <div className="bg-neon-tint border border-neon-stroke/30 rounded-2xl p-6 text-center">
-        <div className="flex justify-center mb-3">
-          <Icon icon={getExerciseIcon(ex)} width={56} className="text-neon-ink/80" />
+      <Card hero>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Icon icon={getExerciseIcon(ex)} width={30} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
+            <div className="font-bold text-2xl text-ink leading-tight break-words">{ex.name}</div>
+          </div>
+          <IconButton icon="mdi:play-circle-outline" label={`How to do ${ex.name}`} onClick={() => setShowDemo(true)} className="-mr-1 -mt-1" />
         </div>
-        <div className="font-bold text-3xl mb-1">{ex.name}</div>
-        <div className="text-muted text-sm mb-1">{ex.muscle}</div>
-        <button onClick={() => setShowDemo(true)}
-          className="mt-3 inline-flex items-center gap-1.5 text-xs text-neon-ink border border-neon-stroke/30 px-3 py-1.5 rounded-lg hover:bg-neon/10">
-          <Icon icon="mdi:play-circle-outline" width={16} /> How to
-        </button>
-        {showDemo && <ExerciseDemoSheet name={ex.name} onClose={() => setShowDemo(false)} />}
-      </div>
-
-      <Card pad="md">
-        <div className="text-xs text-muted mb-3">Set {setIdx + 1} of {totalSets}</div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          <Fact icon="mdi:repeat">Set {setIdx + 1} of {totalSets}</Fact>
+          {ex.reps && <Fact icon="mdi:target">{ex.reps} reps</Fact>}
+          {records?.maxWeight > 0 && <Fact icon="mdi:trophy-outline">PR {fmt(records.maxWeight)} × {records.maxWeightReps}</Fact>}
+        </div>
+        <div className="flex gap-1.5 mt-4" aria-hidden="true">
           {Array.from({ length: totalSets }, (_, i) => (
-            <div key={i} className={`flex-1 h-2 rounded-full transition-all duration-300 ${i < setIdx ? 'bg-neon' : i === setIdx ? 'bg-neon ring-2 ring-inset ring-ink' : 'bg-line'}`} />
+            <div key={i} className={`flex-1 h-2 rounded-full transition-colors duration-300 ${i < setIdx ? 'bg-neon' : i === setIdx ? 'bg-neon/40' : 'bg-line'}`} />
           ))}
         </div>
+        {showDemo && <ExerciseDemoSheet name={ex.name} onClose={() => setShowDemo(false)} />}
       </Card>
 
-      <Card pad="lg">
-        <div className="text-xs text-muted mb-3">Log set {setIdx + 1}</div>
+      <Card>
         {!prev && suggestion && (
-          <div className="mb-4 bg-neon/5 border border-neon-stroke/20 rounded-xl p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <div className="text-sm font-semibold text-ink-2">Try today</div>
-                <div className="font-bold text-xl text-neon-ink leading-tight">
-                  {suggestion.weight > 0 ? `${fmt(suggestion.weight)} × ${suggestion.reps}` : `${suggestion.reps} reps`}
-                </div>
+          <div className="mb-4 flex items-center justify-between gap-2 bg-raised rounded-xl px-3 py-2.5">
+            <div className="min-w-0">
+              <div className="text-xs font-semibold text-neon-ink">Try today</div>
+              <div className="font-bold text-2xl text-ink tabular-nums leading-tight">
+                {suggestion.weight > 0 ? `${fmt(suggestion.weight)} × ${suggestion.reps}` : `${suggestion.reps} reps`}
               </div>
-              <button onClick={() => { setWeight(String(fromLb(suggestion.weight))); setReps(String(suggestion.reps)) }}
-                className="flex-shrink-0 text-xs font-semibold text-on-neon bg-neon px-3 py-1.5 rounded-lg">
-                Use
-              </button>
             </div>
-            <div className="text-xs text-muted mt-1">{suggestion.reason}</div>
-            <div className="text-xs text-muted mt-1.5 flex flex-wrap gap-x-3">
-              {lastSession && <span>Last: {lastSession.sets.map(st => `${fromLb(st.weight)}×${st.reps}`).join(', ')}</span>}
-              {records?.maxWeight > 0 && <span>PR: {fmt(records.maxWeight)} × {records.maxWeightReps}</span>}
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <InfoButton title="Why this weight">
+                <p className="text-sm text-ink-2">{suggestion.reason}</p>
+                {lastSession && <p className="text-sm text-ink-2">Last time: <span className="font-semibold text-ink">{lastSession.sets.map(st => `${fromLb(st.weight)}×${st.reps}`).join(', ')}</span></p>}
+              </InfoButton>
+              <Button size="sm" onClick={() => { setWeight(String(fromLb(suggestion.weight))); setReps(String(suggestion.reps)) }}>Use</Button>
             </div>
           </div>
         )}
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
-            <label className="text-xs text-muted block mb-1">Weight ({unit})</label>
-            <input type="number" placeholder="0" aria-label={`Weight in ${unit}`} value={weight} onChange={e => setWeight(e.target.value)} min="0" step={unit === 'kg' ? 0.25 : 0.5}
-              className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-sm outline-none transition-colors" />
+            <label className="text-sm font-semibold text-ink-2 block mb-1">Weight ({unit})</label>
+            <input type="number" inputMode="decimal" placeholder="0" aria-label={`Weight in ${unit}`} value={weight} onChange={e => setWeight(e.target.value)} min="0" step={unit === 'kg' ? 0.25 : 0.5}
+              className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-2xl font-bold tabular-nums text-center outline-none transition-colors" />
           </div>
           <div>
-            <label className="text-xs text-muted block mb-1">Reps</label>
-            <input type="number" placeholder="0" aria-label="Reps" value={reps} onChange={e => setReps(e.target.value)} min="1"
-              className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-sm outline-none transition-colors" />
+            <label className="text-sm font-semibold text-ink-2 block mb-1">Reps</label>
+            <input type="number" inputMode="numeric" placeholder="0" aria-label="Reps" value={reps} onChange={e => setReps(e.target.value)} min="1"
+              className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-2xl font-bold tabular-nums text-center outline-none transition-colors" />
           </div>
         </div>
-        <Button full onClick={onLog}>Log set</Button>
+        <Button full icon="mdi:check" onClick={onLog}>Log set {setIdx + 1}</Button>
         <div className="flex gap-2 mt-3">
           <Button variant="secondary" size="sm" icon="mdi:plus" className="flex-1" onClick={onAddSet}>Add a set</Button>
           <Button variant="secondary" size="sm" iconRight="mdi:skip-next" className="flex-1" onClick={onFinishExercise}>
@@ -1065,20 +992,21 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
       )}
 
       {!freeWorkout && (
-        <Card pad="md">
-          <div className="text-lg leading-[1.3] font-semibold text-ink mb-3">Queue</div>
-          <div className="space-y-2">
+        <Card>
+          <SectionTitle action={<Fact>{exIdx + 1}/{exercises.length}</Fact>}>Up next</SectionTitle>
+          <ol className="space-y-1">
             {exercises.map((e, i) => (
-              <div key={i} className={`flex items-center gap-2 ${i < exIdx ? 'opacity-30' : ''}`}>
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+              <li key={i} className={`flex items-center gap-3 rounded-xl px-2 py-1.5 ${i === exIdx ? 'bg-neon-tint' : ''} ${i < exIdx ? 'opacity-40' : ''}`}>
+                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
                   i < exIdx ? 'bg-neon text-on-neon' : i === exIdx ? 'border-2 border-neon-stroke text-neon-ink' : 'border border-line-strong text-muted'
                 }`}>
                   {i < exIdx ? <Icon icon="mdi:check" width={14} aria-label="Done" /> : i + 1}
-                </div>
-                <span className={`text-sm ${i === exIdx ? 'text-ink font-medium' : 'text-muted'}`}>{e.name}</span>
-              </div>
+                </span>
+                <span className={`flex-1 min-w-0 text-sm break-words ${i === exIdx ? 'text-ink font-semibold' : 'text-ink-2'}`}>{e.name}</span>
+                <span className={`text-xs tabular-nums ${i === exIdx ? 'font-semibold text-neon-ink' : 'text-muted'}`}>{setsFor(i)} sets</span>
+              </li>
             ))}
-          </div>
+          </ol>
         </Card>
       )}
     </div>
@@ -1093,8 +1021,8 @@ function LoggedSets({ sets, onEdit, onDelete }) {
   const field = 'w-full bg-raised border border-line focus:border-neon-stroke text-ink rounded-lg px-3 py-2 text-sm outline-none'
 
   return (
-    <Card pad="md">
-      <div className="text-sm font-semibold text-ink-2 mb-2">Logged this exercise</div>
+    <Card>
+      <SectionTitle action={<Fact icon="mdi:check">{sets.length}</Fact>}>Logged sets</SectionTitle>
       <ul className="divide-y divide-line">
         {sets.map(s => (
           <li key={s.i} className="py-2">
@@ -1113,8 +1041,8 @@ function LoggedSets({ sets, onEdit, onDelete }) {
               </form>
             ) : (
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted w-12 flex-shrink-0">Set {s.set}</span>
-                <span className="flex-1 text-sm font-semibold text-ink">{s.weight > 0 ? `${fmt(s.weight)} × ${s.reps}` : `${s.reps} reps`}</span>
+                <span className="w-7 h-7 rounded-full bg-neon text-on-neon text-xs font-bold flex items-center justify-center flex-shrink-0" aria-label={`Set ${s.set}`}>{s.set}</span>
+                <span className="flex-1 text-base font-bold text-ink tabular-nums">{s.weight > 0 ? `${fmt(s.weight)} × ${s.reps}` : `${s.reps} reps`}</span>
                 <button aria-label={`Edit set ${s.set}`} onClick={() => { setDraft({ weight: String(fromLb(s.weight)), reps: String(s.reps) }); setEditing(s.i) }}
                   className="press w-11 h-11 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-raised">
                   <Icon icon="mdi:pencil-outline" width={18} />
@@ -1150,21 +1078,20 @@ function ExercisePickerScreen({ activeExercises, loggedSets, onPick, onEnd }) {
 
   return (
     <div className="space-y-4 py-4 slide-up">
-      <div>
-        <div className="font-bold text-3xl">Choose exercise</div>
-        <div className="text-sm text-muted mt-1">
-          {activeExercises.length === 0 ? 'Pick your first exercise' : `${loggedSets.length} sets logged · pick what's next`}
-        </div>
-      </div>
+      <PageHeader icon="mdi:format-list-checks" title={activeExercises.length === 0 ? 'First exercise' : 'Next exercise'}
+        facts={loggedSets.length > 0 && <>
+          <Fact icon="mdi:dumbbell">{activeExercises.length} done</Fact>
+          <Fact icon="mdi:check">{loggedSets.length} sets</Fact>
+        </>} />
 
       {loggedSets.length > 0 && (
-        <Button full onClick={onEnd}>Finish workout</Button>
+        <Button full icon="mdi:flag-checkered" onClick={onEnd}>Finish workout</Button>
       )}
 
-      <Card pad="md">
+      <Card>
         <input
-          className="w-full bg-inset border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-3 py-2.5 text-sm outline-none transition-colors mb-3"
-          placeholder="Search exercises..."
+          className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-3 py-2.5 text-sm outline-none transition-colors mb-3"
+          placeholder="Search exercises"
           value={search}
           onChange={e => setSearch(e.target.value)}
           autoFocus
@@ -1180,20 +1107,10 @@ function ExercisePickerScreen({ activeExercises, loggedSets, onPick, onEnd }) {
           {filtered.map((ex, i) => {
             const already = doneNames.has(ex.name)
             return (
-              <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-inset">
-                <Icon icon={getExerciseIcon(ex)} width={22} className="flex-shrink-0 text-muted" />
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm truncate">{ex.name}</div>
-                  <div className="text-xs text-muted">{ex.muscle} · {ex.equipment}</div>
-                </div>
-                {already && (
-                  <span className="text-xs text-neon-ink/50 flex-shrink-0">done</span>
-                )}
-                <Button
-                  onClick={() => onPick(ex)}>
-                  Go
-                </Button>
-              </div>
+              <ExerciseRow key={i} icon={getExerciseIcon(ex)} name={ex.name} meta={ex.muscle}>
+                {already && <Fact icon="mdi:check">Done</Fact>}
+                <Button size="sm" onClick={() => onPick(ex)}>Go</Button>
+              </ExerciseRow>
             )
           })}
         </div>
@@ -1263,8 +1180,8 @@ function RestScreen({ exercises, restDuration, exIdx, setIdx, totalSets, onAdvan
       </div>
 
       <div className="text-center">
-        <div className="text-sm font-semibold text-ink-2 mb-1">Up next</div>
-        <div className="font-bold text-lg">{nextLabel}</div>
+        <div className="text-xs font-semibold text-neon-ink mb-1">Up next</div>
+        <div className="font-bold text-xl text-ink">{nextLabel}</div>
       </div>
 
       <Button variant="secondary" onClick={onAdvance}>Skip rest</Button>
@@ -1314,18 +1231,11 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
         </InlineError>
       )}
 
-      <div className="grid grid-cols-3 gap-3 w-full">
-        {[['Duration', `${duration}m`], ['Volume', fmtVolume(volume)], ['Sets', loggedSets.length]].map(([l, v]) => (
-          <Card key={l}>
-            <div className="text-xs text-muted mb-1">{l}</div>
-            <div className="font-bold text-xl">{v}</div>
-          </Card>
-        ))}
-      </div>
+      <StatTiles className="w-full text-left" items={[['Minutes', duration], ['Volume', fmtVolume(volume)], ['Sets', loggedSets.length]]} />
 
       {badges.length > 0 && (
         <Card pad="lg" tone="neon" className="w-full text-left">
-          <div className="text-xs text-neon-ink mb-3">Badge unlocked</div>
+          <SectionTitle>Badge unlocked</SectionTitle>
           <div className="space-y-3">
             {badges.map(b => (
               <div key={b.id} className="flex items-center gap-3">
@@ -1342,7 +1252,7 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
 
       {prs.length > 0 && (
         <Card pad="lg" tone="neon" className="w-full text-left">
-          <div className="text-xs text-neon-ink mb-3">New personal records</div>
+          <SectionTitle action={<Fact icon="mdi:trophy-outline">{prs.length}</Fact>}>New records</SectionTitle>
           <div className="space-y-2">
             {prs.map((pr, i) => (
               <div key={i} className="flex items-start justify-between gap-3">
@@ -1375,46 +1285,30 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
                 value={workoutName}
                 onChange={e => setWorkoutName(e.target.value)}
               />
-              <div className="space-y-1.5 mb-4">
-                {uniqueExNames.map((name, i) => {
-                  const ex = EXERCISES.find(e => e.name === name)
-                  return (
-                    <div key={i} className="flex items-center gap-2.5 py-1 border-b border-line last:border-0">
-                      <span className="text-xs text-muted w-4 flex-shrink-0">{i + 1}</span>
-                      <Icon icon={getExerciseIcon(ex)} width={18} className="flex-shrink-0 text-muted" />
-                      <span className="text-sm text-ink-2">{name}</span>
-                      <span className="text-xs text-muted ml-auto">{ex?.muscle}</span>
-                    </div>
-                  )
-                })}
-              </div>
-              <button
-                onClick={handleSave}
-                disabled={saveState === 'saving' || !workoutName.trim()}
-                className="w-full py-3 rounded-xl border border-neon-stroke/30 bg-neon/8 text-neon-ink font-semibold text-sm hover:bg-neon/15 transition-all disabled:opacity-40">
-                {saveState === 'saving' ? 'Saving...' : `Save "${workoutName || '...'}"`}
-              </button>
+              <Button variant="secondary" full icon="mdi:content-save-outline" onClick={handleSave}
+                disabled={saveState === 'saving' || !workoutName.trim()}>
+                {saveState === 'saving' ? 'Saving…' : `Save ${uniqueExNames.length} exercises`}
+              </Button>
             </>
           )}
         </Card>
       )}
 
-      <Card pad="lg" className="w-full text-left">
-        <div className="text-lg leading-[1.3] font-semibold text-ink mb-3">Set log</div>
-        <div className="space-y-1">
-          {loggedSets.map((s, i) => (
-            <div key={i} className="flex justify-between items-center py-1.5 border-b border-line last:border-0">
-              <div>
-                <span className="font-medium text-sm">{s.ex}</span>
-                <span className="text-muted text-xs ml-2">Set {s.set}</span>
-              </div>
-              <div className="text-sm font-bold text-neon-ink">{fmt(s.weight)} × {s.reps}</div>
-            </div>
-          ))}
+      <Button full onClick={onHome}>Done</Button>
+
+      <Card className="w-full text-left">
+        <SectionTitle>Sets</SectionTitle>
+        <div className="space-y-2">
+          {uniqueExNames.map(name => {
+            const exSets = loggedSets.filter(s => s.ex === name)
+            return (
+              <ExerciseRow key={name} icon={getExerciseIcon(EXERCISES.find(e => e.name === name))} name={name}
+                meta={exSets.map(s => s.weight > 0 ? `${fmt(s.weight)} × ${s.reps}` : `${s.reps} reps`).join(' · ')}
+                value={`${exSets.length} ${exSets.length === 1 ? 'set' : 'sets'}`} />
+            )
+          })}
         </div>
       </Card>
-
-      <Button full onClick={onHome}>Back to home</Button>
     </div>
   )
 }
@@ -1496,28 +1390,19 @@ function SessionModal({ session, onClose, history }) {
 
   return (
     <Sheet title={session.name} onClose={onClose} bodyClassName="">
-        <div className="text-xs text-muted -mt-1">{session.date} · {session.duration}</div>
-
-        {/* Stats row */}
-        <div className="flex gap-3 mt-4 mb-5">
-          {[
-            ['Volume', fmtVolume(totalVolume)],
-            ['Sets', sets.length],
-            ['Exercises', Object.keys(byExercise).length],
-          ].map(([label, val]) => (
-            <div key={label} className="flex-1 bg-inset rounded-xl p-3 text-center">
-              <div className="font-bold text-xl text-neon-ink">{val}</div>
-              <div className="text-xs text-muted">{label}</div>
-            </div>
-          ))}
+        <div className="flex flex-wrap gap-1.5 -mt-1">
+          <Fact icon="mdi:calendar">{fmtDay(session.date)}</Fact>
+          {session.duration && <Fact icon="mdi:clock-outline">{session.duration}</Fact>}
         </div>
+
+        <StatTiles className="mt-4 mb-5" items={[['Volume', fmtVolume(totalVolume)], ['Sets', sets.length], ['Exercises', Object.keys(byExercise).length]]} />
 
         {/* Progress vs previous session */}
         {prevSession ? (
           <div className="mb-6">
-            <div className="text-xs text-muted mb-3">
-              vs {prevSession.date}
-            </div>
+            <SectionTitle action={advice && (
+              <InfoButton title="Coach's tip"><p className="text-sm text-ink-2">{advice}</p></InfoButton>
+            )}>vs {fmtDay(prevSession.date)}</SectionTitle>
             <div className="space-y-3">
               {comparisons.map(c => {
                 const maxAvg = Math.max(c.curAvg, c.prevAvg ?? c.curAvg, 1)
@@ -1526,13 +1411,13 @@ function SessionModal({ session, onClose, history }) {
                 const isUp = (c.pct ?? 0) >= 0
                 const ex = EXERCISES.find(e => e.name === c.name)
                 return (
-                  <div key={c.name} className="bg-inset rounded-xl overflow-hidden">
+                  <div key={c.name} className="bg-raised rounded-xl overflow-hidden">
                     {/* Exercise header + bar */}
                     <div className="flex items-center gap-2 px-3 pt-2.5 pb-1.5">
-                      <Icon icon={getExerciseIcon(ex)} width={15} className="flex-shrink-0 text-muted" />
-                      <div className="font-semibold text-xs flex-1 truncate">{c.name}</div>
+                      <Icon icon={getExerciseIcon(ex)} width={18} className="flex-shrink-0 text-neon-ink" aria-hidden="true" />
+                      <div className="font-semibold text-sm text-ink flex-1 truncate">{c.name}</div>
                       {c.pct !== null ? (
-                        <div className={`text-xs font-bold flex-shrink-0 ${c.pct > 0 ? 'text-neon-ink' : c.pct < 0 ? 'text-danger' : 'text-muted'}`}>
+                        <div className={`text-sm font-bold flex-shrink-0 ${c.pct > 0 ? 'text-neon-ink' : c.pct < 0 ? 'text-danger' : 'text-muted'}`}>
                           {c.pct > 0 ? '+' : ''}{c.pct}%
                         </div>
                       ) : (
@@ -1570,38 +1455,18 @@ function SessionModal({ session, onClose, history }) {
               })}
             </div>
 
-            {advice && (
-              <div className="mt-3 p-3 bg-canvas border border-neon-stroke/20 rounded-xl">
-                <div className="text-xs text-neon-ink mb-1.5">Coach's tip</div>
-                <div className="text-xs text-ink-2 leading-relaxed">{advice}</div>
-              </div>
-            )}
           </div>
         ) : (
-          <div className="mb-5 p-3 bg-inset rounded-xl text-center">
-            <div className="text-xs text-muted">First time doing this workout.</div>
-          </div>
+          <div className="mb-5"><Fact icon="mdi:star-outline">First time</Fact></div>
         )}
 
-        {/* Set Details */}
-        <div className="text-lg leading-[1.3] font-semibold text-ink mb-2">Set log</div>
-        <div className="bg-inset rounded-xl overflow-hidden">
-          {/* Header */}
-          <div className="grid grid-cols-[1fr_3.5rem_3rem_3rem] gap-1 px-3 py-1.5 border-b border-line">
-            <span className="text-2xs text-muted">Exercise</span>
-            <span className="text-2xs text-muted text-center">Set</span>
-            <span className="text-2xs text-muted text-right">lbs</span>
-            <span className="text-2xs text-muted text-right">Reps</span>
-          </div>
+        {/* Set log */}
+        <SectionTitle>Sets</SectionTitle>
+        <div className="space-y-2">
           {Object.entries(byExercise).map(([exName, exSets]) => (
-            exSets.map((s, i) => (
-              <div key={`${exName}-${i}`} className="grid grid-cols-[1fr_3.5rem_3rem_3rem] gap-1 items-center px-3 py-1.5 border-b border-line last:border-0">
-                <span className="text-xs text-muted truncate">{i === 0 ? exName : ''}</span>
-                <span className="text-xs text-muted text-center">{i + 1}</span>
-                <span className="text-xs font-bold text-right">{s.weight}</span>
-                <span className="text-xs font-bold text-neon-ink text-right">{s.reps}</span>
-              </div>
-            ))
+            <ExerciseRow key={exName} icon={getExerciseIcon(EXERCISES.find(e => e.name === exName))} name={exName}
+              meta={exSets.map(s => s.weight > 0 ? `${fmt(s.weight)} × ${s.reps}` : `${s.reps} reps`).join(' · ')}
+              value={`${exSets.length} ${exSets.length === 1 ? 'set' : 'sets'}`} />
           ))}
         </div>
     </Sheet>
