@@ -16,7 +16,7 @@ Fitness PWA: AI training plans, workout logging, calorie tracking, progress. Liv
 ## Deploying (always ask the user first)
 - Site: `vercel --prod --yes` (CLI deploys; not connected to git).
 - Functions: `supabase functions deploy <name>`; `send-reminders` needs `--no-verify-jwt` (cron calls it with `x-cron-secret`).
-- Migrations: `supabase db query --linked -f supabase/NNN_*.sql` (from Claude's shell this times out; the user pastes the SQL into the dashboard SQL editor). Live DB changes need the user's explicit OK. Mind order when the app and DB must change together (e.g. 006 before 007). Latest applied: 008 (`user_profiles.weight_unit`). Written, not yet applied: 009 (`009_social.sql`: nicknames, friends, monthly points, `close-month` cron); apply it before deploying the app and the two AI functions that use it.
+- Migrations: `supabase db query --linked -f supabase/NNN_*.sql` (from Claude's shell this times out; the user pastes the SQL into the dashboard SQL editor). Live DB changes need the user's explicit OK. Mind order when the app and DB must change together (e.g. 006 before 007). Latest applied: 009 (`009_social.sql`: nicknames, friends, monthly points, `close-month` cron on the 1st at 12:00 UTC).
 - GitHub `Vorsee/Athrion` is PUBLIC. Working branch `progress-update-v1`. Never commit secrets (`.env.local` is ignored).
 - Backup tags: `backup-2frame-demos`, `backup-old-design`.
 
