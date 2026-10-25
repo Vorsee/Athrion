@@ -10,10 +10,12 @@ import { createCheckoutSession } from './lib/stripe.js'
 import { UnitProvider } from './lib/units.js'
 import HomeScreenPrompt from './components/HomeScreenPrompt.jsx'
 import { PageSkeleton } from './components/ui/States.jsx'
+import { readGuidePick, clearGuidePick } from './lib/guidePlans.js'
 
 // Workout is the landing tab; everything else loads the first time it's opened
 const Auth              = lazy(() => import('./pages/Auth.jsx'))
 const Landing           = lazy(() => import('./pages/Landing.jsx'))
+const Guide             = lazy(() => import('./pages/Guide.jsx'))
 const NewPasswordSheet  = lazy(() => import('./components/NewPasswordSheet.jsx'))
 const Onboarding        = lazy(() => import('./pages/Onboarding.jsx'))
 const FitnessOnboarding = lazy(() => import('./pages/FitnessOnboarding.jsx'))
@@ -33,6 +35,9 @@ const Loading = () => (
 )
 const PageLoading = () => <PageSkeleton />
 
+// athrion.app/guide: the free 7-day plan linked from Instagram
+const onGuidePath = () => /^\/guide\/?$/.test(window.location.pathname)
+
 const PAGES = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan, progress: Progress }
 
 export default function App() {
@@ -41,9 +46,12 @@ export default function App() {
   // Signed-out: landing page for new visitors, straight to sign in for people who've been here
   const [authMode, setAuthMode] = useState(() => {
     if (new URLSearchParams(window.location.search).has('signup')) return 'register'
+    if (onGuidePath()) return null
     try { return localStorage.getItem('athrion_signed_in_before') ? 'login' : null } catch { return null }
   })
   const [recovering, setRecovering] = useState(false)
+  // Open on /guide, or after "Start this plan free" until the new account has saved it
+  const [guide, setGuide] = useState(() => onGuidePath() || !!readGuidePick())
   const [profile, setProfile]   = useState(undefined) // undefined=loading, null=incomplete, obj=complete
   const [fitnessProfile, setFitnessProfile] = useState(undefined) // undefined=loading, null=not set, obj=loaded
   const [isPro, setIsPro]       = useState(false)
@@ -182,6 +190,12 @@ export default function App() {
     }
   }
 
+  function leaveGuide() {
+    clearGuidePick()
+    if (onGuidePath()) window.history.replaceState(window.history.state, '', '/')
+    setGuide(false)
+  }
+
   function toggleTheme() {
     const next = theme === 'dark' ? 'light' : 'dark'
     setTheme(next)
@@ -195,6 +209,8 @@ export default function App() {
     <Suspense fallback={<Loading />}>
       {authMode
         ? <Auth key={authMode} initialMode={authMode} onBack={() => setAuthMode(null)} />
+        : guide
+        ? <Guide onStart={() => setAuthMode('register')} onSignIn={() => setAuthMode('login')} />
         : <Landing onCreateAccount={() => setAuthMode('register')} onSignIn={() => setAuthMode('login')} />}
     </Suspense>
   )
@@ -206,6 +222,12 @@ export default function App() {
         initialValues={profile}
         onComplete={() => { setEditingProfile(false); refreshProfile() }}
       />
+    </Suspense>
+  )
+
+  if (guide) return (
+    <Suspense fallback={<Loading />}>
+      <Guide signedIn isPro={isPro} initialPick={readGuidePick()} onDone={leaveGuide} />
     </Suspense>
   )
 

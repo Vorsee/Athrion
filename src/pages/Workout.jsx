@@ -11,6 +11,7 @@ import { fetchBadges, awardBadges } from '../lib/progressApi.js'
 import { tok } from '../lib/tokens.js'
 import { loadPending, queueWorkout, flushPending } from '../lib/pendingWorkouts.js'
 import { useUnit } from '../lib/units.js'
+import { FREE_WORKOUT_LIMIT } from '../lib/pricing.js'
 import TrainingCalendar from '../components/TrainingCalendar.jsx'
 import { useBackHandler, useFocusMode, notifySession, readSession, setSessionMinimised } from '../lib/shell.js'
 import { HeaderBar } from '../components/Nav.jsx'
@@ -27,8 +28,6 @@ function matchPlanExercises(planExercises) {
     return { name: pe.name, muscle: '', icon: 'mdi:dumbbell', sets: pe.sets, reps: pe.reps, restSeconds: pe.restSeconds }
   })
 }
-
-const FREE_WORKOUT_LIMIT = 3
 
 const SESSION_SCREENS = ['training', 'rest', 'exercise-picker']
 

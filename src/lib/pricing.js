@@ -1,6 +1,8 @@
 // What the app shows for Pro. The Stripe prices behind STRIPE_PRICE_MONTHLY and
 // STRIPE_PRICE_ANNUAL (Vercel env) must match these amounts.
 export const TRIAL_DAYS = 7
+// Saved workouts a free account can keep; Pro is unlimited
+export const FREE_WORKOUT_LIMIT = 3
 
 export const PLANS = {
   monthly: { id: 'monthly', price: 7.99, label: 'Monthly', per: 'month' },
