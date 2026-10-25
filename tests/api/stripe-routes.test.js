@@ -212,3 +212,45 @@ describe('POST /api/stripe-webhook', () => {
     })
   })
 })
+
+describe('GET /api/monthly-prizes (Vercel cron)', () => {
+  let prizes
+  beforeEach(async () => {
+    process.env.CRON_SECRET = 'cron-secret'
+    prizes = (await import('../../api/monthly-prizes.js')).default
+  })
+  const cron = { authorization: 'Bearer cron-secret' }
+  const due = rows => sb.set('monthly_scores', q => sb.op(q, 'update') ? { data: null, error: null } : { data: rows, error: null })
+
+  it('refuses calls without the cron secret', async () => {
+    const r = res()
+    await prizes(req({ method: 'GET', headers: { authorization: 'Bearer nope' } }), r)
+    expect(r.statusCode).toBe(401)
+  })
+
+  it('moves a paying winner\'s next charge a month later and marks the prize given', async () => {
+    due([{ user_id: 'user-1', month: '2026-10-01' }])
+    sb.set('subscriptions', { data: { status: 'pro', stripe_subscription_id: 'sub_1' }, error: null })
+    const nov15 = Date.UTC(2026, 10, 15) / 1000
+    stripe.subscriptions.retrieve.mockResolvedValue({ id: 'sub_1', status: 'active', items: { data: [{ current_period_end: nov15 }] } })
+    const r = res()
+    await prizes(req({ method: 'GET', headers: cron }), r)
+    expect(stripe.subscriptions.update).toHaveBeenCalledWith('sub_1',
+      { trial_end: Date.UTC(2026, 11, 15) / 1000, proration_behavior: 'none' },
+      { idempotencyKey: 'prize-user-1-2026-10-01' })
+    expect(r.body).toEqual({ given: 1, results: [{ month: '2026-10-01', via: 'stripe' }] })
+    const marked = sb.queriesFor('monthly_scores').map(q => sb.op(q, 'update')).find(Boolean)
+    expect(marked[0].prize_given_at).toBeTruthy()
+  })
+
+  it('gives a free Pro month when the winner does not pay through Stripe', async () => {
+    due([{ user_id: 'user-1', month: '2026-10-01' }])
+    sb.set('subscriptions', q => sb.op(q, 'update') ? { data: null, error: null } : { data: { status: 'free', comp_pro_until: null }, error: null })
+    const r = res()
+    await prizes(req({ method: 'GET', headers: cron }), r)
+    expect(stripe.subscriptions.update).not.toHaveBeenCalled()
+    const comp = sb.queriesFor('subscriptions').map(q => sb.op(q, 'update')).find(Boolean)
+    expect(Date.parse(comp[0].comp_pro_until)).toBeGreaterThan(Date.now() + 27 * 864e5)
+    expect(r.body.results).toEqual([{ month: '2026-10-01', via: 'comp' }])
+  })
+})

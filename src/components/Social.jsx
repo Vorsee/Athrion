@@ -78,6 +78,7 @@ function PointsInfo() {
       </div>
       <p className="text-sm text-ink-2 mt-5">
         Points reset on the 1st. The top {PRIZE_PLACES} on Everyone win a medal and a free month of Pro.
+        Already paying? Your next payment moves a month later.
         Hit {MONTHLY_TARGET} workout days to earn that month's badge.
       </p>
       <p className="text-sm text-ink-2 mt-3">
