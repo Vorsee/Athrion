@@ -19,9 +19,13 @@ describe('database policies (SQL migrations)', () => {
     }
   })
 
+  // Nicknames are public to signed-in users on purpose (friend search); nothing else may be
+  const PUBLIC_READS = [/^CREATE POLICY "signed-in users read nicknames" ON public\.social_profiles\s+FOR SELECT TO authenticated USING \(true\);$/]
+
   it('every policy on user data is scoped to auth.uid() or a membership check', () => {
     for (const f of sqlFiles) {
       for (const m of read(f).matchAll(/create policy[\s\S]*?;/gi)) {
+        if (PUBLIC_READS.some(re => re.test(m[0]))) continue
         expect(m[0], `${f}: ${m[0].slice(0, 80)}`).toMatch(/auth\.uid\(\)|is_group_participant|team_members/i)
       }
     }
