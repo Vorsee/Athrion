@@ -37,8 +37,14 @@ export async function createCheckoutSession(plan = 'monthly') {
   window.location.href = data.url
 }
 
-export async function cancelSubscription() {
-  const { res, data } = await postAsUser('/api/cancel-subscription')
-  if (!res.ok) throw new Error(data.error || 'Cancellation failed')
-  return data // { success, cancel_at, period_end }
+// action: 'cancel' (at period end), 'resume' (undo a cancel) or 'status'.
+// Returns { status, cancelled, cancel_at, period_end } straight from Stripe.
+async function manageSubscription(action, failMsg) {
+  const { res, data } = await postAsUser('/api/cancel-subscription', { action })
+  if (!res.ok) throw new Error(data.error || failMsg)
+  return data
 }
+
+export const cancelSubscription = () => manageSubscription('cancel', 'Cancellation failed')
+export const resumeSubscription = () => manageSubscription('resume', 'Could not renew the subscription')
+export const fetchSubscriptionDetails = () => manageSubscription('status', 'Could not load your subscription')

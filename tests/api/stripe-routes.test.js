@@ -4,7 +4,7 @@ import { sb } from '../helpers/supabaseMock.js'
 
 const stripe = {
   checkout: { sessions: { create: vi.fn() } },
-  subscriptions: { update: vi.fn() },
+  subscriptions: { update: vi.fn(), retrieve: vi.fn() },
   webhooks: { constructEvent: vi.fn() },
 }
 vi.mock('stripe', () => ({ default: vi.fn(() => stripe) }))
@@ -133,6 +133,25 @@ describe('POST /api/cancel-subscription', () => {
     const r = res(); await cancel(req({ headers: auth }), r)
     expect(stripe.subscriptions.update).toHaveBeenCalledWith('sub_1', { cancel_at_period_end: true })
     expect(r.body).toMatchObject({ success: true, period_end: '2027-01-01T00:00:00.000Z' })
+  })
+
+  it('reports a pending cancellation from Stripe', async () => {
+    sb.set('subscriptions', { data: { status: 'pro', stripe_subscription_id: 'sub_1' } })
+    stripe.subscriptions.retrieve.mockResolvedValue({ status: 'active', cancel_at_period_end: true, cancel_at: 1798761600, items: { data: [{ current_period_end: 1798761600 }] } })
+    const r = res(); await cancel(req({ headers: auth, body: { action: 'status' } }), r)
+    expect(stripe.subscriptions.update).not.toHaveBeenCalled()
+    expect(r.body).toMatchObject({ cancelled: true, cancel_at: '2027-01-01T00:00:00.000Z' })
+  })
+  it('renews by undoing the pending cancellation', async () => {
+    sb.set('subscriptions', { data: { status: 'pro', stripe_subscription_id: 'sub_1' } })
+    stripe.subscriptions.update.mockResolvedValue({ status: 'active', cancel_at_period_end: false, cancel_at: null, items: { data: [{ current_period_end: 1798761600 }] } })
+    const r = res(); await cancel(req({ headers: auth, body: { action: 'resume' } }), r)
+    expect(stripe.subscriptions.update).toHaveBeenCalledWith('sub_1', { cancel_at_period_end: false })
+    expect(r.body).toMatchObject({ cancelled: false, cancel_at: null })
+  })
+  it('rejects unknown actions', async () => {
+    const r = res(); await cancel(req({ headers: auth, body: { action: 'delete' } }), r)
+    expect(r.statusCode).toBe(400)
   })
 
   describe('regression: fixed in the October 2026 review', () => {

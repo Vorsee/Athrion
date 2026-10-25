@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase.js'
-import { cancelSubscription } from '../lib/stripe.js'
+import { cancelSubscription, resumeSubscription, fetchSubscriptionDetails } from '../lib/stripe.js'
 import { signOut } from '../lib/session.js'
 import { Icon } from '@iconify/react'
 import { tok } from '../lib/tokens.js'
 import Sheet from './Sheet.jsx'
-import { Button, Segmented, ListRow } from './ui/index.js'
+import { Button, Segmented, ListRow, Card, Tag, Skeleton, InlineError } from './ui/index.js'
 import ReminderSettings from './ReminderSettings.jsx'
 import { fmtWeight } from '../lib/units.js'
 import { PRO_FEATURES, annualPerMonth, money } from '../lib/pricing.js'
@@ -36,28 +36,35 @@ function fmtDate(iso) {
 }
 
 // ── Subscription sub-screen ───────────────────────────────────────────────────
+// Stripe is the source of truth: the screen asks it on open, so a cancel made
+// here or in Stripe shows as cancelled, with Renew instead of Cancel.
 
 function SubscriptionScreen({ onBack }) {
-  const [step, setStep]     = useState('idle')   // idle | confirm | loading | done | error
-  const [result, setResult] = useState(null)
-  const [errMsg, setErrMsg] = useState('')
+  const [details, setDetails] = useState(null)    // { cancelled, cancel_at, period_end }
+  const [step, setStep]       = useState('loading') // loading | idle | confirm | working | error
+  const [errMsg, setErrMsg]   = useState('')
 
-  async function handleCancel() {
-    setStep('loading')
+  async function run(fn) {
+    setStep(details ? 'working' : 'loading')
+    setErrMsg('')
     try {
-      const data = await cancelSubscription()
-      setResult(data)
-      setStep('done')
+      setDetails(await fn())
+      setStep('idle')
     } catch (e) {
       setErrMsg(e.message || 'Something went wrong')
       setStep('error')
     }
   }
 
+  useEffect(() => { run(fetchSubscriptionDetails) }, [])
+
+  const cancelled = details?.cancelled
+  const endDate = details && (details.cancel_at ?? details.period_end)
+
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-3 mb-5">
         <button onClick={onBack} aria-label="Back"
           className="press w-10 h-10 -ml-2 rounded-full flex items-center justify-center text-ink-2 hover:text-ink hover:bg-raised transition-colors">
           <Icon icon="mdi:chevron-left" width={24} />
@@ -66,76 +73,62 @@ function SubscriptionScreen({ onBack }) {
       </div>
 
       {/* Plan card */}
-      <div className="bg-gradient-to-br from-neon-tint to-canvas border border-neon-stroke/30 rounded-2xl p-5 mb-5">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <div className="font-bold text-xl text-neon-ink leading-none">ATHRION Pro</div>
-            <div className="text-xs text-muted mt-0.5">Your subscription</div>
-          </div>
-          <div className="bg-neon text-on-neon text-xs font-bold px-3 py-1 rounded-full">
-            Active
-          </div>
+      <Card hero={!cancelled} tone={cancelled ? 'warn' : 'default'} className="mb-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="font-bold text-2xl text-ink leading-tight">ATHRION Pro</div>
+          {details && (cancelled
+            ? <Tag tone="warn"><Icon icon="mdi:close-circle-outline" width={14} aria-hidden="true" />Cancelled</Tag>
+            : <span className="bg-neon text-on-neon text-xs font-bold px-3 py-1 rounded-full">Active</span>)}
         </div>
-
-        <div className="space-y-2 text-sm">
+        {step === 'loading' ? (
+          <Skeleton className="h-5 w-40 mt-3" />
+        ) : endDate ? (
+          <div className="mt-2 text-sm text-ink-2">
+            {cancelled ? 'Pro until ' : 'Renews '}
+            <span className="font-semibold text-ink">{fmtDate(endDate)}</span>
+          </div>
+        ) : null}
+        {cancelled && <p className="text-xs text-muted mt-1">No further charges. Renew any time before then to keep Pro.</p>}
+        <div className="space-y-1.5 mt-4">
           {PRO_FEATURES.map(f => (
-            <div key={f.title} className="flex items-center gap-2 text-ink-2">
-              <Icon icon="mdi:check" width={14} className="text-neon-ink flex-shrink-0" />
-              <span className="text-xs">{f.title}</span>
+            <div key={f.title} className="flex items-center gap-2 text-sm text-ink-2">
+              <Icon icon="mdi:check" width={16} className={`${cancelled ? 'text-muted' : 'text-neon-ink'} flex-shrink-0`} aria-hidden="true" />
+              <span>{f.title}</span>
             </div>
           ))}
         </div>
-        <div className="text-xs text-muted mt-4">Your price and renewal date are on your Stripe receipt email.</div>
-      </div>
+      </Card>
 
-      {/* Status / actions */}
-      {step === 'idle' && (
+      {/* Actions: Renew when cancelled, Cancel when active */}
+      {step === 'error' && (
+        <InlineError className="mb-3" onRetry={() => run(fetchSubscriptionDetails)}>{errMsg}</InlineError>
+      )}
+
+      {details && cancelled && (step === 'idle' || step === 'working' || step === 'error') && (
+        <Button full icon="mdi:refresh" onClick={() => run(resumeSubscription)} disabled={step === 'working'}>
+          {step === 'working' ? 'Renewing…' : 'Renew subscription'}
+        </Button>
+      )}
+
+      {details && !cancelled && (step === 'idle' || step === 'error') && (
         <Button variant="danger" full onClick={() => setStep('confirm')}>Cancel subscription</Button>
       )}
 
-      {step === 'confirm' && (
-        <div className="bg-danger/12 border border-danger/12 rounded-2xl p-5">
-          <div className="font-bold text-sm text-danger mb-1">Are you sure?</div>
-          <p className="text-xs text-muted leading-relaxed mb-4">
-            You'll keep Pro access until the end of your current billing period. After that your account moves to Free.
+      {details && !cancelled && step === 'confirm' && (
+        <div className="bg-danger/12 border border-danger/25 rounded-2xl p-4">
+          <div className="font-bold text-sm text-danger mb-1">Cancel ATHRION Pro?</div>
+          <p className="text-sm text-ink-2 mb-4">
+            You keep Pro until {endDate ? fmtDate(endDate) : 'the end of this billing period'}, then move to Free.
           </p>
           <div className="flex gap-3">
             <Button variant="secondary" className="flex-1" onClick={() => setStep('idle')}>Keep Pro</Button>
-            <Button variant="danger" className="flex-1" onClick={handleCancel}>Yes, cancel</Button>
+            <Button variant="danger" className="flex-1" onClick={() => run(cancelSubscription)}>Yes, cancel</Button>
           </div>
         </div>
       )}
 
-      {step === 'loading' && (
-        <div className="w-full py-3.5 rounded-xl text-sm font-semibold text-muted bg-raised border border-line flex items-center justify-center gap-2">
-          <span className="spin inline-block w-4 h-4 border-2 border-line-strong border-t-muted rounded-full" />
-          Cancelling…
-        </div>
-      )}
-
-      {step === 'done' && (
-        <div className="bg-surface border border-line rounded-2xl p-5 text-center">
-          <Icon icon="mdi:check-circle-outline" width={32} className="text-neon-ink mx-auto mb-2" />
-          <div className="font-bold text-sm text-ink mb-1">Subscription cancelled</div>
-          <p className="text-xs text-muted leading-relaxed">
-            You'll keep Pro access until{' '}
-            <span className="text-ink-2 font-semibold">
-              {result?.period_end ? fmtDate(result.period_end) : 'the end of your billing period'}
-            </span>.
-            No further charges will be made.
-          </p>
-        </div>
-      )}
-
-      {step === 'error' && (
-        <div className="bg-danger/12 border border-danger/12 rounded-2xl p-4">
-          <div className="text-sm text-danger font-semibold mb-1">Cancellation failed</div>
-          <p className="text-xs text-muted mb-3">{errMsg}</p>
-          <button onClick={() => setStep('idle')}
-            className="text-xs text-muted hover:text-ink transition-colors underline">
-            Try again
-          </button>
-        </div>
+      {details && !cancelled && step === 'working' && (
+        <Button variant="danger" full disabled>Cancelling…</Button>
       )}
 
       <p className="text-center text-xs text-muted mt-4">

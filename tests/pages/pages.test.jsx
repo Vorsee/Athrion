@@ -1,6 +1,6 @@
 // Smoke and key-flow tests for every other page, plus the App shell.
 // "Today" is Friday 23 Oct 2026, 10am New York.
-import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, beforeAll, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { sb, USER } from '../helpers/supabaseMock.js'
@@ -300,6 +300,46 @@ describe('Onboarding', () => {
 })
 
 describe('ProfileModal', () => {
+  // The subscription screen asks the server (and so Stripe) on open
+  const stripeReply = (...bodies) => {
+    const fetchMock = vi.fn()
+    for (const b of bodies) fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => b })
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+  const openSubscription = async () => {
+    render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={profile} isPro theme="dark" onToggleTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
+    await userEvent.click(screen.getByText('ATHRION Pro is active'))
+  }
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('shows a cancelled subscription as cancelled, with Renew and no Cancel', async () => {
+    const fetchMock = stripeReply(
+      { cancelled: true, cancel_at: '2026-11-01T12:00:00.000Z', period_end: '2026-11-01T12:00:00.000Z' },
+      { cancelled: false, cancel_at: null, period_end: '2026-11-01T12:00:00.000Z' },
+    )
+    await openSubscription()
+    expect(await screen.findByText('Cancelled')).toBeInTheDocument()
+    expect(screen.getByText('November 1, 2026')).toBeInTheDocument()
+    expect(screen.queryByText('Cancel subscription')).toBeNull()
+    await userEvent.click(screen.getByText('Renew subscription'))
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ action: 'resume' })
+    expect(await screen.findByText('Cancel subscription')).toBeInTheDocument()
+    expect(screen.queryByText('Renew subscription')).toBeNull()
+  })
+  it('cancels an active subscription and then offers only Renew', async () => {
+    const fetchMock = stripeReply(
+      { cancelled: false, cancel_at: null, period_end: '2026-11-01T12:00:00.000Z' },
+      { cancelled: true, cancel_at: '2026-11-01T12:00:00.000Z', period_end: '2026-11-01T12:00:00.000Z' },
+    )
+    await openSubscription()
+    await userEvent.click(await screen.findByText('Cancel subscription'))
+    await userEvent.click(screen.getByText('Yes, cancel'))
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ action: 'cancel' })
+    expect(await screen.findByText('Renew subscription')).toBeInTheDocument()
+    expect(screen.queryByText('Cancel subscription')).toBeNull()
+  })
+
   it('signs out', async () => {
     render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={profile} isPro={false} theme="dark" onToggleTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
     await userEvent.click(screen.getByText('Sign out'))
