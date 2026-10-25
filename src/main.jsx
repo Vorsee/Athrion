@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { addCollection } from '@iconify/react'
 import App from './App.jsx'
+import ErrorBoundary, { clearReloadFlagSoon } from './components/ErrorBoundary.jsx'
 import icons from './lib/icons.json'
 import './index.css'
 
@@ -10,9 +11,12 @@ addCollection(icons)
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>
 )
+clearReloadFlagSoon()
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

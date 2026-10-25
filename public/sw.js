@@ -1,4 +1,4 @@
-const CACHE = 'athrion-v3'
+const CACHE = 'athrion-v4'
 
 // On install: take control immediately, no waiting
 self.addEventListener('install', () => self.skipWaiting())
@@ -46,8 +46,10 @@ self.addEventListener('fetch', e => {
   )
 })
 
+// Never store a page under a code or image address (a missing file used to come back as index.html)
 function cache(request, response) {
-  if (response.ok) caches.open(CACHE).then(c => c.put(request, response))
+  const html = (response.headers.get('content-type') || '').includes('text/html')
+  if (response.ok && (request.mode === 'navigate' || !html)) caches.open(CACHE).then(c => c.put(request, response))
 }
 
 // ── Push reminders (sent by the send-reminders Edge Function) ────────────────
