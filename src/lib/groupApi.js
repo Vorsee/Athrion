@@ -107,7 +107,7 @@ export async function fetchParticipants(sessionId) {
 export async function logGroupSet({ sessionId, displayName, exercise, setNum, weight, reps }) {
   const { data: { user } } = await supabase.auth.getUser()
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('group_sets')
     .insert({
       session_id: sessionId,
@@ -118,8 +118,16 @@ export async function logGroupSet({ sessionId, displayName, exercise, setNum, we
       weight,
       reps,
     })
+    .select()
+    .single()
 
   if (error) throw error
+  return data // shown straight away, before realtime or polling brings it back
+}
+
+export async function currentUserId() {
+  const { data: { user } } = await supabase.auth.getUser()
+  return user?.id ?? null
 }
 
 export async function fetchGroupSets(sessionId) {

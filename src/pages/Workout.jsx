@@ -606,19 +606,16 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
       ) : (
       <Card hero>
 
-          {/* Header */}
-          <div className="flex items-center justify-between mb-4">
+          {/* Header: the biggest thing on the Train tab */}
+          <div className="flex items-start justify-between gap-3 mb-4">
             <div className="min-w-0">
-              <div className="text-xs font-semibold text-neon-ink mb-1">Today's training</div>
-              <div className="font-bold text-2xl text-ink leading-tight break-words">{isRestDay ? todayPlan.title : planWorkout ? planName : fallbackName}</div>
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {isRestDay
-                  ? <Fact icon="mdi:sleep">{todayPlan.type.replace('_', ' ')}</Fact>
-                  : <>
-                      {planWorkout?.durationMinutes && <Fact icon="mdi:clock-outline">{planWorkout.durationMinutes} min</Fact>}
-                      <Fact icon="mdi:dumbbell">{(shownWorkout ? planExercises : fallbackExs).length} exercises</Fact>
-                    </>}
-              </div>
+              <div className="text-sm font-semibold text-neon-ink mb-1">Today's training · {TODAY_FULL}</div>
+              <div className="font-bold text-[2rem] xs:text-[2.25rem] text-ink leading-[1.1] tracking-tight break-words">{isRestDay ? todayPlan.title : planWorkout ? planName : fallbackName}</div>
+              {isRestDay && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  <Fact icon="mdi:sleep">{todayPlan.type.replace('_', ' ')}</Fact>
+                </div>
+              )}
             </div>
             {isRestDay && todayPlan.recoveryNotes && (
               <InfoButton title="Recovery"><p className="text-sm text-ink-2">{todayPlan.recoveryNotes}</p></InfoButton>
@@ -642,6 +639,13 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
             </div>
           )}
 
+          {(!isRestDay || shownWorkout) && (() => {
+            const list = shownWorkout ? planExercises : fallbackExs
+            const sets = shownWorkout ? list.reduce((a, e) => a + (Number(e.sets) || 3), 0) : list.length * 3
+            const minutes = (shownWorkout ?? planWorkout)?.durationMinutes ?? Math.round(sets * 2.5 / 5) * 5
+            return <StatTiles className="mb-4" items={[['Exercises', list.length], ['Sets', sets], ['Minutes', `~${minutes}`]]} />
+          })()}
+
           {/* Exercise list */}
           {shownWorkout ? (
             <div className="space-y-2 mb-5">
@@ -662,7 +666,7 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
           )}
 
           {(!isRestDay || shownWorkout) && (
-            <Button full onClick={shownWorkout ? handlePlanStart : () => onStart(fallbackExs, fallbackName)}>
+            <Button full icon="mdi:play" className="h-14 text-base" onClick={shownWorkout ? handlePlanStart : () => onStart(fallbackExs, fallbackName)}>
               {isRestDay ? 'Train anyway' : 'Start workout'}
             </Button>
           )}

@@ -4,7 +4,6 @@ import { useBackHandler } from '../lib/shell.js'
 import { Button, Card, Chip, Segmented, PageHeader, SectionTitle, Fact, IconButton, ExerciseRow, RankChip, SkeletonRows } from '../components/ui/index.js'
 import { NicknameCard, LeaderboardTab, FriendsTab } from '../components/Social.jsx'
 import { fetchMySocial, clearInvite } from '../lib/socialApi.js'
-import { tok } from '../lib/tokens.js'
 import { EXERCISES, MUSCLES, getExerciseIcon, todayKey } from '../lib/data.js'
 import {
   createGroupSession,
@@ -18,7 +17,9 @@ import {
   fetchGroupSets,
   logGroupSet,
   subscribeToGroupSession,
+  currentUserId,
 } from '../lib/groupApi.js'
+import { standings, mergeSets } from '../lib/groupStandings.js'
 import { saveWorkoutEntry } from '../lib/api.js'
 import { useUnit } from '../lib/units.js'
 
@@ -34,16 +35,6 @@ function buildExerciseLeaderboard(allSets, exerciseName) {
     byName[s.display_name].volume += (s.weight || 0) * (s.reps || 0)
     byName[s.display_name].sets += 1
     byName[s.display_name].latestSet = s
-  }
-  return Object.values(byName).sort((a, b) => b.volume - a.volume)
-}
-
-function buildOverallLeaderboard(allSets) {
-  const byName = {}
-  for (const s of allSets) {
-    if (!byName[s.display_name]) byName[s.display_name] = { name: s.display_name, volume: 0, setCount: 0 }
-    byName[s.display_name].volume += (s.weight || 0) * (s.reps || 0)
-    byName[s.display_name].setCount += 1
   }
   return Object.values(byName).sort((a, b) => b.volume - a.volume)
 }
@@ -81,8 +72,13 @@ export default function Group({ session, intent, onIntentDone }) {
   const [invite, setInvite] = useState(intent?.invite || null)
   // The name a room was joined with stays fixed for that room, even if the nickname changes
   const [roomName, setRoomName] = useState(null)
+  const [myId, setMyId] = useState(null)
+  // Read at save time, so a set that arrived after a timer started still counts
+  const allSetsRef = useRef(allSets)
+  allSetsRef.current = allSets
 
   useEffect(() => { fetchMySocial().then(setMe).catch(() => setMe(null)) }, [])
+  useEffect(() => { currentUserId().then(setMyId).catch(() => {}) }, [])
   useEffect(() => {
     if (intent?.tab) setTab(intent.tab)
     if (intent?.invite) setInvite(intent.invite)
@@ -154,7 +150,7 @@ export default function Group({ session, intent, onIntentDone }) {
     fetchGroupSets(groupSession.id).then(setAllSets).catch(() => {})
 
     const unsub = subscribeToGroupSession(groupSession.id, {
-      onSet: (row) => setAllSets(prev => [...prev, row]),
+      onSet: (row) => setAllSets(prev => mergeSets(prev, [row])),
       onParticipant: (row) => {
         setParticipants(prev =>
           prev.some(p => p.user_id === row.user_id) ? prev : [...prev, row]
@@ -178,17 +174,20 @@ export default function Group({ session, intent, onIntentDone }) {
     return unsub
   }, [groupSession?.id])
 
-  // Polling fallback — covers when Realtime tables aren't enabled in Supabase dashboard
+  // Polling for the whole session: realtime makes it instant when it's on, this keeps
+  // everyone's sets and positions current when it isn't
   useEffect(() => {
-    if (!groupSession?.id || screen !== 'lobby') return
+    if (!groupSession?.id || screen === 'home') return
 
     const poll = setInterval(async () => {
       try {
-        const [parts, sess] = await Promise.all([
+        const [parts, sets, sess] = await Promise.all([
           fetchParticipants(groupSession.id),
-          fetchGroupSession(groupSession.id),
+          fetchGroupSets(groupSession.id),
+          screen === 'lobby' ? fetchGroupSession(groupSession.id) : null,
         ])
         if (parts) setParticipants(parts)
+        if (sets) setAllSets(prev => mergeSets(prev, sets))
         if (sess) {
           setGroupSession(sess)
           if (sess.exercises) setExercises(exNamesToObjs(sess.exercises))
@@ -201,7 +200,7 @@ export default function Group({ session, intent, onIntentDone }) {
           }
         }
       } catch {}
-    }, 2500)
+    }, 3000)
 
     return () => clearInterval(poll)
   }, [groupSession?.id, screen])
@@ -313,19 +312,20 @@ export default function Group({ session, intent, onIntentDone }) {
   }
 
   async function handleLogSet() {
-    const w = toLb(parseFloat(weight)) // typed in the person's unit, stored in lb
+    const w = toLb(parseFloat(weight || '0')) // typed in the person's unit, stored in lb; 0 for bodyweight
     const r = parseInt(reps)
-    if (!w || !r || w < 0 || r < 1) return
+    if (!(w >= 0) || !(r >= 1)) return
     try {
-      await logGroupSet({ sessionId: groupSession.id, displayName, exercise: exercises[exIdx]?.name, setNum: setIdx + 1, weight: w, reps: r })
+      const row = await logGroupSet({ sessionId: groupSession.id, displayName, exercise: exercises[exIdx]?.name, setNum: setIdx + 1, weight: w, reps: r })
+      if (row) setAllSets(prev => mergeSets(prev, [row]))
       setRestLeft(restSecs)
       localStorage.setItem('athrion_group_rest_end', String(Date.now() + restSecs * 1000))
       goScreen('rest')
     } catch (err) { console.error(err) }
   }
 
-  async function saveGroupWorkoutToHistory(setsSnapshot) {
-    const mySets = (setsSnapshot ?? allSets).filter(s => s.display_name === displayName)
+  async function saveGroupWorkoutToHistory() {
+    const mySets = allSetsRef.current.filter(s => (myId ? s.user_id === myId : s.display_name === displayName))
     if (!mySets.length) return
     const volume   = mySets.reduce((sum, s) => sum + (s.weight || 0) * (s.reps || 0), 0)
     const duration = startTime ? Math.round((Date.now() - startTime) / 60000) : 0
@@ -424,7 +424,8 @@ export default function Group({ session, intent, onIntentDone }) {
       totalSets={totalSets}
       participants={participants}
       allSets={allSets}
-      displayName={displayName}
+      myId={myId}
+      restSecs={restSecs}
       weight={weight}
       setWeight={setWeight}
       reps={reps}
@@ -446,7 +447,7 @@ export default function Group({ session, intent, onIntentDone }) {
       restSecs={restSecs}
       allSets={allSets}
       participants={participants}
-      displayName={displayName}
+      myId={myId}
       onSkip={advanceAfterRest}
       onEnd={handleEnd}
     />
@@ -457,7 +458,9 @@ export default function Group({ session, intent, onIntentDone }) {
       allSets={allSets}
       exercises={exercises}
       participants={participants}
-      displayName={displayName}
+      totalSets={totalSets}
+      restSecs={restSecs}
+      myId={myId}
       startTime={startTime}
       onHome={handleHome}
     />
@@ -625,56 +628,103 @@ function LobbyScreen({ groupSession, participants, isHost, exercises, onAddExerc
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Live standings: where everyone is, shared by training, rest and done
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Re-render every few seconds so "Resting" turns back into the next set on time
+function useNow(ms = 5000) {
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), ms)
+    return () => clearInterval(t)
+  }, [ms])
+  return now
+}
+
+function LiveBoard({ rows, myId, title, detailed = false }) {
+  const { fmt, fmtVolume } = useUnit()
+  return (
+    <Card pad={detailed ? 'lg' : 'md'}>
+      <SectionTitle action={<Fact icon="mdi:account-multiple">{rows.length}</Fact>}>{title}</SectionTitle>
+      <ol className="space-y-2" aria-label={title}>
+        {rows.map((r, i) => {
+          const me = r.id === myId
+          return (
+            <li key={r.id} className={`rounded-xl px-3 py-2.5 border ${me ? 'bg-neon-tint border-neon-stroke/30' : 'bg-raised border-transparent'}`}>
+              <div className="flex items-center gap-3">
+                <RankChip rank={i + 1} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-sm font-semibold text-ink truncate">{r.name}{me && <span className="font-normal text-muted"> (you)</span>}</span>
+                    {r.resting && <span className="text-2xs font-semibold text-muted bg-inset rounded px-1.5 py-0.5 flex-shrink-0">Resting</span>}
+                  </div>
+                  <div className={`text-xs truncate ${r.finished ? 'text-neon-ink font-semibold' : 'text-muted'}`}>{r.where}</div>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <div className="text-sm font-bold text-neon-ink tabular-nums">{fmtVolume(r.volume)}</div>
+                  <div className="text-xs text-muted tabular-nums">{r.done}/{r.total} sets</div>
+                </div>
+              </div>
+              {detailed && r.latest && (
+                <div className="text-xs text-ink-2 mt-1.5 pl-10 truncate">
+                  Last set: {r.latest.exercise}, {Number(r.latest.weight) ? `${fmt(r.latest.weight)} × ${r.latest.reps}` : `${r.latest.reps} reps`}
+                </div>
+              )}
+              <div className="h-1 bg-inset rounded-full overflow-hidden mt-2" aria-hidden="true">
+                <div className="h-full bg-neon rounded-full transition-[width] duration-500" style={{ width: `${r.total ? (r.done / r.total) * 100 : 0}%` }} />
+              </div>
+            </li>
+          )
+        })}
+      </ol>
+    </Card>
+  )
+}
+
+function EndEarly({ onEnd, confirm, setConfirm }) {
+  return confirm ? (
+    <div className="flex gap-3">
+      <Button variant="secondary" className="flex-1" onClick={() => setConfirm(false)}>Keep going</Button>
+      <Button variant="danger" className="flex-1" onClick={onEnd}>End workout</Button>
+    </div>
+  ) : (
+    <button onClick={() => setConfirm(true)}
+      className="w-full text-center text-xs text-muted hover:text-ink-2 py-2 min-h-[44px] transition-colors">
+      End workout early
+    </button>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Training
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TrainingScreen({ exercises, exIdx, setIdx, totalSets, participants, allSets, displayName, weight, setWeight, reps, setReps, onLog, onEnd, confirmEnd, setConfirmEnd }) {
+function TrainingScreen({ exercises, exIdx, setIdx, totalSets, participants, allSets, myId, restSecs, weight, setWeight, reps, setReps, onLog, onEnd, confirmEnd, setConfirmEnd }) {
   const { unit } = useUnit()
+  const now = useNow()
   const ex = exercises[exIdx]
   if (!ex) return null
-
-  const setsForThisExByPerson = (name) =>
-    allSets.filter(s => s.exercise === ex.name && s.display_name === name).length
+  // My own row follows this screen: I'm lifting, whatever my last set's time says
+  const rows = standings({ sets: allSets, participants, exercises, totalSets, restSecs, now })
+    .map(r => r.id === myId ? { ...r, resting: false, where: `${ex.name} · set ${setIdx + 1}/${totalSets}` } : r)
+  const mine = rows.find(r => r.id === myId)
+  const total = exercises.length * totalSets
+  const done = mine?.done ?? exIdx * totalSets + setIdx
+  const next = exercises[exIdx + 1]
 
   return (
     <div className="space-y-4 py-4 slide-in">
-      {/* Progress header */}
+      {/* My progress through the whole workout */}
       <div>
         <div className="flex justify-between text-xs mb-2">
           <span className="font-semibold text-ink-2">Exercise {exIdx + 1} of {exercises.length}</span>
-          <span className="font-semibold text-neon-ink tabular-nums">{Math.round(((exIdx * totalSets + setIdx) / (exercises.length * totalSets)) * 100)}%</span>
+          <span className="font-semibold text-neon-ink tabular-nums">{done} of {total} sets</span>
         </div>
-        <div className="h-1.5 bg-raised rounded-full overflow-hidden">
-          <div
-            className="h-full bg-neon rounded-full transition-all duration-500"
-            style={{ width: `${((exIdx * totalSets + setIdx) / (exercises.length * totalSets)) * 100}%` }}
-          />
+        <div className="h-1.5 bg-raised rounded-full overflow-hidden" role="progressbar" aria-label="Workout progress"
+          aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
+          <div className="h-full bg-neon rounded-full transition-all duration-500" style={{ width: `${total ? (done / total) * 100 : 0}%` }} />
         </div>
       </div>
-
-      {/* Participants strip */}
-      {participants.length > 0 && (
-        <Card pad="sm">
-          <SectionTitle className="mb-2">Participants</SectionTitle>
-          <div className="flex flex-wrap gap-3">
-            {participants.map((p, i) => {
-              const done = setsForThisExByPerson(p.display_name)
-              return (
-                <div key={i} className="flex items-center gap-1.5">
-                  <span className={`text-xs font-medium ${p.display_name === displayName ? 'text-ink' : 'text-muted'}`}>
-                    {p.display_name.split(' ')[0]}
-                  </span>
-                  <div className="flex gap-0.5">
-                    {Array.from({ length: totalSets }, (_, si) => (
-                      <div key={si} className={`w-2 h-2 rounded-full ${si < done ? 'bg-neon' : 'bg-line-strong'}`} />
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </Card>
-      )}
 
       {/* Exercise card */}
       <Card hero>
@@ -684,6 +734,7 @@ function TrainingScreen({ exercises, exIdx, setIdx, totalSets, participants, all
         </div>
         <div className="flex flex-wrap gap-1.5 mt-2">
           <Fact icon="mdi:repeat">Set {setIdx + 1} of {totalSets}</Fact>
+          {next && <Fact icon="mdi:arrow-right">Next: {next.name}</Fact>}
         </div>
         <div className="flex gap-1.5 mt-4" aria-hidden="true">
           {Array.from({ length: totalSets }, (_, i) => (
@@ -712,48 +763,35 @@ function TrainingScreen({ exercises, exIdx, setIdx, totalSets, participants, all
             />
           </div>
         </div>
-        <Button full icon="mdi:check" onClick={onLog}>Log set {setIdx + 1}</Button>
+        <Button full icon="mdi:check" onClick={onLog} disabled={!(parseInt(reps) >= 1)}>Log set {setIdx + 1}</Button>
+        <p className="text-xs text-muted text-center mt-2">Bodyweight? Leave weight empty.</p>
       </Card>
 
-      {confirmEnd ? (
-        <div className="flex gap-3">
-          <Button variant="secondary" className="flex-1" onClick={() => setConfirmEnd(false)}>Keep going</Button>
-          <Button variant="danger" className="flex-1" onClick={onEnd}>End workout</Button>
-        </div>
-      ) : (
-        <button onClick={() => setConfirmEnd(true)}
-          className="w-full text-center text-xs text-muted hover:text-ink-2 py-2 min-h-[44px] transition-colors">
-          End workout early
-        </button>
-      )}
+      <LiveBoard rows={rows} myId={myId} title="Live standings" />
+
+      <EndEarly onEnd={onEnd} confirm={confirmEnd} setConfirm={setConfirmEnd} />
     </div>
   )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Rest (competitive leaderboard)
+// Rest: the timer, then everyone's standing
 // ─────────────────────────────────────────────────────────────────────────────
 
-function RestScreen({ exercises, exIdx, setIdx, totalSets, restLeft, restSecs, allSets, participants, displayName, onSkip, onEnd }) {
-  const { fmt, fmtVolume } = useUnit()
+function RestScreen({ exercises, exIdx, setIdx, totalSets, restLeft, restSecs, allSets, participants, myId, onSkip, onEnd }) {
   const [confirmEnd, setConfirmEnd] = useState(false)
+  const now = useNow()
   const ex = exercises[exIdx]
-  const leaderboard = buildExerciseLeaderboard(allSets, ex?.name || '')
-  const maxVolume = leaderboard[0]?.volume || 1
-  const myEntry = leaderboard.find(e => e.name === displayName)
+  const rows = standings({ sets: allSets, participants, exercises, totalSets, restSecs, now })
+  const place = rows.findIndex(r => r.id === myId) + 1
 
   const pct = Math.min(1, restLeft / restSecs) * 100
   const r = 70
   const circ = 2 * Math.PI * r
-
-
-  function fmtTime(s) {
-    return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
-  }
+  const fmtTime = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
 
   return (
-    <div className="space-y-6 py-4 fade-in">
-      {/* Timer */}
+    <div className="space-y-5 py-4 fade-in">
       <div className="flex flex-col items-center">
         <div className="text-xs text-muted mb-1">
           <span className="inline-flex items-center gap-1.5"><Icon icon="mdi:check-circle-outline" width={16} className="text-neon-ink" />{ex?.name}, set {setIdx + 1} done</span>
@@ -761,134 +799,62 @@ function RestScreen({ exercises, exIdx, setIdx, totalSets, restLeft, restSecs, a
         <div className="relative w-44 h-44 my-2">
           <svg className="w-44 h-44 -rotate-90" viewBox="0 0 180 180">
             <circle cx="90" cy="90" r={r} fill="none" className="stroke-line" strokeWidth="8" />
-            <circle
-              cx="90" cy="90" r={r} fill="none" className="stroke-neon-stroke" strokeWidth="8"
-              strokeDasharray={`${circ * pct / 100} ${circ}`}
-              strokeLinecap="round"
-              style={{ transition: 'stroke-dasharray 0.5s linear' }}
-            />
+            <circle cx="90" cy="90" r={r} fill="none" className="stroke-neon-stroke" strokeWidth="8"
+              strokeDasharray={`${circ * pct / 100} ${circ}`} strokeLinecap="round"
+              style={{ transition: 'stroke-dasharray 0.5s linear' }} />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <div className="font-bold text-4xl text-neon-ink leading-none tabular-nums">{fmtTime(restLeft)}</div>
             <div className="text-xs font-medium text-muted">rest</div>
           </div>
         </div>
+        {place > 0 && rows.length > 1 && (
+          <div className="text-sm text-ink-2 mb-3">You're <span className="font-bold text-neon-ink">#{place}</span> of {rows.length}</div>
+        )}
         <Button variant="secondary" onClick={onSkip}>Skip rest</Button>
       </div>
 
-      {/* Live Leaderboard */}
-      <Card pad="lg">
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-neon-ink text-sm font-bold">Live standings</span>
-          <div className="flex-1 h-px bg-neon/20" />
-          <span className="text-xs text-muted">{ex?.name}</span>
-        </div>
+      <LiveBoard rows={rows} myId={myId} title="Live standings" detailed />
 
-        {leaderboard.length === 0 ? (
-          <div className="text-center py-4 text-muted text-sm">No sets logged yet. Yours could be first.</div>
-        ) : (
-          <div className="space-y-3">
-            {leaderboard.map((entry, i) => {
-              const barWidth = maxVolume > 0 ? (entry.volume / maxVolume) * 100 : 0
-              const barColor = i === 0 ? tok('neon-stroke') : i === 1 ? tok('ink-2') : i === 2 ? tok('ember') : tok('line-strong')
-              const textColor = i === 0 ? 'text-neon-ink' : i === 1 ? 'text-ink-2' : i === 2 ? 'text-ember' : 'text-muted'
-              const isMe = entry.name === displayName
-              return (
-                <div key={i} className="bg-inset rounded-xl p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <RankChip rank={i + 1} />
-                    <span className={`text-sm flex-1 ${isMe ? 'font-bold text-ink' : 'font-medium text-ink-2'}`}>
-                      {entry.name}{isMe ? ' (you)' : ''}
-                    </span>
-                    <div className="text-right">
-                      <div className={`text-xs font-bold ${textColor}`}>
-                        {entry.latestSet ? `${fmt(entry.latestSet.weight)} × ${entry.latestSet.reps}` : ''}
-                      </div>
-                      <div className="text-xs text-muted">{fmtVolume(entry.volume)} vol</div>
-                    </div>
-                  </div>
-                  <div className="h-1.5 bg-raised rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{ width: `${barWidth}%`, background: barColor }}
-                    />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {!myEntry && leaderboard.length > 0 && (
-          <div className="mt-3 text-xs text-muted text-center">You haven't logged this exercise yet</div>
-        )}
-      </Card>
-
-      {confirmEnd ? (
-        <div className="flex gap-3">
-          <Button variant="secondary" className="flex-1" onClick={() => setConfirmEnd(false)}>Keep going</Button>
-          <Button variant="danger" className="flex-1" onClick={onEnd}>End workout</Button>
-        </div>
-      ) : (
-        <button onClick={() => setConfirmEnd(true)}
-          className="w-full text-center text-xs text-muted hover:text-ink-2 py-2 min-h-[44px] transition-colors">
-          End workout early
-        </button>
-      )}
+      <EndEarly onEnd={onEnd} confirm={confirmEnd} setConfirm={setConfirmEnd} />
     </div>
   )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Done
+// Done: final standings, updating while others finish
 // ─────────────────────────────────────────────────────────────────────────────
 
-function DoneScreen({ allSets, exercises, participants, displayName, startTime, onHome }) {
+function DoneScreen({ allSets, exercises, participants, totalSets, restSecs, myId, startTime, onHome }) {
   const { fmtVolume } = useUnit()
-  const duration = startTime ? Math.round((Date.now() - startTime) / 60000) : 0
-  const overall = buildOverallLeaderboard(allSets)
-  const champion = overall[0]
+  const now = useNow()
+  const duration = startTime ? Math.round((now - startTime) / 60000) : 0
+  const rows = standings({ sets: allSets, participants, exercises, totalSets, restSecs, now })
+  const going = rows.filter(r => !r.finished).length
+  const leader = rows[0]
+  const myName = rows.find(r => r.id === myId)?.name
 
   return (
     <div className="space-y-5 py-4 slide-up">
       <div className="text-center">
-        <Icon icon="mdi:trophy-outline" width={48} className="mx-auto mb-3 text-neon-ink" />
+        <Icon icon="mdi:trophy-outline" width={48} className="mx-auto mb-3 text-neon-ink" aria-hidden="true" />
         <div className="font-bold text-3xl text-neon-ink">Group workout complete</div>
-        {duration > 0 && <div className="text-muted mt-1 text-sm">Duration: {duration}min</div>}
+        {duration > 0 && <div className="text-muted mt-1 text-sm">Duration: {duration} min</div>}
       </div>
 
-      {/* Champion */}
-      {champion && (
-        <Card pad="lg" tone="neon" className="text-center">
-          <Icon icon="mdi:crown-outline" width={28} className="mx-auto mb-1 text-neon-ink" />
-          <div className="font-bold text-2xl text-neon-ink">{champion.name}</div>
-          <div className="text-muted text-sm">{fmtVolume(champion.volume)} total volume</div>
-          {champion.name === displayName && (
-            <div className="mt-2 text-xs text-neon-ink">That's you.</div>
-          )}
+      {leader && (
+        <Card hero className="text-center">
+          <div className="text-xs font-semibold text-neon-ink">{going ? 'Leading for now' : 'Winner'}</div>
+          <Icon icon="mdi:crown-outline" width={28} className="mx-auto my-1 text-neon-ink" aria-hidden="true" />
+          <div className="font-bold text-2xl text-ink">{leader.name}</div>
+          <div className="text-muted text-sm">{fmtVolume(leader.volume)} total volume</div>
+          {leader.id === myId && <div className="mt-2 text-sm font-semibold text-neon-ink">That's you.</div>}
         </Card>
       )}
 
-      {/* Final rankings */}
-      {overall.length > 1 && (
-        <Card pad="md">
-          <SectionTitle>Final rankings</SectionTitle>
-          <div className="space-y-2">
-            {overall.map((entry, i) => (
-              <div key={i} className="flex items-center gap-3 bg-raised rounded-xl px-3 py-2.5">
-                <RankChip rank={i + 1} />
-                <span className={`flex-1 text-sm font-medium ${entry.name === displayName ? 'text-ink' : 'text-ink-2'}`}>
-                  {entry.name}
-                </span>
-                <span className="text-sm font-bold text-neon-ink">{fmtVolume(entry.volume)}</span>
-                <span className="text-xs text-muted">{entry.setCount} sets</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+      <LiveBoard rows={rows} myId={myId} detailed
+        title={going ? `Standings · ${going} still training` : 'Final standings'} />
 
-      {/* Per-exercise breakdown */}
       {exercises.length > 0 && (
         <Card pad="md">
           <SectionTitle>Exercise breakdown</SectionTitle>
@@ -899,16 +865,14 @@ function DoneScreen({ allSets, exercises, participants, displayName, startTime, 
               return (
                 <div key={ei} className="bg-inset rounded-xl p-3">
                   <div className="flex items-center gap-2 mb-2">
-                    <Icon icon={getExerciseIcon(ex)} width={16} className="text-muted flex-shrink-0" />
+                    <Icon icon={getExerciseIcon(ex)} width={16} className="text-muted flex-shrink-0" aria-hidden="true" />
                     <span className="text-xs font-semibold text-ink-2">{ex.name}</span>
                   </div>
                   <div className="space-y-1.5">
                     {lb.map((entry, i) => (
                       <div key={i} className="flex items-center gap-2">
                         <RankChip rank={i + 1} small />
-                        <span className={`text-xs flex-1 ${entry.name === displayName ? 'font-bold text-ink' : 'text-muted'}`}>
-                          {entry.name}
-                        </span>
+                        <span className={`text-xs flex-1 ${entry.name === myName ? 'font-bold text-ink' : 'text-muted'}`}>{entry.name}</span>
                         <span className="text-xs font-bold text-neon-ink">{fmtVolume(entry.volume)}</span>
                       </div>
                     ))}
