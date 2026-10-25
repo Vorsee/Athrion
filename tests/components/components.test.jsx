@@ -116,7 +116,7 @@ describe('ReminderSettings', () => {
   it('turns reminders on: subscribes to push and saves settings with the timezone', async () => {
     sb.set('reminder_settings', { data: null, error: null })
     render(<ReminderSettings />)
-    const toggle = await screen.findByRole('switch', { name: 'Workout reminders' })
+    const toggle = await screen.findByRole('switch', { name: 'Notifications' })
     expect(toggle).toHaveAttribute('aria-checked', 'false')
     await userEvent.click(toggle)
     await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'))
@@ -132,6 +132,14 @@ describe('ReminderSettings', () => {
     await userEvent.click(await screen.findByText('Send test notification'))
     expect(push.sendTestPush).toHaveBeenCalled()
     expect(await screen.findByText(/Test sent/)).toBeInTheDocument()
+  })
+  it('saves a per-type switch, keeping the others on', async () => {
+    sb.set('reminder_settings', { data: { enabled: true, reminder_hour: 7, streak_warnings: true }, error: null })
+    push.currentSubscription.mockResolvedValueOnce({ endpoint: 'x' })
+    render(<ReminderSettings />)
+    await userEvent.click(await screen.findByRole('switch', { name: 'Sunday recap of your week' }))
+    const upsert = sb.op(sb.queriesFor('reminder_settings').at(-1), 'upsert')[0]
+    expect(upsert).toMatchObject({ notify_recap: false, notify_friends: true, notify_workout_open: true, notify_achievements: true })
   })
   it('hides the test button while reminders are off', async () => {
     render(<ReminderSettings />)

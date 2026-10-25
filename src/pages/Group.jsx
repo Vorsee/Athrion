@@ -86,6 +86,7 @@ export default function Group({ session, intent, onIntentDone }) {
   useEffect(() => {
     if (intent?.tab) setTab(intent.tab)
     if (intent?.invite) setInvite(intent.invite)
+    else if (intent) onIntentDone?.() // a tab-only intent is used up once applied
   }, [intent])
 
   const displayName = roomName || me?.nickname || session?.name || 'You'

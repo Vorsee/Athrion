@@ -6,6 +6,15 @@ import { pushSupported, needsHomeScreenInstall, currentSubscription, enablePush,
 const HOURS = Array.from({ length: 18 }, (_, i) => i + 5) // 5am – 10pm
 const fmtHour = h => new Date(2000, 0, 1, h).toLocaleTimeString(undefined, { hour: 'numeric' })
 
+// Push switches per type (supabase/011_notifications.sql); the in-app bell always lists them
+const TYPES = [
+  ['notify_friends', 'Friend requests and accepts'],
+  ['notify_workout_open', 'A workout left open'],
+  ['notify_achievements', 'Medals and month results'],
+  ['notify_recap', 'Sunday recap of your week'],
+]
+const DEFAULTS = { enabled: false, reminder_hour: 18, streak_warnings: true, ...Object.fromEntries(TYPES.map(([k]) => [k, true])) }
+
 export function Toggle({ on, onChange, label }) {
   return (
     <button role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)}
@@ -24,7 +33,7 @@ export default function ReminderSettings() {
   useEffect(() => {
     Promise.all([fetchReminderSettings().catch(() => null), currentSubscription().catch(() => null)])
       .then(([s, sub]) => {
-        setSettings(s ?? { enabled: false, reminder_hour: 18, streak_warnings: true })
+        setSettings({ ...DEFAULTS, ...(s ?? {}) })
         setSubscribed(!!sub)
       })
   }, [])
@@ -40,6 +49,7 @@ export default function ReminderSettings() {
     await saveReminderSettings({
       enabled: next.enabled, reminder_hour: next.reminder_hour,
       streak_warnings: next.streak_warnings, timezone,
+      ...Object.fromEntries(TYPES.map(([k]) => [k, next[k]])),
     }).catch(e => setMsg(e.message))
   }
 
@@ -49,7 +59,7 @@ export default function ReminderSettings() {
       if (on) { await enablePush(); setSubscribed(true) }
       else { await disablePush(); setSubscribed(false) }
       await update({ enabled: on })
-      if (on) setMsg(`You'll get a reminder around ${fmtHour(settings.reminder_hour)} on training days.`)
+      if (on) setMsg(`You'll get a reminder around ${fmtHour(settings.reminder_hour)} when it's time to train.`)
     } catch (e) {
       setMsg(e.message)
     } finally {
@@ -75,11 +85,11 @@ export default function ReminderSettings() {
         <div className="flex items-center gap-2.5 min-w-0">
           <Icon icon="mdi:bell-ring-outline" width={20} className="text-neon-ink flex-shrink-0" />
           <div>
-            <div className="text-sm font-semibold text-ink">Workout reminders</div>
-            <div className="text-xs text-muted">Training-day nudges and streak warnings</div>
+            <div className="text-sm font-semibold text-ink">Notifications</div>
+            <div className="text-xs text-muted">Reminders, friends, open workouts and your weekly recap</div>
           </div>
         </div>
-        <Toggle on={active} onChange={toggle} label="Workout reminders" />
+        <Toggle on={active} onChange={toggle} label="Notifications" />
       </div>
 
       {!pushSupported() && <p className="text-xs text-muted">This browser doesn't support notifications.</p>}
@@ -100,6 +110,12 @@ export default function ReminderSettings() {
             <span className="text-xs text-muted">Warn me before I lose my streak</span>
             <Toggle on={settings.streak_warnings} onChange={v => update({ streak_warnings: v })} label="Streak warnings" />
           </div>
+          {TYPES.map(([key, label]) => (
+            <div key={key} className="flex items-center justify-between gap-3">
+              <span className="text-xs text-muted">{label}</span>
+              <Toggle on={settings[key] !== false} onChange={v => update({ [key]: v })} label={label} />
+            </div>
+          ))}
           <button onClick={sendTest} disabled={busy}
             className="w-full py-2 rounded-xl border border-line-strong text-xs font-semibold text-ink-2 hover:text-neon-ink hover:border-neon-stroke/40 disabled:opacity-50 transition-colors">
             Send test notification

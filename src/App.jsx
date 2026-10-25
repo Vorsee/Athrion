@@ -12,6 +12,7 @@ import HomeScreenPrompt from './components/HomeScreenPrompt.jsx'
 import { PageSkeleton } from './components/ui/States.jsx'
 import { readGuidePick, clearGuidePick } from './lib/guidePlans.js'
 import { rememberInvite, readInvite } from './lib/socialApi.js'
+import { useUnreadCount } from './lib/notifications.js'
 
 // Workout is the landing tab; everything else loads the first time it's opened
 const Auth              = lazy(() => import('./pages/Auth.jsx'))
@@ -27,6 +28,7 @@ const Plan              = lazy(() => import('./pages/Plan.jsx'))
 const Progress          = lazy(() => import('./pages/Progress.jsx'))
 const ProfileModal      = lazy(() => import('./components/ProfileModal.jsx'))
 const UpgradeSheet      = lazy(() => import('./components/UpgradeSheet.jsx'))
+const NotificationsSheet = lazy(() => import('./components/NotificationsSheet.jsx'))
 
 // Before the shell exists: the wordmark on the canvas. Inside the shell: a content-shaped skeleton.
 const Loading = () => (
@@ -78,6 +80,15 @@ export default function App() {
   const [foodIntent, setFoodIntent] = useState(null) // 'goals': open the targets editor on Food
   const [resumeTick, setResumeTick] = useState(0)    // bumped when the session bar is tapped
   const minimised = useMinimisedSession()
+  const [unread, setUnread] = useUnreadCount(!!session)
+  const [showInbox, setShowInbox] = useState(false)
+  // Where a tapped notification points: /?open=friends | ranks | workout | progress | notifications
+  const [pendingOpen, setPendingOpen] = useState(() => {
+    const params = new URLSearchParams(window.location.search)
+    const target = params.get('open')
+    if (target) window.history.replaceState(null, '', window.location.pathname)
+    return target
+  })
   const { focus } = useShell()
 
   // Pages live in browser history so the phone's back gesture steps back inside the app.
@@ -176,9 +187,29 @@ export default function App() {
       .catch(() => setIsPro(false))
   }, [session])
 
+  // Each intent opens Train together once (not again when the profile reloads)
+  const handledIntent = useRef(null)
   useEffect(() => {
-    if (groupIntent && session && profile && !guide) navigate('group')
+    if (groupIntent && groupIntent !== handledIntent.current && session && profile && !guide) {
+      handledIntent.current = groupIntent
+      navigate('group')
+    }
   }, [groupIntent, session, profile, guide])
+
+  function openTarget(target) {
+    setShowInbox(false)
+    if (target === 'friends' || target === 'ranks') setGroupIntent({ tab: target })
+    else if (target === 'workout') resumeWorkout()
+    else if (target === 'progress') navigate('progress')
+    else if (target === 'notifications') setShowInbox(true)
+  }
+
+  useEffect(() => {
+    if (pendingOpen && session && profile && !guide) {
+      openTarget(pendingOpen)
+      setPendingOpen(null)
+    }
+  }, [pendingOpen, session, profile, guide])
 
   function refreshProfile() {
     fetchUserProfile()
@@ -289,6 +320,7 @@ export default function App() {
     <UnitProvider value={profile?.weight_unit === 'kg' ? 'kg' : 'lb'}>
     <div className={`min-h-dvh bg-canvas text-ink font-dm${isLight ? ' light' : ''}`}>
       <Nav page={page} setPage={navigate} session={session} isPro={isPro} onProfileClick={() => setShowProfile(true)}
+        unread={unread} onBellClick={() => setShowInbox(true)}
         minimised={minimised} onResume={resumeWorkout} />
       <main className="relative z-10 max-w-lg mx-auto px-4"
         style={{
@@ -307,6 +339,13 @@ export default function App() {
       {recovering && (
         <Suspense fallback={null}>
           <NewPasswordSheet onClose={() => setRecovering(false)} />
+        </Suspense>
+      )}
+
+      {showInbox && (
+        <Suspense fallback={null}>
+          <NotificationsSheet onClose={() => setShowInbox(false)} onRead={() => setUnread(0)}
+            onGo={url => openTarget(new URLSearchParams(url.split('?')[1] || '').get('open'))} />
         </Suspense>
       )}
 

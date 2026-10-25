@@ -128,7 +128,37 @@ describe('send-reminders', () => {
     webpush.sendNotification.mockImplementation(async (sub: any) => { if (sub.endpoint.endsWith('gone')) throw Object.assign(new Error('Gone'), { statusCode: 410 }) })
     const h = await load('send-reminders')
     expect(await (await h(post({}, { 'x-cron-secret': 'cron-123' }))).json()).toEqual({ sent: 1, skipped: 1, removed: 1 })
-    expect(JSON.parse(webpush.sendNotification.mock.calls[0][1])).toMatchObject({ title: 'Time to train 💪', url: '/' })
+    expect(JSON.parse(webpush.sendNotification.mock.calls[0][1])).toMatchObject({ title: 'Time to train', url: '/' })
+  })
+})
+
+describe('send-reminders from the database', () => {
+  const cron = { 'x-cron-secret': 'cron-123' }
+  const subs = { data: [{ id: 1, endpoint: 'https://push/ok', p256dh: 'p', auth: 'a' }], error: null }
+  it('pushes a new notification once, unless its type is switched off', async () => {
+    sb.set('notifications', (q: any) => q.ops.some((o: any) => o[0] === 'update') ? { data: null, error: null }
+      : { data: { id: 'n1', user_id: 'u1', kind: 'friend_request', title: 'New friend request', body: '@alex wants to be friends.', url: '/?open=friends', push: true, pushed_at: null }, error: null })
+    sb.set('reminder_settings', { data: null, error: null })
+    sb.set('push_subscriptions', subs)
+    const h = await load('send-reminders')
+    expect(await (await h(post({ deliver: 'n1' }, cron))).json()).toEqual({ sent: 1, removed: 0 })
+    expect(JSON.parse(webpush.sendNotification.mock.calls[0][1])).toMatchObject({ title: 'New friend request', url: '/?open=friends' })
+    expect(sb.queriesFor('notifications').some((q: any) => sb.op(q, 'update')?.[0]?.pushed_at)).toBe(true)
+
+    webpush.sendNotification.mockClear()
+    sb.set('reminder_settings', { data: { notify_friends: false }, error: null })
+    expect(await (await h(post({ deliver: 'n1' }, cron))).json()).toEqual({ sent: 0, muted: true })
+    expect(webpush.sendNotification).not.toHaveBeenCalled()
+  })
+  it('reminds about a workout left open and marks it so it is sent once', async () => {
+    sb.set('open_workouts', (q: any) => q.ops.some((o: any) => o[0] === 'update' || o[0] === 'delete') ? { data: null, error: null }
+      : { data: [{ user_id: 'u1', name: 'Leg day', exercises_done: 2, exercises_total: 5, sets_done: 6 }], error: null })
+    sb.set('reminder_settings', { data: null, error: null })
+    sb.set('push_subscriptions', subs)
+    const h = await load('send-reminders')
+    expect(await (await h(post({ open: true }, cron))).json()).toEqual({ sent: 1 })
+    expect(JSON.parse(webpush.sendNotification.mock.calls[0][1])).toMatchObject({ title: 'Leg day is still open', url: '/?open=workout' })
+    expect(sb.queriesFor('open_workouts').some((q: any) => sb.op(q, 'update')?.[0]?.notified_at)).toBe(true)
   })
 })
 
@@ -154,7 +184,7 @@ describe('send-reminders test notification', () => {
     expect(await (await h(post({ test: true }, auth))).json()).toEqual({ sent: 1, removed: 0 })
     const q = sb.queriesFor('push_subscriptions')[0]
     expect(sb.op(q, 'eq')).toEqual(['user_id', 'user-1'])
-    expect(JSON.parse(webpush.sendNotification.mock.calls.at(-1)[1])).toMatchObject({ title: 'Test notification ✅', tag: 'test' })
+    expect(JSON.parse(webpush.sendNotification.mock.calls.at(-1)[1])).toMatchObject({ title: 'Test notification', tag: 'test' })
   })
 })
 

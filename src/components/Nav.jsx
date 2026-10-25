@@ -52,7 +52,7 @@ function useScrolledPast(page) {
   return past
 }
 
-function PageHeader({ page, setPage, session, isPro, onProfileClick, shell }) {
+function PageHeader({ page, setPage, session, isPro, onProfileClick, unread = 0, onBellClick, shell }) {
   const scrolled = useScrolledPast(page)
   const meta = PAGE_META[page] ?? PAGE_META[LANDING]
   const parent = PARENT_TAB[page]
@@ -93,6 +93,19 @@ function PageHeader({ page, setPage, session, isPro, onProfileClick, shell }) {
           className="press flex-shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-xl text-sm font-semibold text-ink bg-raised border border-line-strong hover:border-muted/50 transition-colors">
           <Icon icon={shell.action.icon} width={18} aria-hidden="true" />
           {shell.action.label}
+        </button>
+      )}
+
+      {onBellClick && (
+        <button onClick={onBellClick} aria-label={unread ? `Notifications, ${unread} new` : 'Notifications'}
+          className="press relative flex-shrink-0 w-11 h-11 flex items-center justify-center rounded-full text-ink-2 hover:text-ink">
+          <Icon icon="mdi:bell-outline" width={24} aria-hidden="true" />
+          {unread > 0 && (
+            <span aria-hidden="true"
+              className="absolute top-1.5 right-1 min-w-[1.125rem] h-[1.125rem] px-1 rounded-full bg-neon text-on-neon text-2xs font-bold flex items-center justify-center tabular-nums">
+              {unread > 9 ? '9+' : unread}
+            </span>
+          )}
         </button>
       )}
 
@@ -156,7 +169,7 @@ export function SessionBar({ session, onResume }) {
   )
 }
 
-export default function Nav({ page, setPage, session, isPro, onProfileClick, minimised, onResume }) {
+export default function Nav({ page, setPage, session, isPro, onProfileClick, unread, onBellClick, minimised, onResume }) {
   const shell = useShell()
   const activeTab = PARENT_TAB[page] ?? page
 
@@ -164,7 +177,7 @@ export default function Nav({ page, setPage, session, isPro, onProfileClick, min
 
   return (
     <>
-      <PageHeader page={page} setPage={setPage} session={session} isPro={isPro} onProfileClick={onProfileClick} shell={shell} />
+      <PageHeader page={page} setPage={setPage} session={session} isPro={isPro} onProfileClick={onProfileClick} unread={unread} onBellClick={onBellClick} shell={shell} />
 
       <div className="fixed bottom-0 left-0 right-0 z-50">
         {minimised && (

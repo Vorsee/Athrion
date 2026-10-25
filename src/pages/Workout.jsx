@@ -12,6 +12,7 @@ import { tok } from '../lib/tokens.js'
 import { loadPending, queueWorkout, flushPending } from '../lib/pendingWorkouts.js'
 import { useUnit } from '../lib/units.js'
 import { FREE_WORKOUT_LIMIT } from '../lib/pricing.js'
+import { syncOpenWorkout, clearOpenWorkout } from '../lib/notifications.js'
 import TrainingCalendar from '../components/TrainingCalendar.jsx'
 import { useBackHandler, useFocusMode, notifySession, readSession, setSessionMinimised } from '../lib/shell.js'
 import { HeaderBar } from '../components/Nav.jsx'
@@ -93,8 +94,10 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       freeWorkout,
     }
     localStorage.setItem('athrion_workout', JSON.stringify(state))
+    syncOpenWorkout(state) // so the server can say "your workout is still open"
   }
   function clearPersistedWorkout() {
+    clearOpenWorkout()
     localStorage.removeItem('athrion_workout')
     localStorage.removeItem('athrion_rest_end')
     notifySession()
@@ -196,6 +199,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       exIdx: 0, setIdx: 0, loggedSets: [], startTime: t, freeWorkout: false,
     }))
     notifySession()
+    syncOpenWorkout(readSession())
     setScreen('training')
   }
 
@@ -408,6 +412,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
           freeWorkout,
         }))
         notifySession()
+        syncOpenWorkout(readSession())
         setScreen(nextScreen)
       }}
     />
