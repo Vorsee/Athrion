@@ -1,4 +1,4 @@
-// The free 7-day plan at /guide (the "comment GUIDE" link from Instagram).
+// The free 7-day plan at /workout (the "comment WORKOUT" link from Instagram; /guide also works).
 // Fixed plans, no AI: pick a goal and a place, get three sessions plus rest and cardio days.
 // Every exercise name must exist in EXERCISES (data.js) so the saved workouts start normally.
 

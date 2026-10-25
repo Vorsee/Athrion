@@ -28,7 +28,7 @@ async function addPlanWorkouts(plan, isPro) {
   return { added, skipped }
 }
 
-// Public free-week page (athrion.app/guide). Signed out it leads to sign-up; signed in it saves the workouts.
+// Public free-week page (athrion.app/workout). Signed out it leads to sign-up; signed in it saves the workouts.
 export default function Guide({ signedIn = false, isPro = false, initialPick, onStart, onSignIn, onDone }) {
   const params = new URLSearchParams(window.location.search)
   const [goal, setGoal]   = useState(initialPick?.goal || params.get('goal') || 'muscle')
@@ -64,7 +64,7 @@ export default function Guide({ signedIn = false, isPro = false, initialPick, on
 
       <main className="max-w-2xl mx-auto px-4 pb-40 space-y-6">
         <section className="pt-4">
-          <span className="inline-flex text-xs font-semibold text-on-neon bg-neon rounded-md px-2 py-0.5">Free guide</span>
+          <span className="inline-flex text-xs font-semibold text-on-neon bg-neon rounded-md px-2 py-0.5">Free plan</span>
           <h1 className="font-bold text-[2.25rem] xs:text-5xl leading-[1.05] tracking-tight mt-3">Your 7-day workout plan</h1>
           <p className="text-ink-2 text-base mt-4">Pick your goal and where you train. Every session with sets, reps and rest, ready to follow.</p>
         </section>

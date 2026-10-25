@@ -35,8 +35,8 @@ const Loading = () => (
 )
 const PageLoading = () => <PageSkeleton />
 
-// athrion.app/guide: the free 7-day plan linked from Instagram
-const onGuidePath = () => /^\/guide\/?$/.test(window.location.pathname)
+// athrion.app/workout (and the older /guide): the free 7-day plan linked from Instagram
+const onGuidePath = () => /^\/(workout|guide)\/?$/.test(window.location.pathname)
 
 const PAGES = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan, progress: Progress }
 
