@@ -30,8 +30,10 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) return json({ error: { message: 'Please sign in again.' } }, 401)
 
-    const { data: sub } = await supabase.from('subscriptions').select('status').eq('user_id', user.id).maybeSingle()
-    if (sub?.status !== 'pro') return json({ error: { message: 'The AI food scanner is a Pro feature.' } }, 403)
+    // Pro: a Stripe subscription, or a free month won on the leaderboard
+    const { data: sub } = await supabase.from('subscriptions').select('*').eq('user_id', user.id).maybeSingle()
+    const pro = sub?.status === 'pro' || (sub?.comp_pro_until && new Date(sub.comp_pro_until) > new Date())
+    if (!pro) return json({ error: { message: 'The AI food scanner is a Pro feature.' } }, 403)
 
     let body: any
     try { body = await req.json() } catch { return json({ error: { message: 'Invalid JSON body' } }, 400) }

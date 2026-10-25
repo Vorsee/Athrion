@@ -6,7 +6,7 @@ import { pushSupported, needsHomeScreenInstall, currentSubscription, enablePush,
 const HOURS = Array.from({ length: 18 }, (_, i) => i + 5) // 5am – 10pm
 const fmtHour = h => new Date(2000, 0, 1, h).toLocaleTimeString(undefined, { hour: 'numeric' })
 
-function Toggle({ on, onChange, label }) {
+export function Toggle({ on, onChange, label }) {
   return (
     <button role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)}
       className={`w-11 h-6 rounded-full relative transition-colors flex-shrink-0 ${on ? 'bg-neon' : 'bg-line-strong'}`}>

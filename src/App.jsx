@@ -11,6 +11,7 @@ import { UnitProvider } from './lib/units.js'
 import HomeScreenPrompt from './components/HomeScreenPrompt.jsx'
 import { PageSkeleton } from './components/ui/States.jsx'
 import { readGuidePick, clearGuidePick } from './lib/guidePlans.js'
+import { rememberInvite, readInvite } from './lib/socialApi.js'
 
 // Workout is the landing tab; everything else loads the first time it's opened
 const Auth              = lazy(() => import('./pages/Auth.jsx'))
@@ -37,6 +38,8 @@ const PageLoading = () => <PageSkeleton />
 
 // athrion.app/workout (and the older /guide): the free 7-day plan linked from Instagram
 const onGuidePath = () => /^\/(workout|guide)\/?$/.test(window.location.pathname)
+// athrion.app/add/<nickname>: a friend invite
+const INVITE_PATH = /^\/add\/@?([A-Za-z0-9_]{3,20})\/?$/
 
 const PAGES = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan, progress: Progress }
 
@@ -47,11 +50,21 @@ export default function App() {
   const [authMode, setAuthMode] = useState(() => {
     if (new URLSearchParams(window.location.search).has('signup')) return 'register'
     if (onGuidePath()) return null
+    if (INVITE_PATH.test(window.location.pathname)) {
+      try { return localStorage.getItem('athrion_signed_in_before') ? 'login' : 'register' } catch { return 'register' }
+    }
     try { return localStorage.getItem('athrion_signed_in_before') ? 'login' : null } catch { return null }
   })
   const [recovering, setRecovering] = useState(false)
   // Open on /guide, or after "Start this plan free" until the new account has saved it
   const [guide, setGuide] = useState(() => onGuidePath() || !!readGuidePick())
+  // A friend invite opens Train together → Friends once signed in; it survives sign-up
+  const [groupIntent, setGroupIntent] = useState(() => {
+    const m = window.location.pathname.match(INVITE_PATH)
+    if (m) { rememberInvite(m[1]); window.history.replaceState(null, '', '/') }
+    const invite = readInvite()
+    return invite ? { tab: 'friends', invite } : null
+  })
   const [profile, setProfile]   = useState(undefined) // undefined=loading, null=incomplete, obj=complete
   const [fitnessProfile, setFitnessProfile] = useState(undefined) // undefined=loading, null=not set, obj=loaded
   const [isPro, setIsPro]       = useState(false)
@@ -163,6 +176,10 @@ export default function App() {
       .catch(() => setIsPro(false))
   }, [session])
 
+  useEffect(() => {
+    if (groupIntent && session && profile && !guide) navigate('group')
+  }, [groupIntent, session, profile, guide])
+
   function refreshProfile() {
     fetchUserProfile()
       .then(p => setProfile(p ?? null))
@@ -260,7 +277,7 @@ export default function App() {
     workout: { pendingWorkout, onClearPending: () => setPendingWorkout(null), isPro, onUpgrade: goUpgrade, onOpenPage: navigate, resumeTick },
     library: { onStartWorkout: handleStartFromLibrary },
     calories: { profile, isPro, onUpgrade: goUpgrade, onGoToPlan: () => navigate('plan'), intent: foodIntent, onIntentHandled: () => setFoodIntent(null) },
-    group: { session },
+    group: { session, intent: groupIntent, onIntentDone: () => setGroupIntent(null) },
     plan: { isPro, onUpgrade: goUpgrade, onStartSetup: () => setPlanSetup(true), onGoToWorkout: () => navigate('workout'), onStartWorkout: handleStartPlanDay, profile, onProfileChange: () => { refreshProfile(); refreshFitnessProfile() } },
   }
 

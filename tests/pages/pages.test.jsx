@@ -208,7 +208,7 @@ describe('Library and Group live inside Workout', () => {
     sb.set('fitness_plans', { data: planRow, error: null })
     render(<P.App />)
     await userEvent.click(await screen.findByText('Train together'))
-    expect(await screen.findByText('Host a session')).toBeInTheDocument()
+    expect(await screen.findByText('Host a room')).toBeInTheDocument()
     await userEvent.click(screen.getByLabelText('Back to Train'))
     expect(await screen.findByText('Exercise library')).toBeInTheDocument()
   })
@@ -220,7 +220,7 @@ describe('Library and Group live inside Workout', () => {
     sb.set('fitness_plans', { data: planRow, error: null })
     render(<P.App />)
     await userEvent.click(await screen.findByText('Train together'))
-    expect(await screen.findByText('Host a session')).toBeInTheDocument()
+    expect(await screen.findByText('Host a room')).toBeInTheDocument()
     await waitFor(() => expect(window.history.state?.page).toBe('group'))
     act(() => window.history.back())
     expect(await screen.findByText('Exercise library')).toBeInTheDocument()
@@ -246,7 +246,7 @@ describe('Group', () => {
   it('shows host and join options and rejects an unknown room code', async () => {
     sb.supabase.rpc.mockResolvedValue({ data: null, error: { code: 'P0002', message: 'Room not found' } })
     render(<P.Group session={{ name: 'Sam', email: USER.email }} />)
-    expect(screen.getByText('Host a session')).toBeInTheDocument()
+    expect(screen.getByText('Host a room')).toBeInTheDocument()
     await userEvent.type(screen.getByPlaceholderText('ABC123'), 'ZZZZZZ')
     const join = screen.getAllByRole('button').find(b => /join/i.test(b.textContent) && b.textContent !== 'Join a room')
     await userEvent.click(join)
@@ -326,6 +326,16 @@ describe('ProfileModal', () => {
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ action: 'resume' })
     expect(await screen.findByText('Cancel subscription')).toBeInTheDocument()
     expect(screen.queryByText('Renew subscription')).toBeNull()
+  })
+  it('shows a month of Pro won on the leaderboard as a prize, with nothing to cancel', async () => {
+    sb.set('subscriptions', { data: { status: 'free', comp_pro_until: '2026-11-30T12:00:00.000Z' }, error: null })
+    const fetchMock = stripeReply()
+    await openSubscription()
+    expect(await screen.findByText('Prize')).toBeInTheDocument()
+    expect(screen.getByText('November 30, 2026')).toBeInTheDocument()
+    expect(screen.queryByText('Cancel subscription')).toBeNull()
+    expect(screen.queryByText('Renew subscription')).toBeNull()
+    expect(fetchMock).not.toHaveBeenCalled() // no Stripe subscription to ask about
   })
   it('cancels an active subscription and then offers only Renew', async () => {
     const fetchMock = stripeReply(

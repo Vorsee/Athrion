@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { cancelSubscription, resumeSubscription, fetchSubscriptionDetails } from '../lib/stripe.js'
 import { signOut } from '../lib/session.js'
+import { fetchProState } from '../lib/api.js'
 import { Icon } from '@iconify/react'
 import { tok } from '../lib/tokens.js'
 import Sheet from './Sheet.jsx'
@@ -56,8 +57,16 @@ function SubscriptionScreen({ onBack }) {
     }
   }
 
-  useEffect(() => { run(fetchSubscriptionDetails) }, [])
+  // A free month won on the leaderboard has no Stripe subscription behind it
+  async function loadDetails() {
+    const { paid, prizeUntil } = await fetchProState()
+    if (!paid && prizeUntil) return { prize: true, period_end: prizeUntil }
+    return fetchSubscriptionDetails()
+  }
 
+  useEffect(() => { run(loadDetails) }, [])
+
+  const prize = details?.prize
   const cancelled = details?.cancelled
   const endDate = details && (details.cancel_at ?? details.period_end)
 
@@ -78,17 +87,18 @@ function SubscriptionScreen({ onBack }) {
           <div className="font-bold text-2xl text-ink leading-tight">ATHRION Pro</div>
           {details && (cancelled
             ? <Tag tone="warn"><Icon icon="mdi:close-circle-outline" width={14} aria-hidden="true" />Cancelled</Tag>
-            : <span className="bg-neon text-on-neon text-xs font-bold px-3 py-1 rounded-full">Active</span>)}
+            : <span className="bg-neon text-on-neon text-xs font-bold px-3 py-1 rounded-full">{prize ? 'Prize' : 'Active'}</span>)}
         </div>
         {step === 'loading' ? (
           <Skeleton className="h-5 w-40 mt-3" />
         ) : endDate ? (
           <div className="mt-2 text-sm text-ink-2">
-            {cancelled ? 'Pro until ' : 'Renews '}
+            {prize ? 'Free Pro until ' : cancelled ? 'Pro until ' : 'Renews '}
             <span className="font-semibold text-ink">{fmtDate(endDate)}</span>
           </div>
         ) : null}
         {cancelled && <p className="text-xs text-muted mt-1">No further charges. Renew any time before then to keep Pro.</p>}
+        {prize && <p className="text-xs text-muted mt-1">Won on the monthly leaderboard. Nothing to pay or cancel.</p>}
         <div className="space-y-1.5 mt-4">
           {PRO_FEATURES.map(f => (
             <div key={f.title} className="flex items-center gap-2 text-sm text-ink-2">
@@ -101,16 +111,16 @@ function SubscriptionScreen({ onBack }) {
 
       {/* Actions: Renew when cancelled, Cancel when active */}
       {step === 'error' && (
-        <InlineError className="mb-3" onRetry={() => run(fetchSubscriptionDetails)}>{errMsg}</InlineError>
+        <InlineError className="mb-3" onRetry={() => run(loadDetails)}>{errMsg}</InlineError>
       )}
 
-      {details && cancelled && (step === 'idle' || step === 'working' || step === 'error') && (
+      {details && !prize && cancelled && (step === 'idle' || step === 'working' || step === 'error') && (
         <Button full icon="mdi:refresh" onClick={() => run(resumeSubscription)} disabled={step === 'working'}>
           {step === 'working' ? 'Renewing…' : 'Renew subscription'}
         </Button>
       )}
 
-      {details && !cancelled && (step === 'idle' || step === 'error') && (
+      {details && !prize && !cancelled && (step === 'idle' || step === 'error') && (
         <Button variant="danger" full onClick={() => setStep('confirm')}>Cancel subscription</Button>
       )}
 

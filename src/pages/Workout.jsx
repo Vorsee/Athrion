@@ -677,14 +677,14 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
             <div className="flex-1 min-w-0">
               <div className="font-bold text-lg text-ink leading-tight">Train together</div>
               <div className="flex flex-wrap gap-1.5 mt-1.5">
-                <Fact icon="mdi:trophy-outline">Live standings</Fact>
-                <Fact icon="mdi:lightning-bolt">Real time</Fact>
+                <Fact icon="mdi:trophy-outline">Leaderboard</Fact>
+                <Fact icon="mdi:account-multiple-outline">Friends</Fact>
               </div>
             </div>
             <Icon icon="mdi:chevron-right" width={24} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
           </div>
           <div className="mt-3 h-11 rounded-xl border-2 border-neon-stroke text-neon-ink text-sm font-semibold flex items-center justify-center gap-2">
-            <Icon icon="mdi:plus" width={18} aria-hidden="true" />Start or join a room
+            <Icon icon="mdi:plus" width={18} aria-hidden="true" />Rooms, friends and leaderboard
           </div>
         </button>
       )}

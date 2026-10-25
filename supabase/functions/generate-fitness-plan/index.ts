@@ -73,9 +73,11 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 401, headers: cors })
     }
 
-    // Plans are a Pro feature; check the server-side subscription, not the app's say-so
-    const { data: sub } = await supabase.from('subscriptions').select('status').eq('user_id', user.id).maybeSingle()
-    if (sub?.status !== 'pro') {
+    // Plans are a Pro feature; check the server-side subscription, not the app's say-so.
+    // Pro: a Stripe subscription, or a free month won on the leaderboard
+    const { data: sub } = await supabase.from('subscriptions').select('*').eq('user_id', user.id).maybeSingle()
+    const pro = sub?.status === 'pro' || (sub?.comp_pro_until && new Date(sub.comp_pro_until) > new Date())
+    if (!pro) {
       return new Response(JSON.stringify({ error: 'Training plans are a Pro feature.' }), { status: 403, headers: cors })
     }
 

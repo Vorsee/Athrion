@@ -108,13 +108,17 @@ export async function saveWorkoutEntry(entry) {
 
 // ── Subscription ─────────────────────────────────────────────────────────────
 
+// Pro from Stripe, or a free month won on the leaderboard (comp_pro_until)
+export async function fetchProState() {
+  const { data } = await supabase.from('subscriptions').select('*').maybeSingle()
+  const prizeUntil = data?.comp_pro_until && new Date(data.comp_pro_until) > new Date() ? data.comp_pro_until : null
+  return { paid: data?.status === 'pro', prizeUntil }
+}
+
 export async function fetchSubscriptionStatus() {
   try {
-    const { data } = await supabase
-      .from('subscriptions')
-      .select('status')
-      .maybeSingle()
-    return data?.status === 'pro'
+    const { paid, prizeUntil } = await fetchProState()
+    return paid || !!prizeUntil
   } catch {
     return false
   }

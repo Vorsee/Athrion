@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { Icon } from '@iconify/react'
 import { useBackHandler } from '../lib/shell.js'
-import { Button, Card, Chip, Segmented, PageHeader, SectionTitle, Fact, IconButton, ExerciseRow } from '../components/ui/index.js'
+import { Button, Card, Chip, Segmented, PageHeader, SectionTitle, Fact, IconButton, ExerciseRow, RankChip, SkeletonRows } from '../components/ui/index.js'
+import { NicknameCard, LeaderboardTab, FriendsTab } from '../components/Social.jsx'
+import { fetchMySocial, clearInvite } from '../lib/socialApi.js'
 import { tok } from '../lib/tokens.js'
 import { EXERCISES, MUSCLES, getExerciseIcon, todayKey } from '../lib/data.js'
 import {
@@ -50,7 +52,10 @@ function buildOverallLeaderboard(allSets) {
 // Main component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function Group({ session }) {
+const TABS = [['rooms', 'Rooms'], ['ranks', 'Leaderboard'], ['friends', 'Friends']]
+
+// intent: { tab, invite } from App, e.g. after opening an athrion.app/add/<nickname> link
+export default function Group({ session, intent, onIntentDone }) {
   const { toLb } = useUnit()
   const [screen, setScreen] = useState('home')
   const [joinCode, setJoinCode] = useState('')
@@ -70,8 +75,20 @@ export default function Group({ session }) {
   const [startTime, setStartTime] = useState(null)
   const [restLeft, setRestLeft] = useState(60)
   const [confirmEnd, setConfirmEnd] = useState(false)
+  const [tab, setTab] = useState(intent?.tab || 'rooms')
+  const [me, setMe] = useState(undefined) // undefined = loading, null = no nickname yet
+  const [editingNick, setEditingNick] = useState(false)
+  const [invite, setInvite] = useState(intent?.invite || null)
+  // The name a room was joined with stays fixed for that room, even if the nickname changes
+  const [roomName, setRoomName] = useState(null)
 
-  const displayName = session?.name || 'You'
+  useEffect(() => { fetchMySocial().then(setMe).catch(() => setMe(null)) }, [])
+  useEffect(() => {
+    if (intent?.tab) setTab(intent.tab)
+    if (intent?.invite) setInvite(intent.invite)
+  }, [intent])
+
+  const displayName = roomName || me?.nickname || session?.name || 'You'
   // Ref so callbacks always see the current screen without stale closure
   const screenRef = useRef('home')
 
@@ -99,6 +116,7 @@ export default function Group({ session }) {
         return
       }
       setGroupSession(sess)
+      if (state.name) setRoomName(state.name)
       setIsHost(state.isHost || false)
       setExIdx(state.exIdx || 0)
       setSetIdx(state.setIdx || 0)
@@ -123,8 +141,9 @@ export default function Group({ session }) {
       exIdx,
       setIdx,
       startTime,
+      name: displayName,
     }))
-  }, [groupSession?.id, screen, isHost, exIdx, setIdx, startTime])
+  }, [groupSession?.id, screen, isHost, exIdx, setIdx, startTime, displayName])
 
   // Realtime subscription
   useEffect(() => {
@@ -248,6 +267,7 @@ export default function Group({ session }) {
     setLoading(true)
     try {
       const sess = await createGroupSession({ exercises: [], totalSets: 3, restSecs: 60, displayName })
+      setRoomName(displayName)
       setGroupSession(sess)
       setIsHost(true)
       setExercises([])
@@ -266,6 +286,7 @@ export default function Group({ session }) {
     setLoading(true); setJoinError('')
     try {
       const sess = await joinGroupSession(joinCode.trim(), displayName)
+      setRoomName(displayName)
       setGroupSession(sess)
       setIsHost(false)
       setExercises(exNamesToObjs(sess.exercises))
@@ -335,20 +356,46 @@ export default function Group({ session }) {
     goScreen('home')
     setGroupSession(null); setParticipants([]); setAllSets([]); setIsHost(false)
     setExercises([]); setExIdx(0); setSetIdx(0); setWeight(''); setReps('')
-    setJoinCode(''); setJoinError(''); setConfirmEnd(false)
+    setJoinCode(''); setJoinError(''); setConfirmEnd(false); setRoomName(null)
     localStorage.removeItem('athrion_group_rest_end')
     localStorage.removeItem(SESSION_PERSIST_KEY)
   }
 
+  function inviteDone() {
+    setInvite(null)
+    clearInvite()
+    onIntentDone?.()
+  }
+
   if (screen === 'home') return (
-    <HomeScreen
-      joinCode={joinCode}
-      setJoinCode={setJoinCode}
-      joinError={joinError}
-      loading={loading}
-      onCreate={handleCreate}
-      onJoin={handleJoin}
-    />
+    <div className="space-y-4 py-4 slide-up">
+      <PageHeader icon="mdi:account-group-outline" title="Train together"
+        facts={<>
+          <Fact icon="mdi:lightning-bolt">Live rooms</Fact>
+          <Fact icon="mdi:trophy-outline">Monthly leaderboard</Fact>
+        </>} />
+      <Segmented label="Train together" options={TABS} value={tab} onChange={t => { setTab(t); setEditingNick(false) }} />
+
+      {tab === 'rooms' ? (
+        <HomeScreen
+          joinCode={joinCode}
+          setJoinCode={setJoinCode}
+          joinError={joinError}
+          loading={loading}
+          onCreate={handleCreate}
+          onJoin={handleJoin}
+        />
+      ) : me === undefined ? (
+        <SkeletonRows rows={3} />
+      ) : me === null || editingNick ? (
+        <NicknameCard current={me?.nickname} onSaved={m => { setMe(m); setEditingNick(false) }}
+          onCancel={me ? () => setEditingNick(false) : null} />
+      ) : tab === 'ranks' ? (
+        <LeaderboardTab me={me} onMeChange={setMe} onAddFriends={() => setTab('friends')} />
+      ) : (
+        <FriendsTab me={me} invite={invite} onInviteDone={inviteDone} onEditNickname={() => setEditingNick(true)} />
+      )}
+    </div>
   )
 
   if (screen === 'lobby') return (
@@ -422,12 +469,12 @@ export default function Group({ session }) {
 
 function HomeScreen({ joinCode, setJoinCode, joinError, loading, onCreate, onJoin }) {
   return (
-    <div className="space-y-4 py-4 slide-up">
-      <PageHeader icon="mdi:account-group-outline" title="Group workout"
-        facts={<Fact icon="mdi:trophy-outline">Live standings</Fact>} />
-
+    <div className="space-y-4">
       <Card hero className="space-y-3">
-        <SectionTitle className="mb-0">Host a session</SectionTitle>
+        <div>
+          <SectionTitle className="mb-0">Host a room</SectionTitle>
+          <p className="text-sm text-ink-2 mt-1">Pick the exercises, share the code, and see everyone's sets as they happen.</p>
+        </div>
         <Button full icon="mdi:plus" onClick={onCreate} disabled={loading}>
           {loading ? 'Creating...' : 'Create a room'}
         </Button>
@@ -876,24 +923,3 @@ function DoneScreen({ allSets, exercises, participants, displayName, startTime, 
     </div>
   )
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Shared UI
-// ─────────────────────────────────────────────────────────────────────────────
-
-
-// Rank 1-3 get a medal icon and a coloured chip (neon, ink-2, ember); the rest a plain number
-function RankChip({ rank, small = false }) {
-  const tone = rank === 1 ? 'bg-neon text-on-neon'
-    : rank === 2 ? 'bg-raised text-ink-2 border border-line-strong'
-    : rank === 3 ? 'bg-ember/12 text-ember'
-    : 'text-muted'
-  return (
-    <span aria-label={`Rank ${rank}`}
-      className={`inline-flex items-center justify-center gap-0.5 rounded-full font-bold tabular-nums flex-shrink-0 ${small ? 'h-5 min-w-[1.25rem] px-1 text-2xs' : 'h-6 min-w-[1.75rem] px-1.5 text-xs'} ${tone}`}>
-      {rank <= 3 && !small && <Icon icon="mdi:medal-outline" width={12} aria-hidden="true" />}
-      {rank}
-    </span>
-  )
-}
-

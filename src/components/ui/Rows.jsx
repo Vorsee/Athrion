@@ -84,3 +84,18 @@ export function StatTiles({ items, className = '' }) {
     </div>
   )
 }
+
+// Rank 1-3 get a medal icon and a coloured chip (neon, ink-2, ember); the rest a plain number
+export function RankChip({ rank, small = false }) {
+  const tone = rank === 1 ? 'bg-neon text-on-neon'
+    : rank === 2 ? 'bg-raised text-ink-2 border border-line-strong'
+    : rank === 3 ? 'bg-ember/12 text-ember'
+    : 'text-muted'
+  return (
+    <span aria-label={`Rank ${rank}`}
+      className={`inline-flex items-center justify-center gap-0.5 rounded-full font-bold tabular-nums flex-shrink-0 ${small ? 'h-5 min-w-[1.25rem] px-1 text-2xs' : 'h-6 min-w-[1.75rem] px-1.5 text-xs'} ${tone}`}>
+      {rank <= 3 && !small && <Icon icon="mdi:medal-outline" width={12} aria-hidden="true" />}
+      {rank}
+    </span>
+  )
+}
