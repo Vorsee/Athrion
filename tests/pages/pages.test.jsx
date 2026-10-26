@@ -35,9 +35,12 @@ describe('Plan — Pro lock', () => {
     const onUpgrade = vi.fn()
     render(<P.Plan isPro={false} onUpgrade={onUpgrade} profile={profile} onGoToWorkout={() => {}} onProfileChange={() => {}} />)
     expect(screen.getByText('Get a plan built for your goal')).toBeInTheDocument()
-    expect(screen.getByText('Muscle Builder')).toBeInTheDocument() // sample plan rendered underneath
+    expect(screen.getByText('Sample: Muscle Builder')).toBeInTheDocument() // sample plan rendered underneath, labelled
+    expect(screen.getByText('Example plan')).toBeInTheDocument()
     expect(screen.getByText('Weekly schedule')).toBeInTheDocument()
-    expect(screen.getByText('Muscle Builder').closest('[inert]')).toHaveAttribute('aria-hidden', 'true')
+    expect(screen.queryByText(/2750/)).toBeNull() // its calories would contradict the person's own targets
+    expect(screen.getByText(/\$7\.99 a month or \$59\.99 a year/)).toBeInTheDocument()
+    expect(screen.getByText('Sample: Muscle Builder').closest('[inert]')).toHaveAttribute('aria-hidden', 'true')
     expect(sb.queriesFor('fitness_plans')).toHaveLength(0) // no data loaded for free users
     await userEvent.click(screen.getByText('Get Pro'))
     expect(onUpgrade).toHaveBeenCalled()
@@ -163,6 +166,13 @@ describe('Auth', () => {
     await userEvent.type(screen.getByPlaceholderText('Email address'), 'sam@example.com')
     await userEvent.type(screen.getByPlaceholderText('Password'), 'secret12{Enter}')
     expect(sb.supabase.auth.signInWithPassword).toHaveBeenCalled()
+  })
+  it('names who sent an invite link', async () => {
+    localStorage.setItem('athrion_friend_invite', 'alex_fit')
+    render(<P.Auth initialMode="register" />)
+    expect(screen.getByText('@alex_fit')).toBeInTheDocument()
+    expect(screen.getByText(/invited you to train together/)).toBeInTheDocument()
+    localStorage.removeItem('athrion_friend_invite')
   })
   it('sends a password reset link', async () => {
     render(<P.Auth />)
@@ -399,6 +409,11 @@ describe('ProfileModal', () => {
     Object.assign(URL, saved)
   })
 
+  it('shows height in cm for people who use kg', () => {
+    render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={{ ...profile, height_cm: 180, weight_unit: 'kg' }} isPro={false} theme="dark" onToggleTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
+    expect(screen.getByText('180 cm')).toBeInTheDocument()
+    expect(screen.getByText(/Get ATHRION Pro · \$7\.99 a month/)).toBeInTheDocument()
+  })
   it('signs out', async () => {
     render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={profile} isPro={false} theme="dark" onToggleTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
     await userEvent.click(screen.getByText('Sign out'))

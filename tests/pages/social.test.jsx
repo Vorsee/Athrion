@@ -103,6 +103,7 @@ describe('Train together tabs', () => {
     expect(screen.getByText('8/12')).toBeInTheDocument()
     expect(screen.getByText('4 more workout days for the October badge')).toBeInTheDocument()
     expect(screen.getByText('October 2026 · 9 days left')).toBeInTheDocument()
+    expect(screen.getByText('Top 3 on Everyone win a free month of Pro')).toBeInTheDocument() // the prize is on the card, not only behind ⓘ
     expect(rpcCalls('leaderboard')[0]).toEqual({ p_scope: 'friends' })
   })
 

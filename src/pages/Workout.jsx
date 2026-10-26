@@ -12,6 +12,7 @@ import { tok } from '../lib/tokens.js'
 import { loadPending, queueWorkout, flushPending } from '../lib/pendingWorkouts.js'
 import { useUnit } from '../lib/units.js'
 import { FREE_WORKOUT_LIMIT } from '../lib/pricing.js'
+import { guidePlan } from '../lib/guidePlans.js'
 import { syncOpenWorkout, clearOpenWorkout } from '../lib/notifications.js'
 import TrainingCalendar from '../components/TrainingCalendar.jsx'
 import { useBackHandler, useFocusMode, notifySession, readSession, setSessionMinimised } from '../lib/shell.js'
@@ -32,7 +33,7 @@ function matchPlanExercises(planExercises) {
 
 const SESSION_SCREENS = ['training', 'rest', 'exercise-picker']
 
-export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgrade, onOpenPage, resumeTick = 0 }) {
+export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgrade, onOpenPage, onOpenGuide, resumeTick = 0 }) {
   const { unit, toLb } = useUnit()
   const [screen, setScreen]                   = useState('home')
   const [activeExercises, setActiveExercises] = useState([])
@@ -376,6 +377,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       isPro={isPro}
       onUpgrade={onUpgrade}
       onOpenPage={onOpenPage}
+      onOpenGuide={onOpenGuide}
       pendingCount={pendingCount}
       onRetryPending={retryPending}
     />
@@ -555,7 +557,17 @@ function upcomingWorkoutDays(schedule) {
     .sort((a, b) => ((order.indexOf(a.day) - dayIdx + 7) % 7) - ((order.indexOf(b.day) - dayIdx + 7) % 7))
 }
 
-function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade, onOpenPage, pendingCount = 0, onRetryPending }) {
+// '90 s' / '2 min' from the free plan → seconds for the rest timer
+const restSecs = r => { const n = parseFloat(r); return /min/.test(r) ? n * 60 : n || 60 }
+
+// Someone with no plan and no saved workouts gets the free plan's beginner sessions, A → B → C
+function starterSession(done) {
+  const sessions = guidePlan('fit', 'gym').days.filter(d => d.type === 'workout')
+  const s = sessions[done % sessions.length]
+  return { title: s.title, starter: true, workout: { exercises: s.exercises.map(e => ({ name: e.name, sets: e.sets, reps: e.reps, restSeconds: restSecs(e.rest) })) } }
+}
+
+function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade, onOpenPage, onOpenGuide, pendingCount = 0, onRetryPending }) {
   const { fmtVolume } = useUnit()
   const [selectedSession, setSelectedSession] = useState(null)
 
@@ -573,7 +585,8 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
   const isRestDay = !!todayPlan && todayPlan.type !== 'workout'
   const otherDays = isRestDay ? upcomingWorkoutDays(planSchedule) : []
   const [pickedDay, setPickedDay] = useState(null)
-  const shownWorkout = isRestDay ? (pickedDay ?? otherDays[0] ?? null) : planWorkout
+  const starter = !planWorkout && !planSchedule && !todayCustom ? starterSession(history.length) : null
+  const shownWorkout = isRestDay ? (pickedDay ?? otherDays[0] ?? null) : planWorkout ?? starter
 
   const planExercises = shownWorkout?.workout?.exercises ?? []
   const planName = shownWorkout?.title ?? fallbackName
@@ -610,13 +623,28 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
           <div className="flex items-start justify-between gap-3 mb-4">
             <div className="min-w-0">
               <div className="text-sm font-semibold text-neon-ink mb-1">Today's training · {TODAY_FULL}</div>
-              <div className="font-bold text-[2rem] xs:text-[2.25rem] text-ink leading-[1.1] tracking-tight break-words">{isRestDay ? todayPlan.title : planWorkout ? planName : fallbackName}</div>
+              <div className="font-bold text-[2rem] xs:text-[2.25rem] text-ink leading-[1.1] tracking-tight break-words">{isRestDay ? todayPlan.title : shownWorkout ? planName : fallbackName}</div>
+              {starter && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  <Fact icon="mdi:sprout-outline">Starter plan</Fact>
+                  <Fact icon="mdi:refresh">Session {['A', 'B', 'C'][history.length % 3]} of 3</Fact>
+                </div>
+              )}
               {isRestDay && (
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   <Fact icon="mdi:sleep">{todayPlan.type.replace('_', ' ')}</Fact>
                 </div>
               )}
             </div>
+            {starter && (
+              <InfoButton title="Your starter plan">
+                <div className="space-y-3 text-sm text-ink-2">
+                  <p>Three beginner-friendly full-body sessions that take turns, so every muscle gets trained through the week. Do whichever comes up next, two or three times a week.</p>
+                  <p>Want sessions for your goal, or for training at home? Pick a free 7-day plan. Or save your own workout with Set up workout.</p>
+                  {onOpenGuide && <Button full icon="mdi:calendar-week" onClick={onOpenGuide}>Pick a free 7-day plan</Button>}
+                </div>
+              </InfoButton>
+            )}
             {isRestDay && todayPlan.recoveryNotes && (
               <InfoButton title="Recovery"><p className="text-sm text-ink-2">{todayPlan.recoveryNotes}</p></InfoButton>
             )}

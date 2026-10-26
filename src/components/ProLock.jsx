@@ -1,5 +1,5 @@
 import { Icon } from '@iconify/react'
-import { TRIAL_DAYS, annualPerMonth, money } from '../lib/pricing.js'
+import { TRIAL_DAYS, priceLine } from '../lib/pricing.js'
 
 // A Pro-only page shown for real but dimmed and inert, with an upgrade card kept in view
 // title names the outcome ("Get a plan built for your goal"), not the paywall
@@ -31,7 +31,7 @@ export default function ProLock({ title = 'Get more with Pro', description, onUp
                 {secondary.label}
               </button>
             )}
-            <div className="text-xs text-muted mt-3">{TRIAL_DAYS}-day free trial for new members, then from {money(annualPerMonth)} a month. Cancel anytime.</div>
+            <div className="text-xs text-muted mt-3">{TRIAL_DAYS}-day free trial for new members, then {priceLine()}. Cancel anytime.</div>
           </div>
         </div>
       </div>

@@ -4,6 +4,7 @@ import { Icon } from '@iconify/react'
 import { Segmented, BackLink } from '../components/ui/index.js'
 import { ConsentChecks } from '../components/LegalConsent.jsx'
 import { consentMetadata } from '../lib/legal.js'
+import { readInvite } from '../lib/socialApi.js'
 
 const INPUT = 'w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-sm outline-none transition-colors'
 const PRIMARY = 'press w-full h-12 bg-neon active:bg-neon-press text-on-neon font-semibold rounded-xl text-sm transition-colors disabled:opacity-40'
@@ -14,6 +15,7 @@ export default function Auth({ initialMode = 'login', onBack }) {
   const [screen, setScreen] = useState('form') // form | check-email | forgot | reset-sent
   const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' })
   const [consent, setConsent] = useState({ terms: false, health: false })
+  const [inviter] = useState(readInvite) // opened from someone's athrion.app/add/<nickname> link
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -71,6 +73,16 @@ export default function Auth({ initialMode = 'login', onBack }) {
           <div className="font-bold text-4xl tracking-tight text-ink">ATHRION</div>
           <div className="text-sm text-muted mt-2">Your training plan and calories, adjusted every week</div>
         </div>
+
+        {inviter && screen === 'form' && (
+          <div role="status" className="flex items-center gap-3 bg-neon-tint border border-neon-stroke/25 rounded-2xl px-4 py-3 mb-4">
+            <Icon icon="mdi:account-plus-outline" width={24} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
+            <div className="text-sm text-ink-2">
+              <span className="font-semibold text-ink">@{inviter}</span> invited you to train together.{' '}
+              {tab === 'register' ? 'Create a free account to add them as a friend.' : 'Sign in to add them as a friend.'}
+            </div>
+          </div>
+        )}
 
         <div className="bg-surface border border-line rounded-2xl p-6 xs:p-8">
           {screen === 'check-email' || screen === 'reset-sent' ? (

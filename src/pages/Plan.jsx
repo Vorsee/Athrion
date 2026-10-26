@@ -450,7 +450,8 @@ function GoalModal({ currentGoal, onClose, onConfirm }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Pro lock: the real page with a sample plan, dimmed behind an upgrade card
+// Pro lock: the real page with a sample plan, dimmed behind an upgrade card.
+// Labelled as a sample, and without its calories, which would contradict the person's own on Food.
 // ─────────────────────────────────────────────────────────────────────────────
 function LockedPlan({ onUpgrade, onStartSetup }) {
   const plan = SAMPLE_PLAN
@@ -461,16 +462,16 @@ function LockedPlan({ onUpgrade, onStartSetup }) {
   return (
     <ProLock onUpgrade={onUpgrade} title="Get a plan built for your goal"
       secondary={onStartSetup && { label: 'Answer the questions first, free', onClick: onStartSetup }}
-      description="Your week of workouts, sets and reps from a few questions about you. It adapts every week from your check-ins.">
+      description="Behind this is an example. Yours is built from a few questions about your goal, schedule and equipment, and adapts every week from your check-ins.">
       <div className="space-y-4 pt-2">
-        <PageHeader icon={GOAL_ICONS[plan.primary_goal]} title={planData.summary.planName}
+        <PageHeader icon={GOAL_ICONS[plan.primary_goal]} title={`Sample: ${planData.summary.planName}`}
           facts={<>
+            <Fact icon="mdi:eye-outline">Example plan</Fact>
             <Fact icon="mdi:calendar-range">{plan.duration_weeks} weeks</Fact>
             <Fact icon="mdi:calendar-check-outline">{workoutDays(planData, plan)} days a week</Fact>
             <Fact icon="mdi:target">{GOAL_LABELS[plan.primary_goal]}</Fact>
           </>} />
         {todayData && <TodayWorkout dayData={todayData} />}
-        <NutritionCard planNutrition={planData.nutrition} dbNutrition={null} />
         <WeeklySchedule schedule={planData.weeklySchedule} onSwap={noop} />
         <CoachNotes advice={planData.advice} progression={planData.progression} />
       </div>

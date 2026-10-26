@@ -69,10 +69,13 @@ describe('Workout tab — rest days match the plan', () => {
     expect(screen.queryByText('Want to train anyway?')).toBeNull()
   })
 
-  it('falls back to the built-in workout without a plan', async () => {
+  it('without a plan or saved workouts, shows the labelled starter session instead of a random one', async () => {
     sb.set('fitness_plans', { data: null, error: null })
     show()
-    expect(await screen.findByText('Fri Workout')).toBeInTheDocument()
+    expect(await screen.findByText('Full body A')).toBeInTheDocument()
+    expect(screen.getByText('Starter plan')).toBeInTheDocument()
+    expect(screen.getByText('Session A of 3')).toBeInTheDocument()
+    expect(screen.queryByText('Fri Workout')).toBeNull()
     expect(screen.getByText('Start workout')).toBeInTheDocument()
   })
 })

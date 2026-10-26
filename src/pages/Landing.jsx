@@ -1,6 +1,6 @@
 import { Icon } from '@iconify/react'
 import { Button } from '../components/ui/index.js'
-import { PLANS, PRO_FEATURES, TRIAL_DAYS, annualPerMonth, annualSavingPct, money } from '../lib/pricing.js'
+import { PLANS, PRO_FEATURES, TRIAL_DAYS, annualSavingPct, money, priceLine } from '../lib/pricing.js'
 
 const PAINS = [
   { icon: 'mdi:clipboard-text-outline', pain: "I don't know what to do today.",
@@ -45,7 +45,7 @@ export default function Landing({ onCreateAccount, onSignIn }) {
               <Button full onClick={onCreateAccount}>Create free account</Button>
             </div>
             <p className="text-xs text-muted mt-3">
-              Free workout and calorie logging. Pro from {money(annualPerMonth)} a month, with a {TRIAL_DAYS}-day free trial.
+              Free workout and calorie logging. Pro is {priceLine()}, with a {TRIAL_DAYS}-day free trial.
             </p>
           </div>
           <ProductPreview />

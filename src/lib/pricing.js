@@ -14,6 +14,9 @@ export const annualSavingPct = Math.round((1 - PLANS.annual.price / (PLANS.month
 
 export const money = n => `$${n.toFixed(2)}`
 
+// How prices are quoted outside the plan picker: the real monthly and yearly charges, not a per-month average
+export const priceLine = () => `${money(PLANS.monthly.price)} a month or ${money(PLANS.annual.price)} a year`
+
 // One list, used everywhere Pro is described
 export const PRO_FEATURES = [
   { icon: 'mdi:calendar-check-outline', title: 'A training plan built for your goal', body: 'Your week of workouts, sets and reps, rebuilt as you log.' },

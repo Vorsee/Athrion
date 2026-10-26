@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
-import { Button, Card, Segmented, SectionTitle, IconButton, ExerciseRow, BigNumber, StatTiles, InfoButton, EmptyState, SkeletonRows, Skeleton, InlineError, RankChip } from './ui/index.js'
+import { Button, Card, Segmented, SectionTitle, IconButton, ExerciseRow, BigNumber, StatTiles, InfoButton, Fact, EmptyState, SkeletonRows, Skeleton, InlineError, RankChip } from './ui/index.js'
 import { Toggle } from './ReminderSettings.jsx'
 import {
   saveNickname, setOnLeaderboard, searchNicknames, sendFriendRequest, respondFriendRequest, removeFriend,
@@ -133,6 +133,9 @@ export function LeaderboardTab({ me, onMeChange, onAddFriends }) {
             {mine ? <BigNumber value={mine.points} unit="pts" className="mt-1" /> : <Skeleton className="h-10 w-28 mt-2" />}
           </div>
           <PointsInfo />
+        </div>
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          <Fact icon="mdi:trophy-outline">Top {PRIZE_PLACES} on Everyone win a free month of Pro</Fact>
         </div>
         <StatTiles className="mt-4" items={[
           [scope === 'friends' ? 'Among friends' : 'On Everyone', myRow?.place ? `#${myRow.place}` : '–'],

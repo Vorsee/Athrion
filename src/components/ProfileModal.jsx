@@ -10,10 +10,12 @@ import Sheet from './Sheet.jsx'
 import { Button, Segmented, ListRow, Card, Tag, Skeleton, InlineError } from './ui/index.js'
 import ReminderSettings from './ReminderSettings.jsx'
 import { fmtWeight } from '../lib/units.js'
-import { PRO_FEATURES, annualPerMonth, money } from '../lib/pricing.js'
+import { PRO_FEATURES, PLANS, money } from '../lib/pricing.js'
 
 
-function fmtHeight(cm) {
+// Metric people (weight in kg) see centimetres; everyone else feet and inches
+function fmtHeight(cm, unit) {
+  if (unit === 'kg') return `${Math.round(cm)} cm`
   const totalIn = Math.round(cm / 2.54)
   const ft = Math.floor(totalIn / 12)
   const inches = totalIn % 12
@@ -253,7 +255,7 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
                 <div className="text-lg leading-[1.3] font-semibold text-ink mb-2">Body stats</div>
                 <div className="grid grid-cols-5 gap-2 mb-5">
                   {[
-                    ['Height', fmtHeight(profile.height_cm)],
+                    ['Height', fmtHeight(profile.height_cm, profile.weight_unit)],
                     ['Weight', fmtWeight(profile.weight_lb, profile.weight_unit === 'kg' ? 'kg' : 'lb')],
                     ['Age',    profile.age ? `${profile.age} yr` : '—'],
                     ['BMI',    bmi.toFixed(1)],
@@ -333,7 +335,7 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
                 <button onClick={onUpgrade}
                   className="press w-full py-3.5 rounded-xl text-sm font-bold bg-neon/10 border border-neon-stroke/30 text-neon-ink hover:bg-neon/15 hover:border-neon-stroke/50 transition-all flex items-center justify-center gap-2">
                   <Icon icon="mdi:star-four-points-outline" width={16} />
-                  <span>Get ATHRION Pro · from {money(annualPerMonth)} a month</span>
+                  <span>Get ATHRION Pro · {money(PLANS.monthly.price)} a month</span>
                 </button>
               )}
             </section>

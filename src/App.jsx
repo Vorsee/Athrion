@@ -240,6 +240,12 @@ export default function App() {
     }
   }
 
+  // The free 7-day plan picker, from the starter session on Train
+  function openGuide() {
+    window.history.pushState(window.history.state, '', '/workout')
+    setGuide(true)
+  }
+
   function leaveGuide() {
     clearGuidePick()
     if (onGuidePath()) window.history.replaceState(window.history.state, '', '/')
@@ -313,7 +319,7 @@ export default function App() {
   )
 
   const pageProps = {
-    workout: { pendingWorkout, onClearPending: () => setPendingWorkout(null), isPro, onUpgrade: goUpgrade, onOpenPage: navigate, resumeTick },
+    workout: { pendingWorkout, onClearPending: () => setPendingWorkout(null), isPro, onUpgrade: goUpgrade, onOpenPage: navigate, onOpenGuide: openGuide, resumeTick },
     library: { onStartWorkout: handleStartFromLibrary },
     calories: { profile, isPro, onUpgrade: goUpgrade, onGoToPlan: () => navigate('plan'), intent: foodIntent, onIntentHandled: () => setFoodIntent(null) },
     group: { session, intent: groupIntent, onIntentDone: () => setGroupIntent(null) },
