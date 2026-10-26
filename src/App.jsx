@@ -13,6 +13,7 @@ import { PageSkeleton } from './components/ui/States.jsx'
 import { readGuidePick, clearGuidePick } from './lib/guidePlans.js'
 import { rememberInvite, readInvite } from './lib/socialApi.js'
 import { useUnreadCount } from './lib/notifications.js'
+import { hasConsented } from './lib/legal.js'
 
 // Workout is the landing tab; everything else loads the first time it's opened
 const Auth              = lazy(() => import('./pages/Auth.jsx'))
@@ -20,6 +21,7 @@ const Landing           = lazy(() => import('./pages/Landing.jsx'))
 const Guide             = lazy(() => import('./pages/Guide.jsx'))
 const NewPasswordSheet  = lazy(() => import('./components/NewPasswordSheet.jsx'))
 const Onboarding        = lazy(() => import('./pages/Onboarding.jsx'))
+const ConsentScreen     = lazy(() => import('./components/LegalConsent.jsx'))
 const FitnessOnboarding = lazy(() => import('./pages/FitnessOnboarding.jsx'))
 const Calories          = lazy(() => import('./pages/Calories.jsx'))
 const Library           = lazy(() => import('./pages/Library.jsx'))
@@ -152,7 +154,7 @@ export default function App() {
     // keep the existing state then, or the whole app reloads and loses the open screen
     const applySession = s => setSession(prev => {
       const next = toProfile(s)
-      return prev && next && prev.email === next.email && prev.name === next.name ? prev : next
+      return prev && next && prev.email === next.email && prev.name === next.name && prev.consented === next.consented ? prev : next
     })
     supabase.auth.getSession().then(({ data: { session } }) => applySession(session))
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -260,6 +262,12 @@ export default function App() {
         : guide
         ? <Guide onStart={() => setAuthMode('register')} onSignIn={() => setAuthMode('login')} />
         : <Landing onCreateAccount={() => setAuthMode('register')} onSignIn={() => setAuthMode('login')} />}
+    </Suspense>
+  )
+
+  if (!session.consented) return (
+    <Suspense fallback={<Loading />}>
+      <ConsentScreen />
     </Suspense>
   )
 
@@ -381,5 +389,6 @@ function toProfile(session) {
   return {
     name: session.user.user_metadata?.full_name || session.user.email.split('@')[0],
     email: session.user.email,
+    consented: hasConsented(session.user),
   }
 }

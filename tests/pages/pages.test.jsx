@@ -5,6 +5,7 @@ import { render, screen, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { sb, USER } from '../helpers/supabaseMock.js'
 import { planRow, withWorkoutOn, profile, fitnessProfile } from '../helpers/fixtures.js'
+import { LEGAL_VERSION } from '../../src/lib/legal.js'
 
 vi.mock('../../src/lib/supabase.js', () => ({ supabase: sb.supabase }))
 vi.mock('@iconify/react', () => ({ Icon: () => null }))
@@ -136,6 +137,24 @@ describe('Auth', () => {
     await userEvent.click(screen.getByText('Create free account'))
     expect(screen.getByText('Passwords do not match.')).toBeInTheDocument()
     expect(sb.supabase.auth.signUp).not.toHaveBeenCalled()
+  })
+  it('needs both consent boxes, and saves the consent with the account', async () => {
+    render(<P.Auth initialMode="register" />)
+    await userEvent.type(screen.getByPlaceholderText('Full name'), 'Sam')
+    await userEvent.type(screen.getByPlaceholderText('Email address'), 'sam@example.com')
+    await userEvent.type(screen.getByPlaceholderText('Password'), 'secret12')
+    await userEvent.type(screen.getByPlaceholderText('Confirm password'), 'secret12')
+    const [terms, health] = screen.getAllByRole('checkbox')
+    await userEvent.click(terms)
+    await userEvent.click(screen.getByText('Create free account'))
+    expect(screen.getByText('Tick both boxes to create your account.')).toBeInTheDocument()
+    expect(sb.supabase.auth.signUp).not.toHaveBeenCalled()
+    await userEvent.click(health)
+    await userEvent.click(screen.getByText('Create free account'))
+    const meta = sb.supabase.auth.signUp.mock.calls[0][0].options.data
+    expect(meta).toMatchObject({ full_name: 'Sam', legal_version: LEGAL_VERSION })
+    expect(meta.terms_accepted_at).toBeTruthy()
+    expect(meta.health_consent_at).toBeTruthy()
   })
   it('submits with Enter from any field and fills from password managers', async () => {
     render(<P.Auth />)
@@ -350,6 +369,36 @@ describe('ProfileModal', () => {
     expect(screen.queryByText('Cancel subscription')).toBeNull()
   })
 
+  it('deletes the account only after DELETE is typed, then signs out on this device', async () => {
+    const fetchMock = stripeReply({ deleted: true })
+    render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={profile} isPro theme="dark" onToggleTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
+    await userEvent.click(screen.getByText('Delete account'))
+    expect(screen.getByText(/Your Pro subscription ends now/)).toBeInTheDocument()
+    const button = screen.getByText('Delete my account').closest('button')
+    expect(button).toBeDisabled()
+    await userEvent.type(screen.getByLabelText('Type DELETE to confirm'), 'delete')
+    await userEvent.click(button)
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/delete-account')
+    await waitFor(() => expect(sb.supabase.auth.signOut).toHaveBeenCalledWith({ scope: 'local' }))
+  })
+  it('downloads a copy of the person\'s data', async () => {
+    sb.set('workout_logs', { data: [{ id: 'w1', name: 'Leg day' }], error: null })
+    const urls = { createObjectURL: vi.fn(() => 'blob:x'), revokeObjectURL: vi.fn() }
+    const saved = { createObjectURL: URL.createObjectURL, revokeObjectURL: URL.revokeObjectURL }
+    Object.assign(URL, urls)
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={profile} isPro={false} theme="dark" onToggleTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
+    await userEvent.click(screen.getByText('Download my data'))
+    await waitFor(() => expect(click).toHaveBeenCalled())
+    const blob = urls.createObjectURL.mock.calls[0][0]
+    const data = JSON.parse(await new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsText(blob) }))
+    expect(data.account.email).toBe(USER.email)
+    expect(data.workout_logs).toEqual([{ id: 'w1', name: 'Leg day' }])
+    expect(sb.queriesFor('workout_logs').every(q => sb.op(q, 'eq')[1] === USER.id)).toBe(true)
+    click.mockRestore()
+    Object.assign(URL, saved)
+  })
+
   it('signs out', async () => {
     render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={profile} isPro={false} theme="dark" onToggleTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
     await userEvent.click(screen.getByText('Sign out'))
@@ -385,6 +434,21 @@ describe('App shell', () => {
     await userEvent.click(screen.getAllByText('Create free account')[0])
     expect(await screen.findByPlaceholderText('Full name')).toBeInTheDocument()
     expect(sb.supabase.from).not.toHaveBeenCalledWith('user_profiles')
+  })
+  it('asks an account made before the terms existed to agree once', async () => {
+    signedIn()
+    const before = { ...USER, user_metadata: { full_name: 'Sam' } }
+    sb.supabase.auth.getSession.mockResolvedValue({ data: { session: { user: before, access_token: 't' } } })
+    render(<P.App />)
+    expect(await screen.findByText('Before you continue')).toBeInTheDocument()
+    const agree = screen.getByText('Agree and continue')
+    expect(agree.closest('button')).toBeDisabled()
+    for (const box of screen.getAllByRole('checkbox')) await userEvent.click(box)
+    await userEvent.click(agree)
+    expect(sb.supabase.auth.updateUser).toHaveBeenCalledWith({ data: expect.objectContaining({ legal_version: LEGAL_VERSION }) })
+  })
+  it('the test user has agreed to the current terms', () => {
+    expect(USER.user_metadata.legal_version).toBe(LEGAL_VERSION)
   })
   it('takes someone who has signed in here before straight to sign in', async () => {
     localStorage.setItem('athrion_signed_in_before', '1')

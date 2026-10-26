@@ -57,8 +57,11 @@ export default function UpgradeSheet({ onClose, onCheckout, busy = false, error 
         </Button>
         <p className="text-xs text-muted text-center mt-3">
           {trial
-            ? `Free until ${firstCharge}, then ${money(chosen.price)} a ${chosen.per}. Cancel before then and you won't be charged.`
-            : `${money(chosen.price)} a ${chosen.per}. Cancel anytime from your profile.`}
+            ? `Free until ${firstCharge}, then ${money(chosen.price)} a ${chosen.per}, renewing automatically until you cancel. Cancel before then and you won't be charged.`
+            : `${money(chosen.price)} a ${chosen.per}, renewing automatically until you cancel. Cancel anytime from your profile.`}
+        </p>
+        <p className="text-xs text-muted text-center mt-1">
+          By continuing you agree to the <a href="/terms.html" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-ink-2">Terms of use</a>.
         </p>
         <p className="text-xs text-muted text-center mt-1">Workout logging, calorie logging and progress stay free.</p>
       </div>

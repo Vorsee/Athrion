@@ -81,7 +81,7 @@ html {
 body {
   background: rgb(var(--canvas));
   color: rgb(var(--ink));
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'DM Sans Variable', 'DM Sans', sans-serif;
   margin: 0;
   /* dvh accounts for browser URL bar appearing/disappearing on scroll */
   min-height: 100dvh;
@@ -91,7 +91,7 @@ body {
 }
 
 @layer utilities {
-  .font-dm    { font-family: 'DM Sans', sans-serif; }
+  .font-dm    { font-family: 'DM Sans Variable', 'DM Sans', sans-serif; }
 }
 
 /* Scrollbars */

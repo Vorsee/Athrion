@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase.js'
 import { cancelSubscription, resumeSubscription, fetchSubscriptionDetails } from '../lib/stripe.js'
 import { signOut } from '../lib/session.js'
 import { fetchProState } from '../lib/api.js'
+import { downloadMyData, deleteAccount } from '../lib/account.js'
 import { Icon } from '@iconify/react'
 import { tok } from '../lib/tokens.js'
 import Sheet from './Sheet.jsx'
@@ -142,8 +143,60 @@ function SubscriptionScreen({ onBack }) {
       )}
 
       <p className="text-center text-xs text-muted mt-4">
-        Need help? Contact support at support@athrion.app
+        Need help? Email athrionsportapp@gmail.com
       </p>
+    </div>
+  )
+}
+
+// ── Delete account sub-screen ─────────────────────────────────────────────────
+// Asks them to type DELETE, since nothing can be brought back afterwards.
+
+function DeleteAccountScreen({ isPro, onBack }) {
+  const [typed, setTyped]   = useState('')
+  const [step, setStep]     = useState('idle') // idle | working | error
+  const [errMsg, setErrMsg] = useState('')
+
+  async function confirm() {
+    setStep('working')
+    setErrMsg('')
+    try {
+      await deleteAccount() // signs out; App returns to the landing page
+    } catch (e) {
+      setErrMsg(e.message || 'Something went wrong')
+      setStep('error')
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-5">
+        <button onClick={onBack} aria-label="Back" disabled={step === 'working'}
+          className="press w-10 h-10 -ml-2 rounded-full flex items-center justify-center text-ink-2 hover:text-ink hover:bg-raised transition-colors">
+          <Icon icon="mdi:chevron-left" width={24} />
+        </button>
+        <div className="font-bold text-base">Delete account</div>
+      </div>
+
+      <div className="bg-danger/12 border border-danger/25 rounded-2xl p-4 mb-4">
+        <div className="font-bold text-sm text-danger mb-2">This can't be undone</div>
+        <ul className="space-y-1.5 text-sm text-ink-2">
+          <li>Your workouts, food log, plan, measurements, photos, friends and points are deleted for good.</li>
+          {isPro && <li>Your Pro subscription ends now with no further charges. Time left in the current period isn't refunded.</li>}
+          <li>Want a copy first? Go back and tap Download my data.</li>
+        </ul>
+      </div>
+
+      <label className="block text-sm text-ink-2 mb-2" htmlFor="delete-confirm">Type DELETE to confirm</label>
+      <input id="delete-confirm" value={typed} onChange={e => setTyped(e.target.value)} autoComplete="off" autoCapitalize="characters"
+        className="w-full bg-raised border border-line focus:border-danger text-ink rounded-xl px-4 py-3 text-sm outline-none transition-colors mb-3" />
+
+      {step === 'error' && <InlineError className="mb-3">{errMsg}</InlineError>}
+
+      <Button variant="danger" full icon="mdi:delete-outline" onClick={confirm}
+        disabled={typed.trim().toUpperCase() !== 'DELETE' || step === 'working'}>
+        {step === 'working' ? 'Deleting…' : 'Delete my account'}
+      </Button>
     </div>
   )
 }
@@ -152,7 +205,8 @@ function SubscriptionScreen({ onBack }) {
 
 export default function ProfileModal({ session, profile, isPro, theme, onToggleTheme, onClose, onEdit, onUpgrade, onEditTargets }) {
   const [pwState, setPwState] = useState('idle')   // idle | loading | sent | error
-  const [screen, setScreen]   = useState('profile') // profile | subscription
+  const [screen, setScreen]   = useState('profile') // profile | subscription | delete
+  const [exportState, setExportState] = useState('idle') // idle | loading | error
 
   const bmi     = profile ? calcBMI(profile.height_cm, profile.weight_lb) : null
   const cat     = bmi ? bmiInfo(bmi) : null
@@ -169,10 +223,17 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
     setPwState(error ? 'error' : 'sent')
   }
 
+  async function handleExport() {
+    setExportState('loading')
+    try { await downloadMyData(); setExportState('idle') } catch { setExportState('error') }
+  }
+
   return (
-    <Sheet ariaLabel={screen === 'subscription' ? 'Subscription' : 'You'} onClose={onClose} bodyClassName="-mx-1">
+    <Sheet ariaLabel={screen === 'subscription' ? 'Subscription' : screen === 'delete' ? 'Delete account' : 'You'} onClose={onClose} bodyClassName="-mx-1">
         {screen === 'subscription' ? (
           <SubscriptionScreen onBack={() => setScreen('profile')} />
+        ) : screen === 'delete' ? (
+          <DeleteAccountScreen isPro={isPro} onBack={() => setScreen('profile')} />
         ) : (
           <div>
             {/* ── User header ── */}
@@ -296,7 +357,24 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
               )}
             </section>
 
+            {/* ── Your data ── */}
+            <section className="mb-6">
+              <h3 className="text-lg leading-[1.3] font-semibold text-ink mb-2">Your data</h3>
+              <div className="bg-surface border border-line rounded-2xl p-1">
+                <ListRow icon="mdi:download-outline" tile="info" title={exportState === 'loading' ? 'Preparing your file…' : 'Download my data'}
+                  meta="Everything you've logged, as a file" onClick={exportState === 'loading' ? undefined : handleExport} />
+                <ListRow icon="mdi:delete-outline" tile="danger" title="Delete account" meta="Erase your account and all its data" chevron onClick={() => setScreen('delete')} />
+              </div>
+              {exportState === 'error' && <p className="text-danger text-xs text-center mt-2">Couldn't prepare the file. Try again.</p>}
+            </section>
+
             <Button variant="ghost" full icon="mdi:logout" onClick={() => signOut()} className="!text-danger">Sign out</Button>
+
+            <p className="text-center text-xs text-muted mt-4">
+              <a href="/privacypolicy.html" className="underline underline-offset-2 hover:text-ink-2 inline-flex items-center min-h-[44px]">Privacy policy</a>
+              {' · '}
+              <a href="/terms.html" className="underline underline-offset-2 hover:text-ink-2 inline-flex items-center min-h-[44px]">Terms of use</a>
+            </p>
           </div>
         )}
     </Sheet>

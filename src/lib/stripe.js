@@ -13,7 +13,7 @@ async function freshToken() {
 }
 
 // POST to one of our api/ routes as the signed-in user; on a 401, renew the token once and retry
-async function postAsUser(path, body) {
+export async function postAsUser(path, body) {
   const send = token => fetch(path, {
     method: 'POST',
     headers: { ...(body && { 'Content-Type': 'application/json' }), Authorization: `Bearer ${token}` },

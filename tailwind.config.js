@@ -19,7 +19,7 @@ export default {
       },
       colors: Object.fromEntries(TOKENS.map(t => [t, token(t)])),
       fontFamily: {
-        dm: ['"DM Sans"', 'sans-serif'],
+        dm: ['"DM Sans Variable"', '"DM Sans"', 'sans-serif'],
       },
       // html font-size drops to 14px on narrow phones; keep meta text at 12px or more
       fontSize: {

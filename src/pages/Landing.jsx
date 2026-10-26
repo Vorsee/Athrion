@@ -127,7 +127,11 @@ export default function Landing({ onCreateAccount, onSignIn }) {
 
       <footer className="max-w-5xl mx-auto px-4 py-8 flex flex-wrap items-center justify-between gap-3 text-xs text-muted">
         <span>Your photos and logs are private to your account.</span>
-        <a href="/privacypolicy.html" className="underline underline-offset-2 hover:text-ink-2 min-h-[44px] inline-flex items-center">Privacy policy</a>
+        <span className="flex flex-wrap gap-x-4">
+          <a href="/privacypolicy.html" className="underline underline-offset-2 hover:text-ink-2 min-h-[44px] inline-flex items-center">Privacy policy</a>
+          <a href="/terms.html" className="underline underline-offset-2 hover:text-ink-2 min-h-[44px] inline-flex items-center">Terms of use</a>
+          <a href="/privacypolicy.html#health-data" className="underline underline-offset-2 hover:text-ink-2 min-h-[44px] inline-flex items-center">Consumer health data</a>
+        </span>
       </footer>
     </div>
   )

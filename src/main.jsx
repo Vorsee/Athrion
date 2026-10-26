@@ -4,6 +4,8 @@ import { addCollection } from '@iconify/react'
 import App from './App.jsx'
 import ErrorBoundary, { clearReloadFlagSoon } from './components/ErrorBoundary.jsx'
 import icons from './lib/icons.json'
+// Served from our own domain, so visitors' browsers never contact Google Fonts
+import '@fontsource-variable/dm-sans/opsz.css'
 import './index.css'
 
 // Icons ship with the app (see scripts/build-icons.mjs) instead of loading from the Iconify API

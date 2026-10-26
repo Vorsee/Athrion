@@ -3,54 +3,207 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ATHRION Privacy Policy</title>
+  <title>Privacy policy · ATHRION</title>
+  <meta name="description" content="How ATHRION collects, uses, shares and protects your information, including your health and fitness data." />
+  <link rel="icon" type="image/png" href="/icons/icon-192.png" />
   <style>
-    :root { --bg: #0a0a0a; --fg: #e5e5e5; --muted: #a3a3a3; --accent: #c8f135; }
-    @media (prefers-color-scheme: light) { :root { --bg: #fdfaf5; --fg: #1a1a1a; --muted: #555; --accent: #5c7a00; } }
-    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 -apple-system, system-ui, sans-serif; }
-    main { max-width: 680px; margin: 0 auto; padding: 32px 16px 64px; }
-    h1 { color: var(--accent); }
-    h2 { margin-top: 32px; font-size: 1.1rem; }
-    p, li { color: var(--muted); }
-    .draft { border: 1px solid var(--accent); border-radius: 8px; padding: 8px 12px; }
+    :root { --bg: #0a0a0a; --surface: #141414; --line: #262626; --fg: #ededed; --muted: #a3a3a3; --accent: #c8f135; }
+    @media (prefers-color-scheme: light) { :root { --bg: #fdfaf5; --surface: #ffffff; --line: #e7e2d9; --fg: #1a1a1a; --muted: #555; --accent: #4d6600; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+    main { max-width: 720px; margin: 0 auto; padding: 24px 16px 80px; }
+    header a.brand { font-weight: 700; letter-spacing: -0.01em; color: var(--fg); text-decoration: none; font-size: 1.25rem; }
+    h1 { font-size: 2rem; line-height: 1.2; margin: 28px 0 4px; }
+    h2 { font-size: 1.2rem; margin: 40px 0 8px; scroll-margin-top: 16px; }
+    h3 { font-size: 1rem; margin: 24px 0 4px; }
+    p, li, td, th { color: var(--muted); }
+    strong { color: var(--fg); font-weight: 600; }
+    a { color: var(--accent); }
+    ul { padding-left: 20px; }
+    li { margin: 4px 0; }
+    .meta { font-size: 0.9rem; }
+    .box { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin: 20px 0; }
+    .box ul { margin: 8px 0 0; }
+    .toc { columns: 2; column-gap: 24px; font-size: 0.95rem; }
+    @media (max-width: 520px) { .toc { columns: 1; } }
+    .table { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+    th, td { text-align: left; vertical-align: top; padding: 10px 8px; border-bottom: 1px solid var(--line); }
+    th { color: var(--fg); font-weight: 600; }
+    footer { margin-top: 48px; font-size: 0.9rem; }
   </style>
 </head>
 <body>
 <main>
-  <h1>ATHRION Privacy Policy</h1>
-  <p class="draft">DRAFT: review and complete this policy (company name, contact address, effective date) before publishing the app.</p>
+  <header><a class="brand" href="/">ATHRION</a></header>
 
-  <h2>What we collect</h2>
+  <h1>Privacy policy</h1>
+  <p class="meta">Effective October 26, 2026 · Last updated October 26, 2026</p>
+
+  <p>This policy explains how ATHRION (the website and app at athrion.app, and our mobile apps) collects, uses, shares and protects your information. ATHRION is operated by <strong>NANUSHKAKNOWSBETER LLC</strong>, a limited liability company registered in Georgia, United States ("we", "us"). If you have any questions, email <a href="mailto:athrionsportapp@gmail.com">athrionsportapp@gmail.com</a>.</p>
+
+  <div class="box">
+    <strong>The short version</strong>
+    <ul>
+      <li>We collect what you give us to run the app: your account, body stats, goals, workouts, meals, measurements and photos.</li>
+      <li>We don't sell your data, don't show ads, and don't use tracking or advertising cookies.</li>
+      <li>To build your plan and read meal photos, the relevant data goes to our AI provider, Anthropic, which doesn't use it to train its models.</li>
+      <li>Other people only see what you choose to share: your nickname and points on leaderboards, and your sets in a Train together room.</li>
+      <li>You can download all your data or delete your account at any time in the app: Profile → Your data.</li>
+    </ul>
+  </div>
+
+  <nav class="toc" aria-label="Contents">
+    <div><a href="#collect">1. What we collect</a></div>
+    <div><a href="#use">2. How we use it</a></div>
+    <div><a href="#ai">3. AI features</a></div>
+    <div><a href="#share">4. Who we share it with</a></div>
+    <div><a href="#others">5. What other users see</a></div>
+    <div><a href="#health-data">6. Consumer health data</a></div>
+    <div><a href="#cookies">7. Cookies and local storage</a></div>
+    <div><a href="#retention">8. How long we keep it</a></div>
+    <div><a href="#security">9. Security</a></div>
+    <div><a href="#rights">10. Your rights and choices</a></div>
+    <div><a href="#us-states">11. US state privacy rights</a></div>
+    <div><a href="#eea">12. EEA, UK and Swiss users</a></div>
+    <div><a href="#children">13. Children</a></div>
+    <div><a href="#changes">14. Changes and contact</a></div>
+  </nav>
+
+  <h2 id="collect">1. What we collect</h2>
+  <h3>Information you give us</h3>
   <ul>
-    <li>Account details: your name and email address.</li>
-    <li>Profile and goals: age, sex, height, weight, fitness goal, experience level and training preferences.</li>
-    <li>Training and nutrition logs: workouts, sets, weights, food entries, weekly check-ins, body measurements and progress photos you add.</li>
-    <li>Health data, only if you allow it: daily steps, sleep duration, resting heart rate and active energy from Apple Health or Health Connect.</li>
+    <li><strong>Account:</strong> your name, email address and password (stored only as a secure hash by our authentication provider), and when you agreed to these terms.</li>
+    <li><strong>Body stats:</strong> age, sex, height, weight and your preferred weight unit.</li>
+    <li><strong>Fitness profile (Pro):</strong> goals, target weight, activity and experience level, daily steps, schedule, location and equipment, exercise likes and dislikes, and anything you choose to enter about injuries, limitations or medical notes.</li>
+    <li><strong>Training:</strong> workouts, exercises, sets, weights, reps, saved workouts, personal records, badges and points.</li>
+    <li><strong>Nutrition:</strong> food entries, calorie and macro targets, barcodes you scan, and meal photos you choose to analyse.</li>
+    <li><strong>Progress:</strong> weekly check-ins (weight, energy, sleep, hunger, soreness, stress, notes), body measurements, progress photos, and daily steps, sleep, resting heart rate and active energy that you enter or sync.</li>
+    <li><strong>Social:</strong> your nickname, friend requests and friends, whether you appear on the public leaderboard, and the rooms and sets you log in Train together.</li>
+    <li><strong>Settings:</strong> reminder times, time zone, notification preferences and theme.</li>
+    <li><strong>Messages to us:</strong> anything you send when you email us.</li>
+  </ul>
+  <h3>Information from other sources</h3>
+  <ul>
+    <li><strong>Apple Health or Health Connect:</strong> only in our mobile app and only if you allow it, we read daily steps, sleep duration, resting heart rate and active energy. We never write to these services.</li>
+    <li><strong>Stripe:</strong> if you subscribe, Stripe tells us your customer ID, subscription status and billing dates. Your card details go straight to Stripe; we never see or store them.</li>
+  </ul>
+  <h3>Information collected automatically</h3>
+  <ul>
+    <li><strong>Technical data:</strong> like any website, our hosting and database providers log your IP address, browser and device type, and request times to keep the service running and secure.</li>
+    <li><strong>Push notifications:</strong> if you turn them on, your browser or phone gives us a push address for this device.</li>
+  </ul>
+  <p>We don't use analytics trackers, advertising IDs, fingerprinting or location tracking.</p>
+
+  <h2 id="use">2. How we use it</h2>
+  <ul>
+    <li>To provide the app: log workouts and meals, show your progress, records, streaks and badges, and keep your data in sync across devices.</li>
+    <li>To build and adapt your training plan and nutrition targets (Pro).</li>
+    <li>To run Train together: friends, rooms, leaderboards, monthly points and prizes.</li>
+    <li>To send the notifications you turn on: reminders, friend requests, achievements, weekly recaps and unfinished-workout nudges.</li>
+    <li>To take payments and manage subscriptions, free trials and prize months.</li>
+    <li>To answer your messages, prevent abuse and fraud, fix problems, and keep the service secure.</li>
+    <li>To meet legal obligations, such as tax records and responding to lawful requests.</li>
+  </ul>
+  <p>We don't use your data for advertising, don't build marketing profiles, and don't make decisions about you that have legal or similarly significant effects.</p>
+
+  <h2 id="ai">3. AI features</h2>
+  <p>ATHRION Pro uses Anthropic's Claude AI models through Anthropic's commercial API:</p>
+  <ul>
+    <li><strong>Plan generation:</strong> when you build or update a plan, we send your body stats, fitness profile (including any injuries, limitations or medical notes you entered), recent training, check-ins and health averages. We don't send your name or email.</li>
+    <li><strong>Meal photo scan:</strong> the photo you choose is sent to estimate its nutrition. We don't store the photo; only the food entries you save are kept.</li>
+  </ul>
+  <p>Under its commercial terms, Anthropic doesn't use API data to train its models and keeps it only for a limited time for safety and abuse monitoring. AI output can be wrong. It is general fitness guidance, not medical advice (see our <a href="/terms.html#health">Terms of use</a>).</p>
+
+  <h2 id="share">4. Who we share it with</h2>
+  <p><strong>We do not sell your personal information, and we do not share it for cross-context behavioural advertising.</strong> We share it only with service providers that process it for us under contract, and only as needed to run ATHRION:</p>
+  <div class="table">
+    <table>
+      <thead><tr><th>Provider</th><th>What they do</th><th>What they receive</th></tr></thead>
+      <tbody>
+        <tr><td>Supabase</td><td>Database, sign-in, file storage, background functions</td><td>All the data described above</td></tr>
+        <tr><td>Vercel</td><td>Hosting the website and payment routes</td><td>Technical data; payment requests</td></tr>
+        <tr><td>Stripe</td><td>Payments and subscriptions</td><td>Email, payment details you enter with Stripe, subscription</td></tr>
+        <tr><td>Anthropic</td><td>AI plan generation and meal photo analysis (Pro)</td><td>The data listed in section 3</td></tr>
+        <tr><td>Apple, Google, Mozilla push services</td><td>Delivering notifications to your device</td><td>Notification text and your device's push address</td></tr>
+        <tr><td>Open Food Facts</td><td>Looking up a scanned barcode</td><td>The barcode number and your IP address</td></tr>
+        <tr><td>jsDelivr, ExerciseDB</td><td>Serving exercise images</td><td>Your IP address, as with any image on the web</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>"Watch a video" links open YouTube, which then handles your data under Google's privacy policy. Our providers may process data in the United States and other countries where they operate.</p>
+  <p>We may also disclose information if the law requires it, to protect the rights, safety or property of our users, us or others, or as part of a merger, acquisition or sale of assets, in which case this policy will continue to apply to your information.</p>
+
+  <h2 id="others">5. What other users see</h2>
+  <ul>
+    <li><strong>Nickname:</strong> other signed-in users can find you by your nickname so they can send a friend request.</li>
+    <li><strong>Friends:</strong> your accepted friends see your nickname, monthly points, workout days, level and medals.</li>
+    <li><strong>Everyone leaderboard:</strong> your nickname, points, level and medals, unless you turn off "Show me on Everyone".</li>
+    <li><strong>Train together rooms:</strong> people in the same room see your display name and the sets you log there.</li>
+  </ul>
+  <p>Your email, body stats, food log, photos, measurements and health data are never shown to other users.</p>
+
+  <h2 id="health-data">6. Consumer health data</h2>
+  <p>This section is our consumer health data privacy policy for the purposes of the Washington My Health My Data Act, Nevada SB 370, Connecticut law and similar laws. It applies alongside the rest of this policy.</p>
+  <ul>
+    <li><strong>What we collect:</strong> body stats (age, sex, height, weight, BMI), body measurements and progress photos, injuries, limitations and medical notes you enter, check-ins (energy, sleep, hunger, soreness, stress), steps, sleep, resting heart rate and active energy, food and nutrition logs, and workout data.</li>
+    <li><strong>Sources:</strong> you, and Apple Health or Health Connect if you connect them.</li>
+    <li><strong>Why:</strong> only to provide the features you use: logging, progress tracking, your plan and nutrition targets, and the reminders you turn on.</li>
+    <li><strong>Who receives it:</strong> only the service providers in section 4 that need it (Supabase for storage, and Anthropic for Pro AI features). We don't share it with any other third party or affiliate.</li>
+    <li><strong>Consent:</strong> we ask for your consent before collecting it. You can withdraw consent by deleting your account; we then stop collecting it and delete it.</li>
+    <li><strong>We never sell it,</strong> never use it for advertising, and never use it to infer health conditions about you beyond the fitness features you see in the app.</li>
+    <li><strong>Your rights:</strong> you can confirm what we hold, access it, delete it and withdraw consent, as described in section 10. Washington residents may also request a list of the third parties we've shared it with.</li>
   </ul>
 
-  <h2>How we use it</h2>
+  <h2 id="cookies">7. Cookies and local storage</h2>
+  <p>We don't use advertising or analytics cookies. The app uses your browser's local storage, which stays on your device, to keep you signed in, remember your theme and settings, keep an unfinished workout, and work offline. This storage is necessary for the app to work, so we don't ask for cookie consent; you can clear it any time in your browser settings, which signs you out. Our fonts are served from our own domain.</p>
+
+  <h2 id="retention">8. How long we keep it</h2>
   <ul>
-    <li>To build and adapt your training plan and nutrition targets.</li>
-    <li>To show your progress, records, streaks and badges.</li>
-    <li>To send workout reminders, if you turn them on.</li>
-  </ul>
-  <p>Your profile, recent training, check-ins and health averages are sent to our AI provider (Anthropic) to generate your plan. Meal photos are sent to the same provider to estimate nutrition.</p>
-
-  <h2>Health data</h2>
-  <p>Health data read from Apple Health or Health Connect is used only to personalise your training plan and show your trends in the app. It is never sold, never used for advertising, and never shared with third parties other than as described above. ATHRION does not write to Apple Health or Health Connect.</p>
-
-  <h2>Where it's stored</h2>
-  <p>Your data is stored in our database hosted by Supabase. Progress photos are stored privately and are only accessible to your account.</p>
-
-  <h2>Your choices</h2>
-  <ul>
-    <li>You can revoke health access at any time in Apple Health or Health Connect settings.</li>
-    <li>You can delete entries, measurements and photos in the app.</li>
-    <li>To delete your account and all associated data, contact us.</li>
+    <li>We keep your data while your account is open, so your history and progress are there when you come back.</li>
+    <li>Anything you delete in the app (an entry, measurement or photo) is removed right away.</li>
+    <li>When you delete your account, we delete your data from our live systems immediately. Copies in our providers' backups are overwritten within 30 days.</li>
+    <li>Payment and tax records are kept by Stripe and us for as long as the law requires, usually up to 7 years.</li>
+    <li>Server logs are kept by our providers for a short period, normally no more than 30 days.</li>
   </ul>
 
-  <h2>Contact</h2>
-  <p>[Add your contact email here]</p>
+  <h2 id="security">9. Security</h2>
+  <p>Data is encrypted in transit (HTTPS) and at rest by our providers. Database access is restricted so each account can only read its own rows, progress photos are stored in a private bucket and shown through links that expire, and payment card data never touches our servers. No system is perfectly secure, so please use a strong, unique password. If a breach affects your information, we will notify you and the authorities as the law requires.</p>
+
+  <h2 id="rights">10. Your rights and choices</h2>
+  <ul>
+    <li><strong>Download your data:</strong> Profile → Your data → Download my data gives you a copy of everything you've logged as a file.</li>
+    <li><strong>Correct it:</strong> edit your body stats, entries and settings in the app at any time.</li>
+    <li><strong>Delete it:</strong> delete individual entries in the app, or delete your whole account in Profile → Your data → Delete account. This also ends any subscription.</li>
+    <li><strong>Notifications:</strong> turn each type on or off in Profile → Notifications, or in your device settings.</li>
+    <li><strong>Leaderboard:</strong> turn off "Show me on Everyone" in Train together.</li>
+    <li><strong>Health access:</strong> revoke it at any time in Apple Health or Health Connect settings.</li>
+  </ul>
+  <p>You can also email <a href="mailto:athrionsportapp@gmail.com">athrionsportapp@gmail.com</a> to make any request, including access, deletion, correction, portability, objection or withdrawing consent. We may need to confirm your identity, usually by replying from the email on your account. We respond within 30 days (45 days where US state law allows), and won't treat you differently for using your rights. You can use an authorised agent, who must show us your signed permission.</p>
+  <p><strong>Appeals:</strong> if we decline your request, you can appeal by replying with "Appeal" in the subject line. We'll answer within 45 days. If you're not satisfied, you can contact your state attorney general.</p>
+
+  <h2 id="us-states">11. US state privacy rights</h2>
+  <p>Residents of California, Colorado, Connecticut, Virginia, Utah, Texas, Oregon, Washington and other states with privacy laws have rights to know, access, correct, delete and port their personal information, to opt out of sale, sharing, targeted advertising and profiling, and to limit the use of sensitive information. Because we don't sell or share personal information, don't do targeted advertising or profiling, and use sensitive information (such as health data) only to provide the service you asked for, there is nothing to opt out of; the other rights are available as described in section 10.</p>
+  <p>For California: in the last 12 months we collected identifiers (name, email, IP address), customer records, commercial information (subscription), sensitive personal information (health and fitness data, account sign-in), photos, and inferences (your plan and targets), for the purposes in section 2, from the sources in section 1, and disclosed them only to the service providers in section 4. We have not sold or shared personal information, including that of anyone under 16.</p>
+
+  <h2 id="eea">12. EEA, UK and Swiss users</h2>
+  <p>NANUSHKAKNOWSBETER LLC is the controller of your personal data. Our legal bases are:</p>
+  <ul>
+    <li><strong>Contract:</strong> to provide the app, your account and your subscription.</li>
+    <li><strong>Explicit consent:</strong> for health data (Article 9(2)(a) GDPR), which you give when you create your account and can withdraw by deleting it.</li>
+    <li><strong>Legitimate interests:</strong> to keep the service secure, prevent abuse, and improve how it works, where those interests aren't overridden by yours.</li>
+    <li><strong>Legal obligation:</strong> for tax and accounting records.</li>
+  </ul>
+  <p>Your data is processed in the United States. Where required, transfers rely on the EU-US Data Privacy Framework (and its UK and Swiss extensions) or the European Commission's standard contractual clauses used by our providers. You have the rights to access, rectify, erase, restrict, object to processing, data portability, and to withdraw consent at any time, plus the right to complain to your local data protection authority.</p>
+
+  <h2 id="children">13. Children</h2>
+  <p>ATHRION is for people aged 16 and over. We don't knowingly collect personal information from anyone under 16. If you believe a child under 16 has created an account, email us and we will delete it.</p>
+
+  <h2 id="changes">14. Changes and contact</h2>
+  <p>If we change this policy, we'll update the date at the top. If a change is significant, we'll tell you in the app or by email before it takes effect and, where the law requires, ask for your consent again.</p>
+  <p>Questions or requests: <a href="mailto:athrionsportapp@gmail.com">athrionsportapp@gmail.com</a><br />NANUSHKAKNOWSBETER LLC, Georgia, United States</p>
+
+  <footer><a href="/terms.html">Terms of use</a> · <a href="/">Back to ATHRION</a></footer>
 </main>
 </body>
 </html>

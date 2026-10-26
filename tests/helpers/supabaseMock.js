@@ -2,7 +2,8 @@
 // (select, eq, order, …) and resolves to whatever the test set for that table.
 import { vi } from 'vitest'
 
-export const USER = { id: 'user-1', email: 'sam@example.com', user_metadata: { full_name: 'Sam' } }
+// Agreed to the current terms (LEGAL_VERSION in lib/legal.js), so tests reach the app
+export const USER = { id: 'user-1', email: 'sam@example.com', user_metadata: { full_name: 'Sam', legal_version: '2026-10-26', terms_accepted_at: '2026-10-26T00:00:00Z', health_consent_at: '2026-10-26T00:00:00Z' } }
 
 function createMock() {
   const state = { queries: [], results: {}, user: USER }
@@ -26,6 +27,7 @@ function createMock() {
   const bucket = {
     upload: vi.fn(async () => ({ error: null })),
     remove: vi.fn(async () => ({ error: null })),
+    list: vi.fn(async () => ({ data: [], error: null })),
     createSignedUrls: vi.fn(async paths => ({ data: paths.map(p => ({ signedUrl: `https://signed/${p}` })) })),
   }
   const channel = { on: vi.fn(() => channel), subscribe: vi.fn(() => channel) }
@@ -41,6 +43,8 @@ function createMock() {
       signUp: vi.fn(async () => ({ data: {}, error: null })),
       signOut: vi.fn(async () => ({ error: null })),
       resetPasswordForEmail: vi.fn(async () => ({ error: null })),
+      updateUser: vi.fn(async () => ({ data: {}, error: null })),
+      admin: { deleteUser: vi.fn(async () => ({ error: null })) },
     },
     storage: { from: vi.fn(() => bucket) },
     rpc: vi.fn(async () => ({ data: null, error: null })),

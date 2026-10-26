@@ -9,7 +9,8 @@ const IN_OPTS  = Array.from({ length: 12 }, (_, i) => i)
 const CM_OPTS  = Array.from({ length: 81 },  (_, i) => i + 140)
 const LB_OPTS  = Array.from({ length: 321 }, (_, i) => i + 80)
 const KG_OPTS  = Array.from({ length: 161 }, (_, i) => i + 40)
-const AGE_OPTS = Array.from({ length: 68 },  (_, i) => i + 13)
+// ATHRION is for people 16 and over (Terms of use)
+const AGE_OPTS = Array.from({ length: 65 },  (_, i) => i + 16)
 
 const ITEM_H = 44
 const PAD    = 88  // (220 / 2) - (44 / 2)

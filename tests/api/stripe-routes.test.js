@@ -4,7 +4,7 @@ import { sb } from '../helpers/supabaseMock.js'
 
 const stripe = {
   checkout: { sessions: { create: vi.fn() } },
-  subscriptions: { update: vi.fn(), retrieve: vi.fn() },
+  subscriptions: { update: vi.fn(), retrieve: vi.fn(), cancel: vi.fn() },
   webhooks: { constructEvent: vi.fn() },
 }
 vi.mock('stripe', () => ({ default: vi.fn(() => stripe) }))
@@ -24,7 +24,7 @@ function res() {
   return r
 }
 
-let checkout, cancel, webhook
+let checkout, cancel, webhook, deleteAccount
 beforeEach(async () => {
   sb.reset()
   vi.clearAllMocks()
@@ -37,6 +37,7 @@ beforeEach(async () => {
   checkout = (await import('../../api/create-checkout.js')).default
   cancel = (await import('../../api/cancel-subscription.js')).default
   webhook = (await import('../../api/stripe-webhook.js')).default
+  deleteAccount = (await import('../../api/delete-account.js')).default
 })
 
 describe('POST /api/create-checkout', () => {
@@ -252,5 +253,48 @@ describe('GET /api/monthly-prizes (Vercel cron)', () => {
     const comp = sb.queriesFor('subscriptions').map(q => sb.op(q, 'update')).find(Boolean)
     expect(Date.parse(comp[0].comp_pro_until)).toBeGreaterThan(Date.now() + 27 * 864e5)
     expect(r.body.results).toEqual([{ month: '2026-10-01', via: 'comp' }])
+  })
+})
+
+describe('POST /api/delete-account', () => {
+  const authed = () => req({ headers: { authorization: 'Bearer jwt' } })
+
+  it('rejects a caller without a valid token', async () => {
+    const r = res()
+    await deleteAccount(req(), r)
+    expect(r.statusCode).toBe(401)
+    expect(sb.supabase.auth.admin.deleteUser).not.toHaveBeenCalled()
+  })
+
+  it('ends the subscription, removes photos and every row, then the login', async () => {
+    sb.set('subscriptions', q => sb.op(q, 'select') ? { data: { stripe_subscription_id: 'sub_1' }, error: null } : { data: null, error: null })
+    sb.bucket.list.mockResolvedValueOnce({ data: [{ name: 'a.jpg' }, { name: 'b.jpg' }], error: null })
+    const r = res()
+    await deleteAccount(authed(), r)
+    expect(r.body).toEqual({ deleted: true })
+    expect(stripe.subscriptions.cancel).toHaveBeenCalledWith('sub_1')
+    expect(sb.bucket.remove).toHaveBeenCalledWith(['user-1/a.jpg', 'user-1/b.jpg'])
+    const deleted = sb.state.queries.filter(q => sb.op(q, 'delete')).map(q => q.table)
+    for (const t of ['group_sets', 'workout_logs', 'calorie_logs', 'custom_workouts', 'progress_photos', 'user_profiles', 'subscriptions'])
+      expect(deleted).toContain(t)
+    expect(sb.state.queries.filter(q => sb.op(q, 'delete')).every(q => sb.op(q, 'eq')[1] === 'user-1')).toBe(true)
+    expect(sb.supabase.auth.admin.deleteUser).toHaveBeenCalledWith('user-1')
+  })
+
+  it('keeps the account if Stripe fails, so nobody is charged for a deleted account', async () => {
+    sb.set('subscriptions', { data: { stripe_subscription_id: 'sub_1' }, error: null })
+    stripe.subscriptions.cancel.mockRejectedValueOnce(Object.assign(new Error('down'), { code: 'api_error' }))
+    const r = res()
+    await deleteAccount(authed(), r)
+    expect(r.statusCode).toBe(500)
+    expect(sb.supabase.auth.admin.deleteUser).not.toHaveBeenCalled()
+  })
+
+  it('carries on when the subscription is already gone in Stripe', async () => {
+    sb.set('subscriptions', { data: { stripe_subscription_id: 'sub_1' }, error: null })
+    stripe.subscriptions.cancel.mockRejectedValueOnce(Object.assign(new Error('No such subscription'), { code: 'resource_missing' }))
+    const r = res()
+    await deleteAccount(authed(), r)
+    expect(r.body).toEqual({ deleted: true })
   })
 })

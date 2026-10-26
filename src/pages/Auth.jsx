@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { Icon } from '@iconify/react'
 import { Segmented, BackLink } from '../components/ui/index.js'
+import { ConsentChecks } from '../components/LegalConsent.jsx'
+import { consentMetadata } from '../lib/legal.js'
 
 const INPUT = 'w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-sm outline-none transition-colors'
 const PRIMARY = 'press w-full h-12 bg-neon active:bg-neon-press text-on-neon font-semibold rounded-xl text-sm transition-colors disabled:opacity-40'
@@ -11,6 +13,7 @@ export default function Auth({ initialMode = 'login', onBack }) {
   const [tab, setTab] = useState(initialMode)
   const [screen, setScreen] = useState('form') // form | check-email | forgot | reset-sent
   const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' })
+  const [consent, setConsent] = useState({ terms: false, health: false })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -31,11 +34,12 @@ export default function Auth({ initialMode = 'login', onBack }) {
     if (!form.name || !form.email || !form.password) return setError('Fill in every field to continue.')
     if (form.password.length < 6) return setError('Password must be at least 6 characters.')
     if (form.password !== form.confirm) return setError('Passwords do not match.')
+    if (!consent.terms || !consent.health) return setError('Tick both boxes to create your account.')
     setLoading(true); setError('')
     const { error } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
-      options: { data: { full_name: form.name } },
+      options: { data: { full_name: form.name, ...consentMetadata() } },
     })
     if (error) setError(error.message)
     else setScreen('check-email')
@@ -129,6 +133,8 @@ export default function Auth({ initialMode = 'login', onBack }) {
                     value={form.confirm} onChange={e => set('confirm', e.target.value)} />
                 )}
 
+                {tab === 'register' && <ConsentChecks value={consent} onChange={v => { setConsent(v); setError('') }} />}
+
                 {error && <p role="alert" className="text-danger text-xs">{error}</p>}
 
                 <button type="submit" disabled={loading} className={`${PRIMARY} mt-1`}>
@@ -148,6 +154,8 @@ export default function Auth({ initialMode = 'login', onBack }) {
         <p className="text-center text-muted text-xs mt-6">
           Your photos and logs are private to your account.{' '}
           <a href="/privacypolicy.html" className="underline underline-offset-2 hover:text-ink-2">Privacy policy</a>
+          {' · '}
+          <a href="/terms.html" className="underline underline-offset-2 hover:text-ink-2">Terms of use</a>
         </p>
       </div>
     </div>
