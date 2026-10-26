@@ -37,7 +37,7 @@ Fitness PWA: AI training plans, workout logging, calorie tracking, progress. Liv
 - The exercise demo animation is commented out on purpose in `ExerciseDemo.jsx` until an ExerciseDB HD licence is bought.
 
 ## Legal
-- Operator: NANUSHKAKNOWSBETER LLC (Georgia, US); contact athrionsportapp@gmail.com. Pages: `public/privacypolicy.html` (also `/privacy`, with the consumer health data section at `#health-data`, linked from the landing footer as Washington's law asks) and `public/terms.html` (`/terms`).
+- Operator: BABUSHKAKNOWSBETTER LLC (Georgia, US); contact athrionsportapp@gmail.com. Pages: `public/privacypolicy.html` (also `/privacy`, with the consumer health data section at `#health-data`, linked from the landing footer as Washington's law asks) and `public/terms.html` (`/terms`).
 - Sign-up needs two boxes (terms, and explicit health-data consent); saved in `user_metadata` via `consentMetadata()` in `src/lib/legal.js`. Bump `LEGAL_VERSION` there after a material policy change: everyone then sees the one-time `ConsentScreen` (`components/LegalConsent.jsx`). Keep the test user's version in `tests/helpers/supabaseMock.js` in step.
 - Profile → Your data: Download my data (`src/lib/account.js`, client-side JSON) and Delete account (`api/delete-account.js`: cancels Stripe now, removes photos and every user table, then the auth user). A new user table must be added to `USER_ROWS` there and `EXPORT_TABLES` in `account.js`.
 - Minimum age 16 (onboarding age picker). No third-party trackers or Google Fonts (DM Sans is bundled via `@fontsource-variable/dm-sans`); keep it that way or the policy and cookie stance change.
