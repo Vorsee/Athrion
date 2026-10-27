@@ -1,4 +1,4 @@
-const CACHE = 'athrion-v4'
+const CACHE = 'athrion-v5'
 
 // On install: take control immediately, no waiting
 self.addEventListener('install', () => self.skipWaiting())
@@ -59,8 +59,8 @@ self.addEventListener('push', e => {
   e.waitUntil(
     self.registration.showNotification(data.title || 'ATHRION', {
       body: data.body || '',
-      icon: '/icons/icon-192.png',
-      badge: '/icons/icon-192.png',
+      icon: '/icons/app-icon-192.png',
+      badge: '/icons/app-icon-192.png',
       tag: data.tag || 'athrion-reminder',
       data: { url: data.url || '/' },
     })

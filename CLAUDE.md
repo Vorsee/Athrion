@@ -50,5 +50,5 @@ Fitness PWA: AI training plans, workout logging, calorie tracking, progress. Liv
 - After the first deploy with the new checkout works, remove `VITE_STRIPE_PRICE_ID` from Vercel. Confirm `STRIPE_SECRET_KEY` there is the live key.
 - Plan generation takes 30-60s (Opus, ~3.5-4.5k output tokens). Ideas: `AI_MODEL=claude-sonnet-5-5` secret, drop the nutrition section the server overwrites anyway, shorten per-exercise notes, show progress steps.
 - Coach shop setup in Stripe: turn on Connect (Express) for the platform, and add `charge.refunded` to the webhook's events. Refund coach sales from the Stripe dashboard with "reverse transfer" so the coach's share comes back. Check the Supabase Storage global file size limit allows 100 MB videos.
-- Not built yet: RPE / warm-up sets / supersets, Apple/Google sign-in, a 1200x630 `og:image`.
+- Not built yet: RPE / warm-up sets / supersets, Apple/Google sign-in.
 - Not yet tested on a real device: push notifications, barcode camera, health sync.
