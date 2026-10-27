@@ -5,12 +5,12 @@ export const TRIAL_DAYS = 7
 export const FREE_WORKOUT_LIMIT = 3
 
 export const PLANS = {
-  monthly: { id: 'monthly', price: 7.99, label: 'Monthly', per: 'month' },
-  annual: { id: 'annual', price: 59.99, label: 'Yearly', per: 'year' },
+  monthly: { id: 'monthly', price: 4.99, label: 'Monthly', per: 'month' },
+  annual: { id: 'annual', price: 49.99, label: 'Yearly', per: 'year' },
 }
 
-export const annualPerMonth = Math.floor((PLANS.annual.price / 12) * 100) / 100 // 4.99
-export const annualSavingPct = Math.round((1 - PLANS.annual.price / (PLANS.monthly.price * 12)) * 100) // 37
+export const annualPerMonth = Math.floor((PLANS.annual.price / 12) * 100) / 100 // 4.16
+export const annualSavingPct = Math.round((1 - PLANS.annual.price / (PLANS.monthly.price * 12)) * 100) // 17
 
 export const money = n => `$${n.toFixed(2)}`
 

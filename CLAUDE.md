@@ -5,7 +5,7 @@ Fitness PWA: AI training plans, workout logging, calorie tracking, progress. Liv
 ## Stack
 - React 18 + Vite 5 + Tailwind. Pages lazy-loaded in `src/App.jsx` (Workout is eager).
 - Supabase: Postgres with RLS, Edge Functions (Deno), Storage, pg_cron. Project ref `dbpxxhqcsfypxjcdalca`.
-- Vercel: static site + `api/` routes for Stripe (checkout, cancel, webhook). Checkout sells `monthly` / `annual` from `STRIPE_PRICE_MONTHLY` / `STRIPE_PRICE_ANNUAL` (live prices $7.99 / $59.99) with a 7-day trial for first-time subscribers. Displayed prices live in `src/lib/pricing.js` and must match Stripe.
+- Vercel: static site + `api/` routes for Stripe (checkout, cancel, webhook). Checkout sells `monthly` / `annual` from `STRIPE_PRICE_MONTHLY` / `STRIPE_PRICE_ANNUAL` (live prices $4.99 / $49.99 since Oct 27 2026, before that $7.99 / $59.99; `scripts/move-to-new-prices.mjs` moves older subscriptions) with a 7-day trial for first-time subscribers. Displayed prices live in `src/lib/pricing.js` and must match Stripe.
 - Claude API in `supabase/functions/generate-fitness-plan` (model `claude-opus-5-5`) and `analyze-meal`.
 - Capacitor wrappers in `android/` and `ios/` (not built yet; needs Xcode / Android Studio).
 

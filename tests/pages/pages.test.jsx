@@ -39,7 +39,7 @@ describe('Plan — Pro lock', () => {
     expect(screen.getByText('Example plan')).toBeInTheDocument()
     expect(screen.getByText('Weekly schedule')).toBeInTheDocument()
     expect(screen.queryByText(/2750/)).toBeNull() // its calories would contradict the person's own targets
-    expect(screen.getByText(/\$7\.99 a month or \$59\.99 a year/)).toBeInTheDocument()
+    expect(screen.getByText(/\$4\.99 a month or \$49\.99 a year/)).toBeInTheDocument()
     expect(screen.getByText('Sample: Muscle Builder').closest('[inert]')).toHaveAttribute('aria-hidden', 'true')
     expect(sb.queriesFor('fitness_plans')).toHaveLength(0) // no data loaded for free users
     await userEvent.click(screen.getByText('Get Pro'))
@@ -199,7 +199,7 @@ describe('Upgrade sheet before Stripe', () => {
     render(<P.App />)
     await userEvent.click(await screen.findByText('Plan'))
     await userEvent.click(await screen.findByText('Get Pro'))
-    expect(await screen.findByRole('radio', { name: /Yearly · \$59\.99/ })).toBeInTheDocument()
+    expect(await screen.findByRole('radio', { name: /Yearly · \$49\.99/ })).toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
     await userEvent.click(screen.getByRole('radio', { name: /Monthly/ }))
     await userEvent.click(await screen.findByText('Start 7-day free trial'))
@@ -412,7 +412,7 @@ describe('ProfileModal', () => {
   it('shows height in cm for people who use kg', () => {
     render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={{ ...profile, height_cm: 180, weight_unit: 'kg' }} isPro={false} theme="dark" onToggleTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
     expect(screen.getByText('180 cm')).toBeInTheDocument()
-    expect(screen.getByText(/Get ATHRION Pro · \$7\.99 a month/)).toBeInTheDocument()
+    expect(screen.getByText(/Get ATHRION Pro · \$4\.99 a month/)).toBeInTheDocument()
   })
   it('signs out', async () => {
     render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={profile} isPro={false} theme="dark" onToggleTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
@@ -445,7 +445,7 @@ describe('App shell', () => {
     sb.supabase.auth.getSession.mockResolvedValue({ data: { session: null } })
     render(<P.App />)
     expect(await screen.findByText('A training plan and calorie targets that adjust every week')).toBeInTheDocument()
-    expect(screen.getByText('$7.99')).toBeInTheDocument()
+    expect(screen.getByText('$4.99')).toBeInTheDocument()
     await userEvent.click(screen.getAllByText('Create free account')[0])
     expect(await screen.findByPlaceholderText('Full name')).toBeInTheDocument()
     expect(sb.supabase.from).not.toHaveBeenCalledWith('user_profiles')
