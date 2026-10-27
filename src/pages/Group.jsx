@@ -1,15 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { Icon } from '@iconify/react'
 import { useBackHandler } from '../lib/shell.js'
-import { Button, Card, Chip, Segmented, PageHeader, SectionTitle, Fact, IconButton, ExerciseRow, RankChip, SkeletonRows } from '../components/ui/index.js'
+import { Button, Card, Chip, Segmented, PageHeader, SectionTitle, Fact, InfoButton, IconButton, ExerciseRow, RankChip, SkeletonRows } from '../components/ui/index.js'
 import { NicknameCard, LeaderboardTab, FriendsTab } from '../components/Social.jsx'
 import { fetchMySocial, clearInvite } from '../lib/socialApi.js'
 import { EXERCISES, MUSCLES, getExerciseIcon, todayKey } from '../lib/data.js'
 import {
   createGroupSession,
   joinGroupSession,
-  updateSessionExercises,
-  updateExercisesOnly,
+  saveSessionPlan,
   fetchGroupSession,
   startGroupSession,
   endGroupSession,
@@ -20,6 +19,7 @@ import {
   currentUserId,
 } from '../lib/groupApi.js'
 import { standings, mergeSets } from '../lib/groupStandings.js'
+import { planFrom, makeSets, totalSets as countSets, setsDone, restAfter, restLabel, setsSummary, REST_OPTIONS, MAX_SETS } from '../lib/groupPlan.js'
 import { saveWorkoutEntry } from '../lib/api.js'
 import { useUnit } from '../lib/units.js'
 
@@ -56,9 +56,8 @@ export default function Group({ session, intent, onIntentDone }) {
   const [participants, setParticipants] = useState([])
   const [allSets, setAllSets] = useState([])
   const [isHost, setIsHost] = useState(false)
-  const [exercises, setExercises] = useState([])
-  const [totalSets, setTotalSets] = useState(3)
-  const [restSecs, setRestSecs] = useState(60)
+  const [plan, setPlan] = useState([]) // [{ name, sets: [{ reps, rest }] }], see groupPlan.js
+  const [restTotal, setRestTotal] = useState(60) // length of the rest that's running
   const [exIdx, setExIdx] = useState(0)
   const [setIdx, setSetIdx] = useState(0)
   const [weight, setWeight] = useState('')
@@ -93,9 +92,7 @@ export default function Group({ session, intent, onIntentDone }) {
   // Back from the lobby leaves the room, as its Back button did
   useBackHandler(screen === 'lobby', () => handleHome(), 'Train together')
 
-  function exNamesToObjs(names) {
-    return (names || []).map(n => EXERCISES.find(e => e.name === n)).filter(Boolean)
-  }
+  const exercises = plan.map(p => EXERCISES.find(e => e.name === p.name) ?? { name: p.name, muscle: '', icon: 'mdi:dumbbell' })
 
   const SESSION_PERSIST_KEY = 'athrion_group_session_state'
 
@@ -118,9 +115,8 @@ export default function Group({ session, intent, onIntentDone }) {
       setExIdx(state.exIdx || 0)
       setSetIdx(state.setIdx || 0)
       setStartTime(state.startTime || null)
-      setExercises(exNamesToObjs(sess.exercises))
-      setTotalSets(sess.total_sets || 3)
-      setRestSecs(sess.rest_secs || 60)
+      if (state.restTotal) setRestTotal(state.restTotal)
+      setPlan(planFrom(sess))
       const target = state.screen && state.screen !== 'done' ? state.screen : (sess.status === 'lobby' ? 'lobby' : 'training')
       goScreen(target)
     }).catch(() => {
@@ -138,9 +134,10 @@ export default function Group({ session, intent, onIntentDone }) {
       exIdx,
       setIdx,
       startTime,
+      restTotal,
       name: displayName,
     }))
-  }, [groupSession?.id, screen, isHost, exIdx, setIdx, startTime, displayName])
+  }, [groupSession?.id, screen, isHost, exIdx, setIdx, startTime, restTotal, displayName])
 
   // Realtime subscription
   useEffect(() => {
@@ -158,13 +155,10 @@ export default function Group({ session, intent, onIntentDone }) {
       },
       onSessionUpdate: (updated) => {
         setGroupSession(updated)
-        // Update exercises shown in lobby for all participants
-        if (updated.exercises) setExercises(exNamesToObjs(updated.exercises))
+        // The host's edits show in everyone's lobby; once training, the plan stays as it started
+        if (screenRef.current === 'lobby' && !hostEditing.current) setPlan(planFrom(updated))
         // Transition everyone from lobby → training when host starts
         if (updated.status === 'active' && screenRef.current === 'lobby') {
-          setExercises(exNamesToObjs(updated.exercises))
-          setTotalSets(updated.total_sets || 3)
-          setRestSecs(updated.rest_secs || 60)
           setStartTime(Date.now())
           goScreen('training')
         }
@@ -190,11 +184,8 @@ export default function Group({ session, intent, onIntentDone }) {
         if (sets) setAllSets(prev => mergeSets(prev, sets))
         if (sess) {
           setGroupSession(sess)
-          if (sess.exercises) setExercises(exNamesToObjs(sess.exercises))
+          if (screenRef.current === 'lobby' && !hostEditing.current) setPlan(planFrom(sess))
           if (sess.status === 'active' && screenRef.current === 'lobby') {
-            setExercises(exNamesToObjs(sess.exercises))
-            setTotalSets(sess.total_sets || 3)
-            setRestSecs(sess.rest_secs || 60)
             setStartTime(Date.now())
             goScreen('training')
           }
@@ -211,7 +202,7 @@ export default function Group({ session, intent, onIntentDone }) {
 
     const endKey = 'athrion_group_rest_end'
     if (!localStorage.getItem(endKey)) {
-      localStorage.setItem(endKey, String(Date.now() + restSecs * 1000))
+      localStorage.setItem(endKey, String(Date.now() + restTotal * 1000))
     }
 
     function tick() {
@@ -235,9 +226,9 @@ export default function Group({ session, intent, onIntentDone }) {
   function advanceAfterRest() {
     localStorage.removeItem('athrion_group_rest_end')
     const nextSet = setIdx + 1
-    if (nextSet >= totalSets) {
+    if (nextSet >= (plan[exIdx]?.sets.length ?? 0)) {
       const nextEx = exIdx + 1
-      if (nextEx >= exercises.length) {
+      if (nextEx >= plan.length) {
         saveGroupWorkoutToHistory()
         goScreen('done')
         return
@@ -250,29 +241,24 @@ export default function Group({ session, intent, onIntentDone }) {
     goScreen('training')
   }
 
-  async function handleAddExercise(ex) {
-    if (exercises.find(e => e.name === ex.name)) return
-    const next = [...exercises, ex]
-    setExercises(next)
-    try { await updateExercisesOnly(groupSession.id, next.map(e => e.name)) } catch {}
-  }
-
-  async function handleRemoveExercise(idx) {
-    const next = exercises.filter((_, i) => i !== idx)
-    setExercises(next)
-    try { await updateExercisesOnly(groupSession.id, next.map(e => e.name)) } catch {}
+  // Only the host edits the room (RLS allows only them). Their own polling mustn't undo an
+  // edit that's still saving, so it waits until the last save lands.
+  const hostEditing = useRef(0)
+  async function editPlan(next) {
+    setPlan(next)
+    hostEditing.current++
+    try { await saveSessionPlan(groupSession.id, next) } catch (err) { console.error(err) }
+    finally { hostEditing.current-- }
   }
 
   async function handleCreate() {
     setLoading(true)
     try {
-      const sess = await createGroupSession({ exercises: [], totalSets: 3, restSecs: 60, displayName })
+      const sess = await createGroupSession({ displayName })
       setRoomName(displayName)
       setGroupSession(sess)
       setIsHost(true)
-      setExercises([])
-      setTotalSets(3)
-      setRestSecs(60)
+      setPlan([])
       goScreen('lobby')
     } catch (err) {
       setJoinError(err.message)
@@ -289,9 +275,7 @@ export default function Group({ session, intent, onIntentDone }) {
       setRoomName(displayName)
       setGroupSession(sess)
       setIsHost(false)
-      setExercises(exNamesToObjs(sess.exercises))
-      setTotalSets(sess.total_sets || 3)
-      setRestSecs(sess.rest_secs || 60)
+      setPlan(planFrom(sess))
       goScreen('lobby')
     } catch (err) {
       setJoinError(err.message)
@@ -301,9 +285,9 @@ export default function Group({ session, intent, onIntentDone }) {
   }
 
   async function handleStartWorkout() {
-    if (!groupSession?.id || exercises.length === 0) return
+    if (!groupSession?.id || plan.length === 0) return
     try {
-      await updateSessionExercises(groupSession.id, exercises.map(e => e.name), totalSets, restSecs)
+      await saveSessionPlan(groupSession.id, plan)
       await startGroupSession(groupSession.id)
       setExIdx(0); setSetIdx(0); setWeight(''); setReps('')
       setStartTime(Date.now())
@@ -316,10 +300,12 @@ export default function Group({ session, intent, onIntentDone }) {
     const r = parseInt(reps)
     if (!(w >= 0) || !(r >= 1)) return
     try {
-      const row = await logGroupSet({ sessionId: groupSession.id, displayName, exercise: exercises[exIdx]?.name, setNum: setIdx + 1, weight: w, reps: r })
+      const row = await logGroupSet({ sessionId: groupSession.id, displayName, exercise: plan[exIdx]?.name, setNum: setIdx + 1, weight: w, reps: r })
       if (row) setAllSets(prev => mergeSets(prev, [row]))
-      setRestLeft(restSecs)
-      localStorage.setItem('athrion_group_rest_end', String(Date.now() + restSecs * 1000))
+      const rest = restAfter(plan, exIdx, setIdx)
+      if (!rest) { advanceAfterRest(); return } // no rest set for this one, or the workout is done
+      setRestTotal(rest); setRestLeft(rest)
+      localStorage.setItem('athrion_group_rest_end', String(Date.now() + rest * 1000))
       goScreen('rest')
     } catch (err) { console.error(err) }
   }
@@ -356,7 +342,7 @@ export default function Group({ session, intent, onIntentDone }) {
   function handleHome() {
     goScreen('home')
     setGroupSession(null); setParticipants([]); setAllSets([]); setIsHost(false)
-    setExercises([]); setExIdx(0); setSetIdx(0); setWeight(''); setReps('')
+    setPlan([]); setExIdx(0); setSetIdx(0); setWeight(''); setReps('')
     setJoinCode(''); setJoinError(''); setConfirmEnd(false); setRoomName(null)
     localStorage.removeItem('athrion_group_rest_end')
     localStorage.removeItem(SESSION_PERSIST_KEY)
@@ -404,13 +390,8 @@ export default function Group({ session, intent, onIntentDone }) {
       groupSession={groupSession}
       participants={participants}
       isHost={isHost}
-      exercises={exercises}
-      onAddExercise={handleAddExercise}
-      onRemoveExercise={handleRemoveExercise}
-      totalSets={totalSets}
-      setTotalSets={setTotalSets}
-      restSecs={restSecs}
-      setRestSecs={setRestSecs}
+      plan={plan}
+      onChange={editPlan}
       onStart={handleStartWorkout}
       onBack={handleHome}
     />
@@ -418,14 +399,13 @@ export default function Group({ session, intent, onIntentDone }) {
 
   if (screen === 'training') return (
     <TrainingScreen
+      plan={plan}
       exercises={exercises}
       exIdx={exIdx}
       setIdx={setIdx}
-      totalSets={totalSets}
       participants={participants}
       allSets={allSets}
       myId={myId}
-      restSecs={restSecs}
       weight={weight}
       setWeight={setWeight}
       reps={reps}
@@ -439,12 +419,11 @@ export default function Group({ session, intent, onIntentDone }) {
 
   if (screen === 'rest') return (
     <RestScreen
-      exercises={exercises}
+      plan={plan}
       exIdx={exIdx}
       setIdx={setIdx}
-      totalSets={totalSets}
       restLeft={restLeft}
-      restSecs={restSecs}
+      restSecs={restTotal}
       allSets={allSets}
       participants={participants}
       myId={myId}
@@ -456,10 +435,9 @@ export default function Group({ session, intent, onIntentDone }) {
   if (screen === 'done') return (
     <DoneScreen
       allSets={allSets}
+      plan={plan}
       exercises={exercises}
       participants={participants}
-      totalSets={totalSets}
-      restSecs={restSecs}
       myId={myId}
       startTime={startTime}
       onHome={handleHome}
@@ -509,10 +487,11 @@ function HomeScreen({ joinCode, setJoinCode, joinError, loading, onCreate, onJoi
 // Lobby
 // ─────────────────────────────────────────────────────────────────────────────
 
-function LobbyScreen({ groupSession, participants, isHost, exercises, onAddExercise, onRemoveExercise, totalSets, setTotalSets, restSecs, setRestSecs, onStart, onBack }) {
+function LobbyScreen({ groupSession, participants, isHost, plan, onChange, onStart, onBack }) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('All')
   const [copied, setCopied] = useState(false)
+  const [open, setOpen] = useState(null) // index of the exercise whose sets are being edited
 
   const filtered = EXERCISES.filter(e => {
     const matchSearch = e.name.toLowerCase().includes(search.toLowerCase()) || e.muscle.toLowerCase().includes(search.toLowerCase())
@@ -520,10 +499,34 @@ function LobbyScreen({ groupSession, participants, isHost, exercises, onAddExerc
     return matchSearch && matchMuscle
   })
 
+  // Quick setup shows a value only while every set in the room matches it
+  const allSets = plan.flatMap(e => e.sets)
+  const sameCount = plan.length && plan.every(e => e.sets.length === plan[0].sets.length) ? plan[0].sets.length : null
+  const sameRest = allSets.length && allSets.every(x => x.rest === allSets[0].rest) ? allSets[0].rest : null
+  const [defaults, setDefaults] = useState({ sets: 3, rest: 60 })
+
   function copyCode() {
     navigator.clipboard.writeText(groupSession?.code || '').then(() => {
       setCopied(true); setTimeout(() => setCopied(false), 2000)
     })
+  }
+
+  const edit = (i, sets) => onChange(plan.map((e, j) => (j === i ? { ...e, sets } : e)))
+  function addExercise(ex) {
+    if (plan.some(e => e.name === ex.name)) return
+    onChange([...plan, { name: ex.name, sets: makeSets(sameCount ?? defaults.sets, sameRest ?? defaults.rest) }])
+  }
+  function removeExercise(i) {
+    onChange(plan.filter((_, j) => j !== i))
+    setOpen(null)
+  }
+  function setAllCounts(n) {
+    setDefaults(d => ({ ...d, sets: n }))
+    onChange(plan.map(e => ({ ...e, sets: Array.from({ length: n }, (_, k) => e.sets[k] ?? { ...e.sets[e.sets.length - 1] }) })))
+  }
+  function setAllRest(r) {
+    setDefaults(d => ({ ...d, rest: r }))
+    onChange(plan.map(e => ({ ...e, sets: e.sets.map(x => ({ ...x, rest: r })) })))
   }
 
   return (
@@ -558,62 +561,95 @@ function LobbyScreen({ groupSession, participants, isHost, exercises, onAddExerc
         </div>
       </Card>
 
-      {/* Host-only config */}
+      {/* Host: one tap sets every exercise, then each set can be changed below */}
       {isHost && (
         <Card>
-          <SectionTitle>Sets per exercise</SectionTitle>
-          <Segmented options={[1,2,3,4,5].map(n => [n, String(n)])} value={totalSets} onChange={setTotalSets} label="Sets per exercise" kind="choice" className="mb-4" scroll={false} />
-          <div className="text-lg leading-[1.3] font-semibold text-ink mb-3">Rest</div>
-          <Segmented options={[30,45,60,90,120].map(s => [s, `${s}s`])} value={restSecs} onChange={setRestSecs} label="Rest duration" kind="choice" scroll={false} />
+          <SectionTitle action={
+            <InfoButton title="Sets and rest">
+              <div className="space-y-3 text-sm text-ink-2">
+                <p><span className="font-semibold text-ink">Quick setup</span> gives every exercise the same sets and rest. Start here, then change single sets.</p>
+                <p><span className="font-semibold text-ink">Edit sets</span> on an exercise to add or remove sets, give each one a reps target, and choose the rest after it.</p>
+                <p>Rest starts when a set is logged. The rest after an exercise's last set is the break before the next exercise.</p>
+              </div>
+            </InfoButton>
+          }>Quick setup</SectionTitle>
+          <Segmented options={[1,2,3,4,5].map(n => [n, String(n)])} value={sameCount ?? (plan.length ? null : defaults.sets)} onChange={setAllCounts} label="Sets per exercise" kind="choice" className="mb-4" scroll={false} />
+          <div className="text-lg leading-[1.3] font-semibold text-ink mb-3">Rest after each set</div>
+          <Segmented options={[30,45,60,90,120].map(r => [r, `${r}s`])} value={sameRest ?? (plan.length ? null : defaults.rest)} onChange={setAllRest} label="Rest after each set" kind="choice" scroll={false} />
         </Card>
       )}
 
-      {/* Exercise list — all participants can edit */}
-      {exercises.length > 0 && (
+      {/* The workout, set by set */}
+      {plan.length > 0 && (
         <Card>
-          <SectionTitle action={<Fact icon="mdi:dumbbell">{exercises.length}</Fact>}>Workout</SectionTitle>
+          <SectionTitle action={<Fact icon="mdi:dumbbell">{plan.length}</Fact>}>Workout</SectionTitle>
           <div className="space-y-2">
-            {exercises.map((ex, i) => (
-              <ExerciseRow key={i} icon={getExerciseIcon(ex)} name={ex.name} value={`${totalSets} sets`}>
-                <IconButton icon="mdi:close" label={`Remove ${ex.name}`} tone="danger" onClick={() => onRemoveExercise(i)} className="w-9 h-9" />
-              </ExerciseRow>
-            ))}
+            {plan.map((e, i) => {
+              const ex = EXERCISES.find(x => x.name === e.name)
+              const rests = [...new Set(e.sets.map(x => x.rest))]
+              const restText = rests.length === 1 ? `Rest ${restLabel(rests[0]).toLowerCase()}` : 'Rest varies'
+              return isHost ? (
+                <div key={e.name} className="bg-raised rounded-xl">
+                  <div className="flex items-center gap-3 px-3 py-2.5">
+                    <Icon icon={getExerciseIcon(ex)} width={22} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-ink truncate">{e.name}</div>
+                      <div className="text-xs text-muted truncate">{setsSummary(e.sets)} · {restText}</div>
+                    </div>
+                    <button type="button" onClick={() => setOpen(open === i ? null : i)} aria-expanded={open === i}
+                      className="press text-xs font-semibold text-neon-ink min-h-[36px] px-2 rounded-md">
+                      {open === i ? 'Done' : 'Edit sets'}
+                    </button>
+                    <IconButton icon="mdi:close" label={`Remove ${e.name}`} tone="danger" onClick={() => removeExercise(i)} className="w-9 h-9" />
+                  </div>
+                  {open === i && (
+                    <SetEditor sets={e.sets} name={e.name} lastExercise={i === plan.length - 1} onChange={sets => edit(i, sets)} />
+                  )}
+                </div>
+              ) : (
+                <ExerciseRow key={e.name} icon={getExerciseIcon(ex)} name={e.name} meta={restText} value={setsSummary(e.sets)} />
+              )
+            })}
           </div>
         </Card>
       )}
 
-      {/* Exercise picker — open to everyone */}
-      <Card>
-        <SectionTitle>Add exercises</SectionTitle>
-        <input
-          className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-3 py-2.5 text-sm outline-none transition-colors mb-3"
-          placeholder="Search exercises"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
-        <div className="flex gap-1.5 overflow-x-auto pb-2 mb-3" style={{ scrollbarWidth: 'none' }}>
-          {['All', ...MUSCLES.filter(m => m !== 'All')].map(m => (
-            <Chip key={m} selected={filter === m} onClick={() => setFilter(m)}>{m}</Chip>
-          ))}
-        </div>
-        <div className="space-y-2 max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
-          {filtered.map((ex, i) => {
-            const added = exercises.some(e => e.name === ex.name)
-            return (
-              <ExerciseRow key={i} icon={getExerciseIcon(ex)} name={ex.name} meta={ex.muscle}>
-                {added
-                  ? <span className="w-9 h-9 flex items-center justify-center text-neon-ink"><Icon icon="mdi:check" width={20} aria-label="Added" /></span>
-                  : <Button size="sm" icon="mdi:plus" onClick={() => onAddExercise(ex)}>Add</Button>}
-              </ExerciseRow>
-            )
-          })}
-        </div>
-      </Card>
+      {/* Exercise picker: the host builds the workout */}
+      {isHost ? (
+        <Card>
+          <SectionTitle>Add exercises</SectionTitle>
+          <input
+            className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-3 py-2.5 text-sm outline-none transition-colors mb-3"
+            placeholder="Search exercises"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          <div className="flex gap-1.5 overflow-x-auto pb-2 mb-3" style={{ scrollbarWidth: 'none' }}>
+            {['All', ...MUSCLES.filter(m => m !== 'All')].map(m => (
+              <Chip key={m} selected={filter === m} onClick={() => setFilter(m)}>{m}</Chip>
+            ))}
+          </div>
+          <div className="space-y-2 max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
+            {filtered.map((ex, i) => {
+              const added = plan.some(e => e.name === ex.name)
+              return (
+                <ExerciseRow key={i} icon={getExerciseIcon(ex)} name={ex.name} meta={ex.muscle}>
+                  {added
+                    ? <span className="w-9 h-9 flex items-center justify-center text-neon-ink"><Icon icon="mdi:check" width={20} aria-label="Added" /></span>
+                    : <Button size="sm" icon="mdi:plus" onClick={() => addExercise(ex)}>Add</Button>}
+                </ExerciseRow>
+              )
+            })}
+          </div>
+        </Card>
+      ) : plan.length === 0 && (
+        <div className="text-sm text-muted text-center py-2">The host is choosing the exercises.</div>
+      )}
 
       {/* Host starts; participants wait */}
       {isHost ? (
         <>
-          <Button full icon="mdi:play" onClick={onStart} disabled={exercises.length === 0}>
+          <Button full icon="mdi:play" onClick={onStart} disabled={plan.length === 0}>
             Start workout
           </Button>
         </>
@@ -622,6 +658,48 @@ function LobbyScreen({ groupSession, participants, isHost, exercises, onAddExerc
           <div className="w-2 h-2 rounded-full bg-neon animate-pulse" />
           <span className="text-sm text-muted">Waiting for host to start...</span>
         </div>
+      )}
+    </div>
+  )
+}
+
+const SET_INPUT = 'bg-surface border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-lg px-2 h-10 text-sm font-semibold tabular-nums outline-none transition-colors'
+
+// One row per set: reps target and the rest that follows it
+function SetEditor({ sets, name, lastExercise, onChange }) {
+  const change = (k, patch) => onChange(sets.map((x, j) => (j === k ? { ...x, ...patch } : x)))
+  return (
+    <div className="px-3 pb-3 space-y-2">
+      <div className="grid grid-cols-[3.25rem_1fr_1.4fr_2.25rem] gap-2 text-xs text-muted px-0.5" aria-hidden="true">
+        <span>Set</span><span>Reps</span><span>Rest after</span><span />
+      </div>
+      {sets.map((x, k) => {
+        const last = k === sets.length - 1
+        const noRest = last && lastExercise
+        return (
+          <div key={k} className="grid grid-cols-[3.25rem_1fr_1.4fr_2.25rem] gap-2 items-center">
+            <span className="text-sm font-semibold text-ink-2 tabular-nums">{k + 1}</span>
+            <input type="number" inputMode="numeric" min="1" max="100" placeholder="Any" value={x.reps ?? ''}
+              aria-label={`${name}, set ${k + 1} reps target`}
+              onChange={e => change(k, { reps: e.target.value === '' ? null : Math.max(1, Math.min(100, parseInt(e.target.value) || 1)) })}
+              className={`${SET_INPUT} w-full text-center`} />
+            {noRest ? (
+              <span className="text-xs text-muted">End of workout</span>
+            ) : (
+              <select value={x.rest} aria-label={last ? `${name}, rest before the next exercise` : `${name}, rest after set ${k + 1}`}
+                onChange={e => change(k, { rest: Number(e.target.value) })}
+                className={`${SET_INPUT} w-full`}>
+                {REST_OPTIONS.map(r => <option key={r} value={r}>{last ? `${restLabel(r)} to next` : restLabel(r)}</option>)}
+              </select>
+            )}
+            {sets.length > 1
+              ? <IconButton icon="mdi:minus-circle-outline" label={`Remove set ${k + 1} of ${name}`} onClick={() => onChange(sets.filter((_, j) => j !== k))} className="w-9 h-9" />
+              : <span />}
+          </div>
+        )
+      })}
+      {sets.length < MAX_SETS && (
+        <Button size="sm" variant="secondary" icon="mdi:plus" onClick={() => onChange([...sets, { ...sets[sets.length - 1] }])}>Add set</Button>
       )}
     </div>
   )
@@ -699,17 +777,20 @@ function EndEarly({ onEnd, confirm, setConfirm }) {
 // Training
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TrainingScreen({ exercises, exIdx, setIdx, totalSets, participants, allSets, myId, restSecs, weight, setWeight, reps, setReps, onLog, onEnd, confirmEnd, setConfirmEnd }) {
+function TrainingScreen({ plan, exercises, exIdx, setIdx, participants, allSets, myId, weight, setWeight, reps, setReps, onLog, onEnd, confirmEnd, setConfirmEnd }) {
   const { unit } = useUnit()
   const now = useNow()
   const ex = exercises[exIdx]
   if (!ex) return null
+  const sets = plan[exIdx].sets
+  const target = sets[setIdx]?.reps
+  const rest = restAfter(plan, exIdx, setIdx)
   // My own row follows this screen: I'm lifting, whatever my last set's time says
-  const rows = standings({ sets: allSets, participants, exercises, totalSets, restSecs, now })
-    .map(r => r.id === myId ? { ...r, resting: false, where: `${ex.name} · set ${setIdx + 1}/${totalSets}` } : r)
+  const rows = standings({ sets: allSets, participants, plan, now })
+    .map(r => r.id === myId ? { ...r, resting: false, where: `${ex.name} · set ${setIdx + 1}/${sets.length}` } : r)
   const mine = rows.find(r => r.id === myId)
-  const total = exercises.length * totalSets
-  const done = mine?.done ?? exIdx * totalSets + setIdx
+  const total = countSets(plan)
+  const done = mine?.done ?? setsDone(plan, exIdx, setIdx)
   const next = exercises[exIdx + 1]
 
   return (
@@ -733,11 +814,13 @@ function TrainingScreen({ exercises, exIdx, setIdx, totalSets, participants, all
           <div className="font-bold text-2xl text-ink leading-tight break-words">{ex.name}</div>
         </div>
         <div className="flex flex-wrap gap-1.5 mt-2">
-          <Fact icon="mdi:repeat">Set {setIdx + 1} of {totalSets}</Fact>
+          <Fact icon="mdi:repeat">Set {setIdx + 1} of {sets.length}</Fact>
+          {target && <Fact icon="mdi:target">Target {target} reps</Fact>}
+          {rest > 0 && <Fact icon="mdi:timer-sand">Then rest {restLabel(rest).toLowerCase()}</Fact>}
           {next && <Fact icon="mdi:arrow-right">Next: {next.name}</Fact>}
         </div>
         <div className="flex gap-1.5 mt-4" aria-hidden="true">
-          {Array.from({ length: totalSets }, (_, i) => (
+          {sets.map((_, i) => (
             <div key={i} className={`flex-1 h-2 rounded-full transition-colors duration-300 ${i < setIdx ? 'bg-neon' : i === setIdx ? 'bg-neon/40' : 'bg-line'}`} />
           ))}
         </div>
@@ -757,7 +840,7 @@ function TrainingScreen({ exercises, exIdx, setIdx, totalSets, participants, all
           <div>
             <label className="text-sm font-semibold text-ink-2 block mb-1">Reps</label>
             <input
-              type="number" placeholder="0" aria-label="Reps" value={reps}
+              type="number" placeholder={target ? String(target) : '0'} aria-label="Reps" value={reps}
               onChange={e => setReps(e.target.value)} min="1" inputMode="numeric"
               className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-2xl font-bold tabular-nums text-center outline-none transition-colors"
             />
@@ -778,11 +861,12 @@ function TrainingScreen({ exercises, exIdx, setIdx, totalSets, participants, all
 // Rest: the timer, then everyone's standing
 // ─────────────────────────────────────────────────────────────────────────────
 
-function RestScreen({ exercises, exIdx, setIdx, totalSets, restLeft, restSecs, allSets, participants, myId, onSkip, onEnd }) {
+function RestScreen({ plan, exIdx, setIdx, restLeft, restSecs, allSets, participants, myId, onSkip, onEnd }) {
   const [confirmEnd, setConfirmEnd] = useState(false)
   const now = useNow()
-  const ex = exercises[exIdx]
-  const rows = standings({ sets: allSets, participants, exercises, totalSets, restSecs, now })
+  const ex = plan[exIdx]
+  const upNext = setIdx + 1 < (ex?.sets.length ?? 0) ? `${ex.name}, set ${setIdx + 2}` : plan[exIdx + 1]?.name
+  const rows = standings({ sets: allSets, participants, plan, now })
   const place = rows.findIndex(r => r.id === myId) + 1
 
   const pct = Math.min(1, restLeft / restSecs) * 100
@@ -808,6 +892,7 @@ function RestScreen({ exercises, exIdx, setIdx, totalSets, restLeft, restSecs, a
             <div className="text-xs font-medium text-muted">rest</div>
           </div>
         </div>
+        {upNext && <div className="text-sm text-ink-2 mb-1">Next: <span className="font-semibold text-ink">{upNext}</span></div>}
         {place > 0 && rows.length > 1 && (
           <div className="text-sm text-ink-2 mb-3">You're <span className="font-bold text-neon-ink">#{place}</span> of {rows.length}</div>
         )}
@@ -825,11 +910,11 @@ function RestScreen({ exercises, exIdx, setIdx, totalSets, restLeft, restSecs, a
 // Done: final standings, updating while others finish
 // ─────────────────────────────────────────────────────────────────────────────
 
-function DoneScreen({ allSets, exercises, participants, totalSets, restSecs, myId, startTime, onHome }) {
+function DoneScreen({ allSets, plan, exercises, participants, myId, startTime, onHome }) {
   const { fmtVolume } = useUnit()
   const now = useNow()
   const duration = startTime ? Math.round((now - startTime) / 60000) : 0
-  const rows = standings({ sets: allSets, participants, exercises, totalSets, restSecs, now })
+  const rows = standings({ sets: allSets, participants, plan, now })
   const going = rows.filter(r => !r.finished).length
   const leader = rows[0]
   const myName = rows.find(r => r.id === myId)?.name

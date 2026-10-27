@@ -26,7 +26,8 @@ describe('database policies (SQL migrations)', () => {
     for (const f of sqlFiles) {
       for (const m of read(f).matchAll(/create policy[\s\S]*?;/gi)) {
         if (PUBLIC_READS.some(re => re.test(m[0]))) continue
-        expect(m[0], `${f}: ${m[0].slice(0, 80)}`).toMatch(/auth\.uid\(\)|is_group_participant|team_members/i)
+        // can_view_product / can_view_coach_video check auth.uid() inside (014)
+        expect(m[0], `${f}: ${m[0].slice(0, 80)}`).toMatch(/auth\.uid\(\)|is_group_participant|team_members|can_view_product|can_view_coach_video/i)
       }
     }
   })

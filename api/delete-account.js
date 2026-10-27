@@ -7,11 +7,13 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-const PHOTO_BUCKET = 'progress-photos'
+// Each keeps a person's files in a folder named after their id
+const BUCKETS = ['progress-photos', 'coach-videos', 'coach-avatars']
 
 // Every table with the person's rows, children before parents. Most also cascade from
 // auth.users, but group_sets doesn't, and deleting explicitly doesn't depend on the schema.
 const USER_ROWS = [
+  ['coach_purchases', 'buyer_id'], ['coach_products', 'coach_id'], ['coach_profiles', 'user_id'],
   ['group_sets', 'user_id'], ['group_participants', 'user_id'], ['group_sessions', 'host_id'],
   ['friendships', 'requester'], ['friendships', 'addressee'],
   ['notifications', 'user_id'], ['open_workouts', 'user_id'], ['monthly_scores', 'user_id'],
@@ -23,15 +25,15 @@ const USER_ROWS = [
   ['user_profiles', 'user_id'],
 ]
 
-// Progress photos live in the user's own folder; list in pages until it's empty
-async function removePhotos(uid) {
-  const bucket = supabase.storage.from(PHOTO_BUCKET)
+// List the user's folder in pages and remove it until it's empty
+async function removeFolder(name, uid) {
+  const bucket = supabase.storage.from(name)
   for (;;) {
     const { data, error } = await bucket.list(uid, { limit: 1000 })
-    if (error) throw new Error(`Photos: ${error.message}`)
+    if (error) throw new Error(`${name}: ${error.message}`)
     if (!data?.length) return
     const { error: rmErr } = await bucket.remove(data.map(f => `${uid}/${f.name}`))
-    if (rmErr) throw new Error(`Photos: ${rmErr.message}`)
+    if (rmErr) throw new Error(`${name}: ${rmErr.message}`)
     if (data.length < 1000) return
   }
 }
@@ -62,7 +64,7 @@ export default async function handler(req, res) {
       }
     }
 
-    await removePhotos(user.id)
+    for (const b of BUCKETS) await removeFolder(b, user.id)
 
     for (const [table, column] of USER_ROWS) {
       const { error } = await supabase.from(table).delete().eq(column, user.id)

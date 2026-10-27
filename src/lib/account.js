@@ -3,6 +3,7 @@ import { supabase } from './supabase.js'
 import { postAsUser } from './stripe.js'
 import { signOut } from './session.js'
 import { todayKey } from './data.js'
+import { COACH_COLUMNS } from './coachApi.js'
 
 // Row-level security limits each read to the signed-in person's rows
 const EXPORT_TABLES = [
@@ -10,6 +11,12 @@ const EXPORT_TABLES = [
   'workout_logs', 'custom_workouts', 'calorie_logs', 'body_measurements', 'daily_health',
   'progress_photos', 'user_badges', 'reminder_settings', 'social_profiles', 'monthly_scores',
   'notifications', 'subscriptions',
+]
+// Tables keyed by another column, or (coach_profiles) only readable column by column
+const EXPORT_OTHER = [
+  ['coach_profiles', 'user_id', COACH_COLUMNS],
+  ['coach_products', 'coach_id', '*'],
+  ['coach_purchases', 'buyer_id', '*'],
 ]
 
 export async function collectMyData() {
@@ -19,8 +26,8 @@ export async function collectMyData() {
     exported_at: new Date().toISOString(),
     account: { id: user.id, email: user.email, created_at: user.created_at, metadata: user.user_metadata },
   }
-  await Promise.all(EXPORT_TABLES.map(async t => {
-    const { data, error } = await supabase.from(t).select('*').eq('user_id', user.id)
+  await Promise.all([...EXPORT_TABLES.map(t => [t, 'user_id', '*']), ...EXPORT_OTHER].map(async ([t, col, cols]) => {
+    const { data, error } = await supabase.from(t).select(cols).eq(col, user.id)
     out[t] = error ? { error: error.message } : data ?? []
   }))
   const { data: friends } = await supabase.rpc('my_friends')

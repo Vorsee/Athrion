@@ -187,7 +187,7 @@ describe('groupApi.js', () => {
   it('creates a room with a readable 6-character code and joins the host', async () => {
     sb.set('group_sessions', ok({ id: 's1' }))
     sb.set('group_participants', ok(null))
-    await group.createGroupSession({ exercises: ['Squat'], totalSets: 3, restSecs: 60, displayName: 'Sam' })
+    await group.createGroupSession({ displayName: 'Sam' })
     const [row] = sb.op(last('group_sessions'), 'insert')
     expect(row.code).toMatch(/^[A-HJ-NP-Z2-9]{6}$/)
     expect(row).toMatchObject({ host_id: USER.id, status: 'lobby' })
@@ -205,8 +205,9 @@ describe('groupApi.js', () => {
   })
   it('updates, starts and ends sessions and logs sets', async () => {
     sb.set('group_sessions', ok({ id: 's1' }))
-    await group.updateSessionExercises('s1', ['A'], 4, 90)
-    await group.updateExercisesOnly('s1', ['B'])
+    const plan = [{ name: 'A', sets: [{ reps: 5, rest: 90 }, { reps: 5, rest: 60 }] }, { name: 'B', sets: [{ reps: null, rest: 30 }] }]
+    await group.saveSessionPlan('s1', plan)
+    expect(sb.op(last('group_sessions'), 'update')[0]).toEqual({ plan, exercises: ['A', 'B'], total_sets: 2, rest_secs: 90 })
     await group.startGroupSession('s1')
     expect(sb.op(last('group_sessions'), 'update')[0]).toEqual({ status: 'active' })
     await group.endGroupSession('s1')
@@ -218,6 +219,12 @@ describe('groupApi.js', () => {
     expect(await group.fetchGroupSets('s1')).toEqual([])
     sb.set('group_participants', ok(null))
     expect(await group.fetchParticipants('s1')).toEqual([])
+  })
+  it('saves the old columns alone while the plan column (013) is missing', async () => {
+    let calls = 0
+    sb.set('group_sessions', () => (++calls === 1 ? { error: { message: "Could not find the 'plan' column of 'group_sessions' in the schema cache" } } : { error: null }))
+    await group.saveSessionPlan('s1', [{ name: 'A', sets: [{ reps: null, rest: 45 }] }])
+    expect(sb.op(last('group_sessions'), 'update')[0]).toEqual({ exercises: ['A'], total_sets: 1, rest_secs: 45 })
   })
   it('subscribes to realtime changes filtered to the session and unsubscribes', () => {
     const unsub = group.subscribeToGroupSession('s1', { onSet: vi.fn(), onParticipant: vi.fn(), onSessionUpdate: vi.fn() })

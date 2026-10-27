@@ -29,6 +29,8 @@ function createMock() {
     remove: vi.fn(async () => ({ error: null })),
     list: vi.fn(async () => ({ data: [], error: null })),
     createSignedUrls: vi.fn(async paths => ({ data: paths.map(p => ({ signedUrl: `https://signed/${p}` })) })),
+    createSignedUrl: vi.fn(async p => ({ data: { signedUrl: `https://signed/${p}` }, error: null })),
+    getPublicUrl: vi.fn(p => ({ data: { publicUrl: `https://public/${p}` } })),
   }
   const channel = { on: vi.fn(() => channel), subscribe: vi.fn(() => channel) }
 

@@ -6,6 +6,8 @@ const stripe = {
   checkout: { sessions: { create: vi.fn() } },
   subscriptions: { update: vi.fn(), retrieve: vi.fn(), cancel: vi.fn() },
   webhooks: { constructEvent: vi.fn() },
+  accounts: { create: vi.fn(), retrieve: vi.fn(), createLoginLink: vi.fn() },
+  accountLinks: { create: vi.fn() },
 }
 vi.mock('stripe', () => ({ default: vi.fn(() => stripe) }))
 vi.mock('@supabase/supabase-js', () => ({ createClient: vi.fn(() => sb.supabase) }))
@@ -24,7 +26,7 @@ function res() {
   return r
 }
 
-let checkout, cancel, webhook, deleteAccount
+let checkout, cancel, webhook, deleteAccount, coachCheckout, coachConnect
 beforeEach(async () => {
   sb.reset()
   vi.clearAllMocks()
@@ -38,6 +40,8 @@ beforeEach(async () => {
   cancel = (await import('../../api/cancel-subscription.js')).default
   webhook = (await import('../../api/stripe-webhook.js')).default
   deleteAccount = (await import('../../api/delete-account.js')).default
+  coachCheckout = (await import('../../api/coach-checkout.js')).default
+  coachConnect = (await import('../../api/coach-connect.js')).default
 })
 
 describe('POST /api/create-checkout', () => {
@@ -296,5 +300,119 @@ describe('POST /api/delete-account', () => {
     const r = res()
     await deleteAccount(authed(), r)
     expect(r.body).toEqual({ deleted: true })
+  })
+})
+
+describe('POST /api/coach-checkout', () => {
+  const auth = { authorization: 'Bearer jwt' }
+  const PID = '11111111-2222-3333-4444-555555555555'
+  const product = { id: PID, title: 'Leg day', price_cents: 1000, published: true, coach_id: 'coach-1' }
+  const coach = { status: 'approved', stripe_account_id: 'acct_1', charges_enabled: true }
+  const setup = (p = product, c = coach, owned = null) => {
+    sb.set('coach_products', { data: p, error: null })
+    sb.set('coach_profiles', { data: c, error: null })
+    sb.set('coach_purchases', { data: owned, error: null })
+  }
+
+  it('sells at the database price, sends 80% to the coach and keeps 20%', async () => {
+    setup()
+    stripe.checkout.sessions.create.mockResolvedValue({ url: 'https://checkout.stripe.com/c' })
+    const r = res(); await coachCheckout(req({ body: { productId: PID, price_cents: 1 }, headers: auth }), r)
+    expect(r.body).toEqual({ url: 'https://checkout.stripe.com/c' })
+    const args = stripe.checkout.sessions.create.mock.calls[0][0]
+    expect(args).toMatchObject({
+      mode: 'payment', client_reference_id: 'user-1',
+      line_items: [{ quantity: 1, price_data: { currency: 'usd', unit_amount: 1000, product_data: { name: 'Leg day' } } }],
+      payment_intent_data: { application_fee_amount: 200, transfer_data: { destination: 'acct_1' } },
+      metadata: { kind: 'coach_product', product_id: PID, buyer_id: 'user-1', coach_id: 'coach-1' },
+    })
+  })
+  it('requires sign-in and a real product id', async () => {
+    let r = res(); await coachCheckout(req({ body: { productId: PID } }), r); expect(r.statusCode).toBe(401)
+    r = res(); await coachCheckout(req({ body: { productId: 'x' }, headers: auth }), r); expect(r.statusCode).toBe(400)
+  })
+  it('refuses unpublished, free, own and already-owned products, and coaches who cannot be paid', async () => {
+    const cases = [
+      [[{ ...product, published: false }], 404],
+      [[{ ...product, price_cents: 0 }], 400],
+      [[{ ...product, coach_id: 'user-1' }], 400],
+      [[product, { ...coach, charges_enabled: false }], 409],
+      [[product, { ...coach, status: 'suspended' }], 409],
+      [[product, coach, { id: 'p1' }], 409],
+    ]
+    for (const [args, code] of cases) {
+      setup(...args)
+      const r = res(); await coachCheckout(req({ body: { productId: PID }, headers: auth }), r)
+      expect(r.statusCode).toBe(code)
+    }
+    expect(stripe.checkout.sessions.create).not.toHaveBeenCalled()
+  })
+  it('charges the same share the app shows coaches', async () => {
+    const { COACH_FEE_RATE: server } = await import('../../api/_coach-fee.js')
+    const { COACH_FEE_RATE: app } = await import('../../src/lib/pricing.js')
+    expect(server).toBe(app)
+  })
+})
+
+describe('POST /api/stripe-webhook: coach sales', () => {
+  const sig = { 'stripe-signature': 't=1,v1=abc' }
+  const event = (type, object) => stripe.webhooks.constructEvent.mockReturnValue({ type, data: { object } })
+
+  it('records the purchase and leaves Pro alone', async () => {
+    sb.set('coach_products', { data: { title: 'Leg day' }, error: null })
+    sb.set('coach_purchases', { data: null, error: null })
+    event('checkout.session.completed', {
+      id: 'cs_1', payment_status: 'paid', amount_total: 1000, payment_intent: 'pi_1', client_reference_id: 'user-1',
+      metadata: { kind: 'coach_product', product_id: 'p1', buyer_id: 'user-1', coach_id: 'coach-1' },
+    })
+    const r = res(); await webhook(req({ body: '{}', headers: sig }), r)
+    expect(r.body).toEqual({ received: true })
+    expect(sb.op(sb.queriesFor('coach_purchases')[0], 'upsert')[0]).toMatchObject({
+      product_id: 'p1', buyer_id: 'user-1', coach_id: 'coach-1', title: 'Leg day', amount_cents: 1000, fee_cents: 200,
+      status: 'paid', stripe_session_id: 'cs_1', stripe_payment_intent: 'pi_1',
+    })
+    expect(sb.queriesFor('subscriptions')).toHaveLength(0)
+  })
+  it('asks Stripe to retry when the purchase cannot be saved', async () => {
+    sb.set('coach_purchases', { data: null, error: { message: 'down' } })
+    event('checkout.session.completed', { id: 'cs_1', payment_status: 'paid', amount_total: 500, metadata: { kind: 'coach_product', product_id: 'p1', buyer_id: 'user-1' } })
+    const r = res(); await webhook(req({ body: '{}', headers: sig }), r)
+    expect(r.statusCode).toBe(500)
+  })
+  it('takes the workout back after a refund', async () => {
+    event('charge.refunded', { refunded: true, payment_intent: 'pi_1' })
+    await webhook(req({ body: '{}', headers: sig }), res())
+    const q = sb.queriesFor('coach_purchases')[0]
+    expect(sb.op(q, 'update')[0]).toEqual({ status: 'refunded' })
+    expect(sb.op(q, 'eq')).toEqual(['stripe_payment_intent', 'pi_1'])
+  })
+})
+
+describe('POST /api/coach-connect', () => {
+  const auth = { authorization: 'Bearer jwt' }
+
+  it('is only for approved coaches', async () => {
+    sb.set('coach_profiles', { data: { status: 'pending' }, error: null })
+    const r = res(); await coachConnect(req({ body: { action: 'onboard' }, headers: auth }), r)
+    expect(r.statusCode).toBe(403)
+    expect(stripe.accounts.create).not.toHaveBeenCalled()
+  })
+  it('creates a Stripe account once and links to its setup', async () => {
+    sb.set('coach_profiles', { data: { status: 'approved', stripe_account_id: null, charges_enabled: false }, error: null })
+    stripe.accounts.create.mockResolvedValue({ id: 'acct_new' })
+    stripe.accountLinks.create.mockResolvedValue({ url: 'https://connect.stripe.com/setup' })
+    const r = res(); await coachConnect(req({ body: { action: 'onboard' }, headers: auth }), r)
+    expect(r.body).toEqual({ url: 'https://connect.stripe.com/setup' })
+    expect(stripe.accounts.create.mock.calls[0][0]).toMatchObject({ type: 'express', metadata: { user_id: 'user-1' } })
+    expect(sb.op(sb.queriesFor('coach_profiles').at(-1), 'update')[0]).toEqual({ stripe_account_id: 'acct_new' })
+    expect(stripe.accountLinks.create.mock.calls[0][0]).toMatchObject({ account: 'acct_new', type: 'account_onboarding' })
+  })
+  it('refreshes whether the coach can take payments', async () => {
+    sb.set('coach_profiles', { data: { status: 'approved', stripe_account_id: 'acct_1', charges_enabled: false }, error: null })
+    stripe.accounts.retrieve.mockResolvedValue({ charges_enabled: true, details_submitted: true })
+    const r = res(); await coachConnect(req({ body: { action: 'status' }, headers: auth }), r)
+    expect(r.body).toMatchObject({ charges_enabled: true, connected: true })
+    expect(sb.op(sb.queriesFor('coach_profiles').at(-1), 'update')[0]).toEqual({ charges_enabled: true })
+    expect(stripe.accounts.create).not.toHaveBeenCalled()
   })
 })

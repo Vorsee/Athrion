@@ -11,6 +11,8 @@ const KIND_ICON = {
   badge: 'mdi:medal-outline',
   target: 'mdi:calendar-star',
   recap: 'mdi:chart-box-outline',
+  coach: 'mdi:whistle-outline',
+  sale: 'mdi:cash',
 }
 
 export function timeAgo(iso, now = Date.now()) {

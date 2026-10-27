@@ -1,5 +1,6 @@
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
+import { COACH_FEE_RATE } from './_coach-fee.js'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
 const supabase = createClient(
@@ -28,6 +29,40 @@ export default async function handler(req, res) {
   }
 
   const { type, data } = event
+
+  // A coach's workout or plan (api/coach-checkout.js): record the purchase, nothing to do with Pro
+  if (type === 'checkout.session.completed' && data.object.metadata?.kind === 'coach_product') {
+    const session = data.object
+    const m = session.metadata
+    if (session.payment_status === 'paid' && m.product_id && m.buyer_id) {
+      const { data: product } = await supabase.from('coach_products').select('title').eq('id', m.product_id).maybeSingle()
+      const amount = session.amount_total ?? 0
+      const { error } = await supabase.from('coach_purchases').upsert({
+        product_id: m.product_id,
+        coach_id: m.coach_id || null,
+        buyer_id: m.buyer_id,
+        title: product?.title ?? 'Coach workout',
+        amount_cents: amount,
+        fee_cents: Math.round(amount * COACH_FEE_RATE),
+        status: 'paid',
+        stripe_session_id: session.id,
+        stripe_payment_intent: session.payment_intent,
+      }, { onConflict: 'product_id,buyer_id' })
+      // Stripe retries on a 500, so a failed write isn't lost
+      if (error) {
+        console.error('Coach purchase write failed:', error.message)
+        return res.status(500).json({ error: 'write failed' })
+      }
+    }
+    return res.json({ received: true })
+  }
+
+  // A refunded coach sale takes the workout away again
+  if (type === 'charge.refunded' && data.object.refunded && data.object.payment_intent) {
+    await supabase.from('coach_purchases')
+      .update({ status: 'refunded' })
+      .eq('stripe_payment_intent', data.object.payment_intent)
+  }
 
   if (type === 'checkout.session.completed') {
     const session = data.object

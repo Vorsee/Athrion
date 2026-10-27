@@ -15,6 +15,7 @@ import { FREE_WORKOUT_LIMIT } from '../lib/pricing.js'
 import { guidePlan } from '../lib/guidePlans.js'
 import { syncOpenWorkout, clearOpenWorkout } from '../lib/notifications.js'
 import TrainingCalendar from '../components/TrainingCalendar.jsx'
+import { CoachNote } from '../components/CoachVideo.jsx'
 import { useBackHandler, useFocusMode, notifySession, readSession, setSessionMinimised } from '../lib/shell.js'
 import { HeaderBar } from '../components/Nav.jsx'
 
@@ -25,9 +26,11 @@ const TODAY_FULL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday',
 function matchPlanExercises(planExercises) {
   return planExercises.map(pe => {
     const found = EXERCISES.find(e => e.name.toLowerCase() === pe.name.toLowerCase())
-    // Keep the plan's rep target so progression suggestions use the right range
-    if (found) return { ...found, reps: pe.reps }
-    return { name: pe.name, muscle: '', icon: 'mdi:dumbbell', sets: pe.sets, reps: pe.reps, restSeconds: pe.restSeconds }
+    // Keep the plan's rep target so progression suggestions use the right range; a coach's
+    // workout also brings its tip and how-to video
+    const coach = { ...(pe.coachTip && { coachTip: pe.coachTip }), ...(pe.coachVideo && { coachVideo: pe.coachVideo }) }
+    if (found) return { ...found, reps: pe.reps, ...coach }
+    return { name: pe.name, muscle: '', icon: 'mdi:dumbbell', sets: pe.sets, reps: pe.reps, restSeconds: pe.restSeconds, ...coach }
   })
 }
 
@@ -162,7 +165,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
     if (pendingWorkout?.planExercises?.length) {
       // From Plan: sets and rest come from the plan, so skip the config screen
       const pe = pendingWorkout.planExercises
-      startPlanWorkout(matchPlanExercises(pe), pendingWorkout.name, pe[0]?.sets ?? 3, pe.map(e => e.restSeconds ?? 60))
+      startPlanWorkout(matchPlanExercises(pe), pendingWorkout.name, pe[0]?.sets ?? 3, pe.map(e => e.restSeconds ?? 60), pe.map(e => e.sets))
       onClearPending?.()
     } else if (pendingWorkout?.exercises?.length) {
       startWorkout(pendingWorkout.exercises, pendingWorkout.name)
@@ -181,7 +184,9 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
   }
 
   // Skips config screen — sets/rest per exercise pre-determined by AI plan
-  function startPlanWorkout(exercises, name, sets, perExRest) {
+  // perExSets: each exercise's own set count, when they differ (coach workouts)
+  function startPlanWorkout(exercises, name, sets, perExRest, perExSets = []) {
+    const counts = perExSets.map(n => (n > 0 ? n : undefined))
     setActiveExercises(exercises)
     setActiveWorkoutName(name)
     setTotalSets(sets)
@@ -189,7 +194,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
     setRestPerExercise(perExRest)
     setFreeWorkout(false)
     const t = Date.now()
-    setExIdx(0); setSetIdx(0); setLoggedSets([]); setSetCounts([])
+    setExIdx(0); setSetIdx(0); setLoggedSets([]); setSetCounts(counts)
     setWeight(''); setReps('')
     setStartTime(t)
     localStorage.setItem('athrion_workout', JSON.stringify({
@@ -197,7 +202,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       exerciseNames: exercises.map(e => e.name),
       exercises,
       totalSets: sets, restDuration: perExRest[0] ?? 60, restPerExercise: perExRest,
-      exIdx: 0, setIdx: 0, loggedSets: [], startTime: t, freeWorkout: false,
+      exIdx: 0, setIdx: 0, loggedSets: [], setCounts: counts, startTime: t, freeWorkout: false,
     }))
     notifySession()
     syncOpenWorkout(readSession())
@@ -1007,6 +1012,8 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
         </div>
         {showDemo && <ExerciseDemoSheet name={ex.name} onClose={() => setShowDemo(false)} />}
       </Card>
+
+      <CoachNote tip={ex.coachTip} video={ex.coachVideo} />
 
       <Card>
         {!prev && suggestion ? (

@@ -24,3 +24,6 @@ export const PRO_FEATURES = [
   { icon: 'mdi:camera-outline', title: 'Log a meal from a photo', body: 'Snap your plate and get calories and macros in seconds.' },
   { icon: 'mdi:dumbbell', title: 'Unlimited saved workouts', body: 'Free accounts can save 3.' },
 ]
+
+// ATHRION's share of each coach sale (api/_coach-fee.js charges it; a test keeps them equal)
+export const COACH_FEE_RATE = 0.2

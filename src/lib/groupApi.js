@@ -10,7 +10,7 @@ function makeCode() {
   return code
 }
 
-export async function createGroupSession({ exercises, totalSets, restSecs, displayName }) {
+export async function createGroupSession({ displayName }) {
   const { data: { user } } = await supabase.auth.getUser()
   const code = makeCode()
 
@@ -19,9 +19,6 @@ export async function createGroupSession({ exercises, totalSets, restSecs, displ
     .insert({
       host_id: user.id,
       code,
-      exercises,
-      total_sets: totalSets,
-      rest_secs: restSecs,
       status: 'lobby',
     })
     .select()
@@ -48,21 +45,18 @@ export async function joinGroupSession(code, displayName) {
   return data
 }
 
-export async function updateSessionExercises(sessionId, exercises, totalSets, restSecs) {
-  const { error } = await supabase
-    .from('group_sessions')
-    .update({ exercises, total_sets: totalSets, rest_secs: restSecs })
-    .eq('id', sessionId)
-
-  if (error) throw error
-}
-
-export async function updateExercisesOnly(sessionId, exerciseNames) {
-  const { error } = await supabase
-    .from('group_sessions')
-    .update({ exercises: exerciseNames })
-    .eq('id', sessionId)
-
+// The set-by-set plan (013) plus the old columns, so older app versions in the room still follow along.
+// Before 013 is applied the plan column is missing: save the old columns alone.
+export async function saveSessionPlan(sessionId, plan) {
+  const legacy = {
+    exercises: plan.map(e => e.name),
+    total_sets: Math.max(1, ...plan.map(e => e.sets.length)),
+    rest_secs: plan[0]?.sets[0]?.rest ?? 60,
+  }
+  let { error } = await supabase.from('group_sessions').update({ ...legacy, plan }).eq('id', sessionId)
+  if (error && /plan/.test(error.message || '') && /column/.test(error.message || '')) {
+    ({ error } = await supabase.from('group_sessions').update(legacy).eq('id', sessionId))
+  }
   if (error) throw error
 }
 

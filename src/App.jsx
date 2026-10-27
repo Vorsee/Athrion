@@ -28,6 +28,7 @@ const Library           = lazy(() => import('./pages/Library.jsx'))
 const Group             = lazy(() => import('./pages/Group.jsx'))
 const Plan              = lazy(() => import('./pages/Plan.jsx'))
 const Progress          = lazy(() => import('./pages/Progress.jsx'))
+const Coach             = lazy(() => import('./pages/Coach.jsx'))
 const ProfileModal      = lazy(() => import('./components/ProfileModal.jsx'))
 const UpgradeSheet      = lazy(() => import('./components/UpgradeSheet.jsx'))
 const NotificationsSheet = lazy(() => import('./components/NotificationsSheet.jsx'))
@@ -45,7 +46,7 @@ const onGuidePath = () => /^\/(workout|guide)\/?$/.test(window.location.pathname
 // athrion.app/add/<nickname>: a friend invite
 const INVITE_PATH = /^\/add\/@?([A-Za-z0-9_]{3,20})\/?$/
 
-const PAGES = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan, progress: Progress }
+const PAGES = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan, progress: Progress, coach: Coach }
 
 export default function App() {
   // undefined = auth not yet resolved; null = logged out; object = logged in
@@ -80,17 +81,23 @@ export default function App() {
   const [checkout, setCheckout] = useState({ open: false, busy: false, error: '' })
   const [planSetup, setPlanSetup] = useState(false) // free user answering the plan questions
   const [foodIntent, setFoodIntent] = useState(null) // 'goals': open the targets editor on Food
+  const [shopIntent, setShopIntent] = useState(null) // { product, paid }: open a coach product in Library → Coaches
   const [resumeTick, setResumeTick] = useState(0)    // bumped when the session bar is tapped
   const minimised = useMinimisedSession()
   const [unread, setUnread] = useUnreadCount(!!session)
   const [showInbox, setShowInbox] = useState(false)
-  // Where a tapped notification points: /?open=friends | ranks | workout | progress | notifications
+  // Where a tapped notification points: /?open=friends | ranks | workout | progress | notifications | coach,
+  // or shop (&product=<id>, back from buying a coach's workout)
   const [pendingOpen, setPendingOpen] = useState(() => {
     const params = new URLSearchParams(window.location.search)
-    const target = params.get('open')
-    if (target) window.history.replaceState(null, '', window.location.pathname)
-    return target
+    const open = params.get('open')
+    return open === 'shop' && params.get('product') ? `shop:${params.get('product')}:${params.get('paid') ? 'paid' : ''}` : open
   })
+  // Tidy the address once read. Not inside the initializer: StrictMode runs that twice in dev,
+  // and the second run would find the link already gone.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has('open')) window.history.replaceState(null, '', window.location.pathname)
+  }, [])
   const { focus } = useShell()
 
   // Pages live in browser history so the phone's back gesture steps back inside the app.
@@ -204,6 +211,12 @@ export default function App() {
     else if (target === 'workout') resumeWorkout()
     else if (target === 'progress') navigate('progress')
     else if (target === 'notifications') setShowInbox(true)
+    else if (target === 'coach') navigate('coach')
+    else if (target?.startsWith('shop')) {
+      const [, product, paid] = target.split(':')
+      setShopIntent({ product: product || null, paid: paid === 'paid' })
+      navigate('library')
+    }
   }
 
   useEffect(() => {
@@ -320,7 +333,8 @@ export default function App() {
 
   const pageProps = {
     workout: { pendingWorkout, onClearPending: () => setPendingWorkout(null), isPro, onUpgrade: goUpgrade, onOpenPage: navigate, onOpenGuide: openGuide, resumeTick },
-    library: { onStartWorkout: handleStartFromLibrary },
+    library: { onStartWorkout: handleStartFromLibrary, onStartPlanDay: handleStartPlanDay, onOpenCoach: () => navigate('coach'), shopIntent, onShopIntentDone: () => setShopIntent(null) },
+    coach: { onOpenShop: () => { setShopIntent({ product: null }); navigate('library') } },
     calories: { profile, isPro, onUpgrade: goUpgrade, onGoToPlan: () => navigate('plan'), intent: foodIntent, onIntentHandled: () => setFoodIntent(null) },
     group: { session, intent: groupIntent, onIntentDone: () => setGroupIntent(null) },
     plan: { isPro, onUpgrade: goUpgrade, onStartSetup: () => setPlanSetup(true), onGoToWorkout: () => navigate('workout'), onStartWorkout: handleStartPlanDay, profile, onProfileChange: () => { refreshProfile(); refreshFitnessProfile() } },
@@ -381,6 +395,7 @@ export default function App() {
             onClose={() => setShowProfile(false)}
             onEdit={() => { setShowProfile(false); setEditingProfile(true) }}
             onUpgrade={goUpgrade}
+            onOpenCoach={() => { setShowProfile(false); navigate('coach') }}
             onEditTargets={() => { setShowProfile(false); setFoodIntent('goals'); navigate('calories') }}
           />
         </Suspense>

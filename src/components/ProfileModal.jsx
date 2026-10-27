@@ -307,7 +307,7 @@ function ImportScreen({ defaultUnit, onBack }) {
 
 // ── Main modal ────────────────────────────────────────────────────────────────
 
-export default function ProfileModal({ session, profile, isPro, theme, onToggleTheme, onClose, onEdit, onUpgrade, onEditTargets }) {
+export default function ProfileModal({ session, profile, isPro, theme, onToggleTheme, onClose, onEdit, onUpgrade, onEditTargets, onOpenCoach }) {
   const [pwState, setPwState] = useState('idle')   // idle | loading | sent | error
   const [screen, setScreen]   = useState('profile') // profile | subscription | import | delete
   const [exportState, setExportState] = useState('idle') // idle | loading | error
@@ -443,6 +443,16 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
                 </button>
               )}
             </section>
+
+            {/* ── Coaching ── */}
+            {onOpenCoach && (
+              <section className="mb-6">
+                <h3 className="text-lg leading-[1.3] font-semibold text-ink mb-2">Coaching</h3>
+                <div className="bg-surface border border-line rounded-2xl p-1">
+                  <ListRow icon="mdi:whistle-outline" tile="neon-ink" title="Coach on ATHRION" meta="Sell your workouts and week plans" chevron onClick={onOpenCoach} />
+                </div>
+              </section>
+            )}
 
             {/* ── Account ── */}
             <section className="mb-6 space-y-2.5">
