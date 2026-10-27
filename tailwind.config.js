@@ -7,7 +7,7 @@ const TOKENS = [
   'canvas', 'surface', 'raised', 'overlay', 'inset', 'line', 'line-strong',
   'ink', 'ink-2', 'muted', 'placeholder',
   'neon', 'neon-press', 'on-neon', 'neon-ink', 'neon-stroke', 'neon-tint',
-  'warn', 'danger', 'info', 'lilac', 'rose', 'ember',
+  'warn', 'danger', 'info', 'lilac', 'rose', 'ember', 'brand',
 ]
 
 export default {

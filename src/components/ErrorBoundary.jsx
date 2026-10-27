@@ -1,4 +1,5 @@
 import { Component } from 'react'
+import Brand from './Brand.jsx'
 
 const RELOADED = 'athrion_reloaded_after_error'
 
@@ -28,7 +29,7 @@ export default class ErrorBoundary extends Component {
     if (!this.state.error) return this.props.children
     return (
       <div role="alert" className="min-h-dvh bg-canvas text-ink font-dm flex flex-col items-center justify-center text-center px-6">
-        <div className="text-[1.625rem] font-bold tracking-tight">ATHRION</div>
+        <Brand size="text-[1.625rem]" />
         <div className="font-semibold text-lg mt-6">Something went wrong</div>
         <p className="text-sm text-muted mt-1 max-w-xs">Reload to try again. Your workouts and logs are saved.</p>
         <button type="button" onClick={() => window.location.reload()}

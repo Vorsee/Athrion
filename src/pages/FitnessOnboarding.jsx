@@ -6,6 +6,7 @@ import { saveFitnessProfile, saveNutritionTarget, generatePlan } from '../lib/fi
 import { saveGoals } from '../lib/api.js'
 import { TRIAL_DAYS } from '../lib/pricing.js'
 import { useBackHandler } from '../lib/shell.js'
+import Brand from '../components/Brand.jsx'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -458,7 +459,7 @@ export default function FitnessOnboarding({ existingProfile, saved = null, isPro
               <Icon icon="mdi:close" width={22} />
             </button>
           )}
-          <div className="font-bold text-3xl text-ink">ATHRION</div>
+          <Brand size="text-3xl" />
         </div>
 
         <ProgressDots step={step} />

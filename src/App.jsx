@@ -14,6 +14,7 @@ import { readGuidePick, clearGuidePick } from './lib/guidePlans.js'
 import { rememberInvite, readInvite } from './lib/socialApi.js'
 import { useUnreadCount } from './lib/notifications.js'
 import { hasConsented } from './lib/legal.js'
+import Brand from './components/Brand.jsx'
 
 // Workout is the landing tab; everything else loads the first time it's opened
 const Auth              = lazy(() => import('./pages/Auth.jsx'))
@@ -36,7 +37,7 @@ const NotificationsSheet = lazy(() => import('./components/NotificationsSheet.js
 // Before the shell exists: the wordmark on the canvas. Inside the shell: a content-shaped skeleton.
 const Loading = () => (
   <div role="status" aria-label="Loading" className="min-h-screen bg-canvas flex items-center justify-center">
-    <div className="text-[1.625rem] font-bold tracking-tight text-ink animate-pulse">ATHRION</div>
+    <Brand size="text-[1.625rem]" className="animate-pulse" />
   </div>
 )
 const PageLoading = () => <PageSkeleton />

@@ -1,6 +1,7 @@
 import { Icon } from '@iconify/react'
 import { Button } from '../components/ui/index.js'
 import { PLANS, PRO_FEATURES, TRIAL_DAYS, annualSavingPct, money, priceLine } from '../lib/pricing.js'
+import Brand from '../components/Brand.jsx'
 
 const PAINS = [
   { icon: 'mdi:clipboard-text-outline', pain: "I don't know what to do today.",
@@ -26,7 +27,7 @@ export default function Landing({ onCreateAccount, onSignIn }) {
   return (
     <div className="min-h-dvh bg-canvas text-ink font-dm">
       <header className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-        <span className="text-xl font-bold tracking-tight">ATHRION</span>
+        <Brand />
         <button onClick={onSignIn} className="press min-h-[44px] px-3 text-sm font-semibold text-ink-2 hover:text-ink">Sign in</button>
       </header>
 

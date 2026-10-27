@@ -5,6 +5,7 @@ import { EXERCISES, getExerciseIcon } from '../lib/data.js'
 import { fetchCustomWorkouts, saveCustomWorkout } from '../lib/api.js'
 import { GUIDE_GOALS, GUIDE_PLACES, guidePlan, guideWorkoutName, rememberGuidePick, clearGuidePick } from '../lib/guidePlans.js'
 import { FREE_WORKOUT_LIMIT, TRIAL_DAYS } from '../lib/pricing.js'
+import Brand from '../components/Brand.jsx'
 
 const PROGRESS = [
   ['mdi:arrow-up-bold-outline', 'Hit the top of the rep range on every set, then add a little weight or a harder variation.'],
@@ -56,7 +57,7 @@ export default function Guide({ signedIn = false, isPro = false, initialPick, on
   return (
     <div className="min-h-dvh bg-canvas text-ink font-dm">
       <header className="max-w-2xl mx-auto px-4 h-16 flex items-center justify-between">
-        <span className="text-xl font-bold tracking-tight">ATHRION</span>
+        <Brand />
         {signedIn
           ? <button onClick={onDone} className="press min-h-[44px] px-3 text-sm font-semibold text-ink-2 hover:text-ink">Open app</button>
           : <button onClick={onSignIn} className="press min-h-[44px] px-3 text-sm font-semibold text-ink-2 hover:text-ink">Sign in</button>}

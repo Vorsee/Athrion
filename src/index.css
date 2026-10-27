@@ -23,6 +23,7 @@
   --neon-ink:    200 241 53;  /* neon-coloured text and thin strokes */
   --neon-stroke: 200 241 53;  /* thick progress fills, rings, neon borders */
   --neon-tint:   34 38 21;    /* neon at 8% on surface */
+  --brand:       201 216 127; /* #C9D87F logo bars */
   --warn:        245 184 65;  /* #F5B841 */
   --danger:      255 123 107; /* #FF7B6B */
   --info:        125 185 240; /* #7DB9F0 */
@@ -56,6 +57,7 @@
   --neon-ink:    79 106 0;    /* #4F6A00 */
   --neon-stroke: 110 148 0;   /* #6E9400 */
   --neon-tint:   240 249 216; /* #F0F9D8 */
+  --brand:       110 128 30;  /* #6E801E logo bars on light */
   --warn:        138 86 0;    /* #8A5600 */
   --danger:      179 38 30;   /* #B3261E */
   --info:        31 94 150;   /* #1F5E96 */

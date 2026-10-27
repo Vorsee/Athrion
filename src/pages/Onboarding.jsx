@@ -3,6 +3,7 @@ import { Icon } from '@iconify/react'
 import { Button, BackLink, Segmented } from '../components/ui/index.js'
 import { saveUserProfile } from '../lib/api.js'
 import { toLb } from '../lib/units.js'
+import Brand from '../components/Brand.jsx'
 
 const FT_OPTS  = [4, 5, 6, 7]
 const IN_OPTS  = Array.from({ length: 12 }, (_, i) => i)
@@ -284,7 +285,7 @@ export default function Onboarding({ onComplete, initialValues = null }) {
       <div className="relative z-10 w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8 slide-up">
-          <div className="font-bold text-3xl tracking-tight text-ink">ATHRION</div>
+          <Brand size="text-3xl" />
           <div className="text-xs text-muted mt-1">
             {initialValues ? 'Update stats' : 'Profile setup'}
           </div>

@@ -5,6 +5,7 @@ import { Segmented, BackLink } from '../components/ui/index.js'
 import { ConsentChecks } from '../components/LegalConsent.jsx'
 import { consentMetadata } from '../lib/legal.js'
 import { readInvite } from '../lib/socialApi.js'
+import Brand from '../components/Brand.jsx'
 
 const INPUT = 'w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-sm outline-none transition-colors'
 const PRIMARY = 'press w-full h-12 bg-neon active:bg-neon-press text-on-neon font-semibold rounded-xl text-sm transition-colors disabled:opacity-40'
@@ -70,7 +71,7 @@ export default function Auth({ initialMode = 'login', onBack }) {
       <div className="relative z-10 w-full max-w-sm slide-up">
         {onBack && <BackLink onClick={onBack} className="mb-4">About ATHRION</BackLink>}
         <div className="text-center mb-10">
-          <div className="font-bold text-4xl tracking-tight text-ink">ATHRION</div>
+          <Brand size="text-4xl" />
           <div className="text-sm text-muted mt-2">Your training plan and calories, adjusted every week</div>
         </div>
 
