@@ -76,6 +76,10 @@
 html {
   /* Scale base font 14px on narrow phones → 16px on 430px+ phones */
   font-size: clamp(14px, 3.7vw, 16px);
+  /* No double-tap zoom, and no text resizing when the phone turns sideways */
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
