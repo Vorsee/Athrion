@@ -94,6 +94,44 @@ describe('Workout tab — logging', () => {
     expect(saved.loggedSets[0]).toMatchObject({ ex: 'Goblet Squat', weight: 50, reps: 10 })
   })
 
+  it('fills the next set with the one just logged, so repeating it is one tap', async () => {
+    localStorage.clear()
+    sb.set('fitness_plans', { data: withWorkoutOn('Friday'), error: null })
+    show()
+    await userEvent.click(await screen.findByText('Start workout'))
+    const [weight, reps] = screen.getAllByPlaceholderText('0')
+    await userEvent.type(weight, '50')
+    await userEvent.type(reps, '10')
+    await userEvent.click(screen.getByText('Log set 1'))
+    await userEvent.click(await screen.findByText('Skip rest'))
+    expect(await screen.findByText('Log set 2')).toBeInTheDocument()
+    expect(screen.getByLabelText('Weight in lb')).toHaveValue(50)
+    expect(screen.getByLabelText('Reps')).toHaveValue(10)
+  })
+
+  it('fills the first set from last time and shows what that was', async () => {
+    localStorage.clear()
+    sb.set('fitness_plans', { data: withWorkoutOn('Friday'), error: null })
+    sb.set('workout_logs', { data: [{ id: 'old', date: '2026-10-20', name: 'Legs', created_at: '2026-10-20T18:00:00Z',
+      sets: [{ ex: 'Goblet Squat', set: 1, weight: 40, reps: 10 }, { ex: 'Goblet Squat', set: 2, weight: 40, reps: 9 }] }], error: null })
+    show()
+    await userEvent.click(await screen.findByText('Start workout'))
+    expect(await screen.findByText('Try today')).toBeInTheDocument()
+    expect(screen.getByText('Last time: 40×10, 40×9')).toBeInTheDocument()
+    expect(Number(screen.getByLabelText('Weight in lb').value)).toBe(40)
+    expect(Number(screen.getByLabelText('Reps').value)).toBeGreaterThan(0)
+  })
+
+  it('explains the setup choices for a saved workout', async () => {
+    sb.set('fitness_plans', { data: null, error: null })
+    show()
+    await userEvent.click(await screen.findByText('Free workout'))
+    expect(await screen.findByText('How many rounds of each exercise. 3 suits most people.')).toBeInTheDocument()
+    expect(screen.getByText('Rest between sets')).toBeInTheDocument()
+    await userEvent.click(screen.getByLabelText('Choosing your sets and rest'))
+    expect(await screen.findByText(/New to lifting\? Start with 2 or 3/)).toBeInTheDocument()
+  })
+
   it('starts a free workout', async () => {
     sb.set('fitness_plans', { data: null, error: null })
     show()

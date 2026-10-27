@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { cancelSubscription, resumeSubscription, fetchSubscriptionDetails } from '../lib/stripe.js'
 import { signOut } from '../lib/session.js'
-import { fetchProState } from '../lib/api.js'
+import { fetchProState, fetchWorkoutHistory } from '../lib/api.js'
 import { downloadMyData, deleteAccount } from '../lib/account.js'
+import { parseCsv, detectFormat, toWorkouts, importWorkouts } from '../lib/importWorkouts.js'
 import { Icon } from '@iconify/react'
 import { tok } from '../lib/tokens.js'
 import Sheet from './Sheet.jsx'
@@ -203,11 +204,112 @@ function DeleteAccountScreen({ isPro, onBack }) {
   )
 }
 
+// ── Import sub-screen ─────────────────────────────────────────────────────────
+// A Strong or Hevy CSV export becomes workout history, so PRs and suggestions carry over.
+
+const IMPORT_STEPS = {
+  strong: 'Strong: Profile → Settings → Export data. Save the CSV file.',
+  hevy: 'Hevy: Profile → Settings → Export & import data → Export workouts.',
+}
+
+function ImportScreen({ defaultUnit, onBack }) {
+  const [rows, setRows]     = useState(null)   // parsed CSV
+  const [format, setFormat] = useState(null)
+  const [unit, setUnit]     = useState(defaultUnit)
+  const [step, setStep]     = useState('pick') // pick | preview | working | done | error
+  const [errMsg, setErrMsg] = useState('')
+  const [added, setAdded]   = useState(0)
+
+  async function readFile(file) {
+    if (!file) return
+    setErrMsg('')
+    try {
+      const parsed = parseCsv(await file.text())
+      const f = detectFormat(parsed)
+      if (!f) throw new Error("This file isn't a Strong or Hevy workout export. Check you picked the CSV file.")
+      setRows(parsed); setFormat(f); setStep('preview')
+    } catch (e) {
+      setErrMsg(e.message); setStep('error')
+    }
+  }
+
+  let workouts = []
+  try { workouts = rows ? toWorkouts(rows, { strongUnit: unit }) : [] } catch {}
+  const sets = workouts.reduce((a, w) => a + w.sets.length, 0)
+  const range = workouts.length ? `${fmtDate(workouts[0].created_at)} to ${fmtDate(workouts.at(-1).created_at)}` : ''
+
+  async function run() {
+    setStep('working'); setErrMsg('')
+    try {
+      setAdded(await importWorkouts(workouts, await fetchWorkoutHistory()))
+      setStep('done')
+    } catch (e) {
+      setErrMsg(e.message || 'Something went wrong'); setStep('error')
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-5">
+        <button onClick={onBack} aria-label="Back" disabled={step === 'working'}
+          className="press w-10 h-10 -ml-2 rounded-full flex items-center justify-center text-ink-2 hover:text-ink hover:bg-raised transition-colors">
+          <Icon icon="mdi:chevron-left" width={24} />
+        </button>
+        <div className="font-bold text-base">Import workouts</div>
+      </div>
+
+      {step === 'done' ? (
+        <div className="text-center space-y-3" role="status">
+          <Icon icon="mdi:check-circle-outline" width={44} className="mx-auto text-neon-ink" />
+          <div className="font-bold text-xl text-ink">{added === 0 ? 'Already up to date' : `${added} workout${added === 1 ? '' : 's'} imported`}</div>
+          <p className="text-sm text-muted">{added === 0 ? 'Every workout in this file was already in ATHRION.' : 'Your records, history and weight suggestions now include them.'}</p>
+          <Button full onClick={() => window.location.reload()}>Done</Button>
+        </div>
+      ) : (
+        <>
+          <p className="text-sm text-ink-2 mb-3">Bring your history from another app. Workouts you already have here are skipped, so it's safe to import again.</p>
+          <ul className="space-y-1.5 text-sm text-muted mb-5">
+            {Object.values(IMPORT_STEPS).map(t => <li key={t} className="flex gap-2"><Icon icon="mdi:export-variant" width={16} className="flex-shrink-0 mt-0.5" aria-hidden="true" />{t}</li>)}
+          </ul>
+
+          <label className="press w-full h-12 rounded-xl border border-dashed border-line-strong text-sm font-semibold text-ink-2 hover:text-ink hover:border-neon-stroke flex items-center justify-center gap-2 cursor-pointer mb-4">
+            <Icon icon="mdi:file-upload-outline" width={18} aria-hidden="true" />
+            {rows ? 'Choose a different file' : 'Choose CSV file'}
+            <input type="file" accept=".csv,text/csv" className="sr-only" aria-label="Workout export file" onChange={e => readFile(e.target.files?.[0])} />
+          </label>
+
+          {step === 'error' && <InlineError className="mb-3">{errMsg}</InlineError>}
+
+          {rows && step !== 'error' && (
+            <Card className="mb-4">
+              <div className="text-xs font-semibold text-neon-ink">From {format === 'strong' ? 'Strong' : 'Hevy'}</div>
+              <div className="font-bold text-2xl text-ink tabular-nums mt-1">{workouts.length} workouts</div>
+              <div className="text-sm text-muted">{sets} sets{range && ` · ${range}`}</div>
+              {format === 'strong' && (
+                <div className="mt-4">
+                  <div className="text-sm text-ink-2 mb-2">Which unit did you use in Strong?</div>
+                  <Segmented options={[['lb', 'lb'], ['kg', 'kg']]} value={unit} onChange={setUnit} label="Strong weight unit" kind="choice" />
+                </div>
+              )}
+            </Card>
+          )}
+
+          {rows && step !== 'error' && (
+            <Button full icon="mdi:import" onClick={run} disabled={!workouts.length || step === 'working'}>
+              {step === 'working' ? 'Importing…' : `Import ${workouts.length} workouts`}
+            </Button>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── Main modal ────────────────────────────────────────────────────────────────
 
 export default function ProfileModal({ session, profile, isPro, theme, onToggleTheme, onClose, onEdit, onUpgrade, onEditTargets }) {
   const [pwState, setPwState] = useState('idle')   // idle | loading | sent | error
-  const [screen, setScreen]   = useState('profile') // profile | subscription | delete
+  const [screen, setScreen]   = useState('profile') // profile | subscription | import | delete
   const [exportState, setExportState] = useState('idle') // idle | loading | error
 
   const bmi     = profile ? calcBMI(profile.height_cm, profile.weight_lb) : null
@@ -231,9 +333,11 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
   }
 
   return (
-    <Sheet ariaLabel={screen === 'subscription' ? 'Subscription' : screen === 'delete' ? 'Delete account' : 'You'} onClose={onClose} bodyClassName="-mx-1">
+    <Sheet ariaLabel={screen === 'subscription' ? 'Subscription' : screen === 'import' ? 'Import workouts' : screen === 'delete' ? 'Delete account' : 'You'} onClose={onClose} bodyClassName="-mx-1">
         {screen === 'subscription' ? (
           <SubscriptionScreen onBack={() => setScreen('profile')} />
+        ) : screen === 'import' ? (
+          <ImportScreen defaultUnit={profile?.weight_unit === 'kg' ? 'kg' : 'lb'} onBack={() => setScreen('profile')} />
         ) : screen === 'delete' ? (
           <DeleteAccountScreen isPro={isPro} onBack={() => setScreen('profile')} />
         ) : (
@@ -365,6 +469,7 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
               <div className="bg-surface border border-line rounded-2xl p-1">
                 <ListRow icon="mdi:download-outline" tile="info" title={exportState === 'loading' ? 'Preparing your file…' : 'Download my data'}
                   meta="Everything you've logged, as a file" onClick={exportState === 'loading' ? undefined : handleExport} />
+                <ListRow icon="mdi:import" tile="neon-ink" title="Import from Strong or Hevy" meta="Bring your workout history" chevron onClick={() => setScreen('import')} />
                 <ListRow icon="mdi:delete-outline" tile="danger" title="Delete account" meta="Erase your account and all its data" chevron onClick={() => setScreen('delete')} />
               </div>
               {exportState === 'error' && <p className="text-danger text-xs text-center mt-2">Couldn't prepare the file. Try again.</p>}

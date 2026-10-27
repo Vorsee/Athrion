@@ -39,12 +39,12 @@ Fitness PWA: AI training plans, workout logging, calorie tracking, progress. Liv
 ## Legal
 - Operator: BABUSHKAKNOWSBETTER LLC (Georgia, US); contact athrionsportapp@gmail.com. Pages: `public/privacypolicy.html` (also `/privacy`, with the consumer health data section at `#health-data`, linked from the landing footer as Washington's law asks) and `public/terms.html` (`/terms`).
 - Sign-up needs two boxes (terms, and explicit health-data consent); saved in `user_metadata` via `consentMetadata()` in `src/lib/legal.js`. Bump `LEGAL_VERSION` there after a material policy change: everyone then sees the one-time `ConsentScreen` (`components/LegalConsent.jsx`). Keep the test user's version in `tests/helpers/supabaseMock.js` in step.
-- Profile → Your data: Download my data (`src/lib/account.js`, client-side JSON) and Delete account (`api/delete-account.js`: cancels Stripe now, removes photos and every user table, then the auth user). A new user table must be added to `USER_ROWS` there and `EXPORT_TABLES` in `account.js`.
+- Profile → Your data: Import from Strong or Hevy (`src/lib/importWorkouts.js`: CSV → `workout_logs`, names matched to `EXERCISES`, skips day+name duplicates; imported workouts count toward points like any log), Download my data (`src/lib/account.js`, client-side JSON) and Delete account (`api/delete-account.js`: cancels Stripe now, removes photos and every user table, then the auth user). A new user table must be added to `USER_ROWS` there and `EXPORT_TABLES` in `account.js`.
 - Minimum age 16 (onboarding age picker). No third-party trackers or Google Fonts (DM Sans is bundled via `@fontsource-variable/dm-sans`); keep it that way or the policy and cookie stance change.
 
 ## Open items
 - Live checkout and webhook verified Oct 2026 (webhook secret replaced with the live endpoint's). Payment calls go through `postAsUser` in `src/lib/stripe.js`, which renews an expired token.
 - After the first deploy with the new checkout works, remove `VITE_STRIPE_PRICE_ID` from Vercel. Confirm `STRIPE_SECRET_KEY` there is the live key.
 - Plan generation takes 30-60s (Opus, ~3.5-4.5k output tokens). Ideas: `AI_MODEL=claude-sonnet-5-5` secret, drop the nutrition section the server overwrites anyway, shorten per-exercise notes, show progress steps.
-- Not built yet: RPE / warm-up sets / supersets, Strong/Hevy import, Apple/Google sign-in, a 1200x630 `og:image`.
+- Not built yet: RPE / warm-up sets / supersets, Apple/Google sign-in, a 1200x630 `og:image`.
 - Not yet tested on a real device: push notifications, barcode camera, health sync.

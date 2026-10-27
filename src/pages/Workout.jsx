@@ -905,9 +905,22 @@ function ConfigScreen({ exercises, free, totalSets, setTotalSets, restDuration, 
         </>} />
 
       <Card>
-        <SectionTitle>Sets per exercise</SectionTitle>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg leading-[1.3] font-semibold text-ink">Sets per exercise</h2>
+            <p className="text-xs text-muted mt-0.5 mb-3">How many rounds of each exercise. 3 suits most people.</p>
+          </div>
+          <InfoButton title="Choosing your sets and rest">
+            <div className="space-y-3 text-sm text-ink-2">
+              <p><span className="font-semibold text-ink">Sets:</span> one set is doing an exercise for your reps, then resting. New to lifting? Start with 2 or 3. Training for size or strength, 3 to 5.</p>
+              <p><span className="font-semibold text-ink">Rest:</span> the timer between sets. 60 to 90 seconds works for most exercises; take 2 minutes for heavy squats, deadlifts and presses, and 30 seconds for light or core work.</p>
+              <p>You can add or skip a set any time during the workout, and skip the rest timer when you're ready.</p>
+            </div>
+          </InfoButton>
+        </div>
         <Segmented options={[2, 3, 4, 5].map(n => [n, String(n)])} value={totalSets} onChange={setTotalSets} label="Sets per exercise" kind="choice" scroll={false} />
-        <div className="text-lg leading-[1.3] font-semibold text-ink mt-5 mb-3">Rest</div>
+        <h2 className="text-lg leading-[1.3] font-semibold text-ink mt-5">Rest between sets</h2>
+        <p className="text-xs text-muted mt-0.5 mb-3">A timer starts after each set. 60 to 90 seconds suits most exercises.</p>
         <Segmented options={[30, 60, 90, 120].map(s => [s, `${s}s`])} value={restDuration} onChange={setRestDuration} label="Rest duration" kind="choice" scroll={false} />
       </Card>
 
@@ -943,6 +956,17 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
   const lastSession = pastSessions[pastSessions.length - 1]
   const records = pastSessions.length ? getRecords(pastSessions) : null
   const suggestion = suggestNext(pastSessions, { ...parseRepRange(ex.reps), unit })
+  const lastSameSet = lastSession?.sets?.[setIdx] ?? null
+
+  // Fill the boxes so logging is one tap: the set before it today, else the suggestion
+  // from last time. Only on a fresh set, so nothing the person typed is overwritten.
+  useEffect(() => {
+    if (weight !== '' || reps !== '') return
+    const from = prev ?? suggestion
+    if (!from) return
+    setWeight(from.weight > 0 ? String(fromLb(from.weight)) : '')
+    setReps(from.reps > 0 ? String(from.reps) : '')
+  }, [ex.name, setIdx])
 
   return (
     <div className="space-y-4 py-4 slide-in">
@@ -985,21 +1009,23 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
       </Card>
 
       <Card>
-        {!prev && suggestion && (
+        {!prev && suggestion ? (
           <div className="mb-4 flex items-center justify-between gap-2 bg-raised rounded-xl px-3 py-2.5">
             <div className="min-w-0">
               <div className="text-xs font-semibold text-neon-ink">Try today</div>
               <div className="font-bold text-2xl text-ink tabular-nums leading-tight">
                 {suggestion.weight > 0 ? `${fmt(suggestion.weight)} × ${suggestion.reps}` : `${suggestion.reps} reps`}
               </div>
+              <div className="text-xs text-muted mt-0.5 truncate">Last time: {lastSession.sets.map(st => st.weight > 0 ? `${fromLb(st.weight)}×${st.reps}` : `${st.reps}`).join(', ')}</div>
             </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <InfoButton title="Why this weight">
-                <p className="text-sm text-ink-2">{suggestion.reason}</p>
-                {lastSession && <p className="text-sm text-ink-2">Last time: <span className="font-semibold text-ink">{lastSession.sets.map(st => `${fromLb(st.weight)}×${st.reps}`).join(', ')}</span></p>}
-              </InfoButton>
-              <Button size="sm" onClick={() => { setWeight(String(fromLb(suggestion.weight))); setReps(String(suggestion.reps)) }}>Use</Button>
-            </div>
+            <InfoButton title="Why this weight">
+              <p className="text-sm text-ink-2">{suggestion.reason}. It's filled in below; change it if today feels different.</p>
+            </InfoButton>
+          </div>
+        ) : lastSameSet && (
+          <div className="mb-4 flex items-center gap-2 text-xs text-muted">
+            <Icon icon="mdi:history" width={16} aria-hidden="true" />
+            <span>Last time, set {setIdx + 1}: <span className="font-semibold text-ink-2 tabular-nums">{lastSameSet.weight > 0 ? `${fmt(lastSameSet.weight)} × ${lastSameSet.reps}` : `${lastSameSet.reps} reps`}</span></span>
           </div>
         )}
         <div className="grid grid-cols-2 gap-3 mb-4">
