@@ -717,27 +717,26 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
       </Card>
       )}
 
-      {/* ── Train together: a headline feature, so it gets its own neon card. Each button opens
-           its tab directly: friends first, then this month's leaderboard, then live rooms ── */}
+      {/* ── Train together: a headline feature, so it gets its own neon card. The big button opens
+           live rooms; Friends and this month's leaderboard sit right under it, one tap each ── */}
       {onOpenGroup && (
-        <section aria-labelledby="train-together" className="rounded-2xl border border-neon-stroke/40 p-4"
+        <section aria-label="Train together" className="rounded-2xl border border-neon-stroke/40 p-3 space-y-2"
           style={{ background: 'linear-gradient(135deg, rgb(var(--neon-tint)), rgb(var(--surface)))' }}>
-          <div className="flex items-center gap-3">
-            <span className="w-11 h-11 rounded-xl bg-neon text-on-neon flex items-center justify-center flex-shrink-0">
-              <Icon icon="mdi:account-group" width={24} aria-hidden="true" />
+          <button type="button" onClick={() => onOpenGroup('rooms')}
+            className="press w-full min-h-[4rem] rounded-xl bg-neon text-on-neon active:bg-neon-press px-4 py-3 flex items-center gap-3 text-left">
+            <Icon icon="mdi:account-group" width={28} className="flex-shrink-0" aria-hidden="true" />
+            <span className="flex-1 min-w-0">
+              <span className="block font-bold text-lg leading-tight">Train together</span>
+              <span className="block text-xs font-medium opacity-80">Start or join a live room</span>
             </span>
-            <div className="flex-1 min-w-0">
-              <h2 id="train-together" className="font-bold text-lg text-ink leading-tight">Train together</h2>
-              <div className="text-xs text-muted">Friends, monthly points and live rooms</div>
-            </div>
-          </div>
-          {/* Three across; stacked rows on a narrow screen (or big phone text) */}
-          <div className="grid grid-cols-3 max-[340px]:grid-cols-1 gap-2 mt-3">
-            {[['friends', 'Friends', 'mdi:account-multiple-outline'], ['ranks', 'Leaderboard', 'mdi:trophy-outline'], ['rooms', 'Rooms', 'mdi:broadcast']].map(([tab, label, icon], i) => (
+            <Icon icon="mdi:chevron-right" width={24} className="flex-shrink-0" aria-hidden="true" />
+          </button>
+          {/* Side by side; stacked on a narrow screen (or big phone text) */}
+          <div className="grid grid-cols-2 max-[300px]:grid-cols-1 gap-2">
+            {[['friends', 'Friends', 'mdi:account-multiple-outline'], ['ranks', 'Leaderboard', 'mdi:trophy-outline']].map(([tab, label, icon]) => (
               <button key={tab} type="button" onClick={() => onOpenGroup(tab)}
-                className={`press min-h-[3.25rem] max-[340px]:min-h-[2.75rem] rounded-xl px-1 py-2 max-[340px]:px-4 flex flex-col max-[340px]:flex-row items-center justify-center max-[340px]:justify-start gap-0.5 max-[340px]:gap-2.5 text-xs max-[340px]:text-sm font-semibold transition-colors ${
-                  i === 0 ? 'bg-neon text-on-neon active:bg-neon-press' : 'bg-surface border border-neon-stroke/30 text-ink hover:border-neon-stroke'}`}>
-                <Icon icon={icon} width={20} aria-hidden="true" />{label}
+                className="press min-h-[2.75rem] rounded-xl px-3 py-2 bg-surface border border-neon-stroke/30 hover:border-neon-stroke text-ink text-sm font-semibold flex items-center justify-center gap-2 transition-colors">
+                <Icon icon={icon} width={18} className="text-neon-ink flex-shrink-0" aria-hidden="true" />{label}
               </button>
             ))}
           </div>
