@@ -252,13 +252,38 @@ describe('Workout tab — session shell', () => {
     expect(await screen.findByText('Hold 30-60 s')).toBeInTheDocument()
     expect(screen.getByText('Best 40s')).toBeInTheDocument()
     expect(screen.queryByLabelText('Reps')).toBeNull()
-    expect(screen.getByLabelText('Seconds')).toHaveValue(45) // 5 seconds longer than last time
-    expect(screen.getByRole('button', { name: /Start timer/ })).toBeInTheDocument()
+    expect(screen.getByRole('timer', { name: /^Time / })).toHaveTextContent('0:45.00') // 5 seconds longer than last time
+    expect(screen.getByText('Target 30–60s')).toBeInTheDocument()
+    expect(screen.getByText('Target reached')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Type the time' }))
+    await userEvent.type(screen.getByLabelText('Minutes'), '1')
     await userEvent.clear(screen.getByLabelText('Seconds'))
-    await userEvent.type(screen.getByLabelText('Seconds'), '50')
+    await userEvent.type(screen.getByLabelText('Seconds'), '5.37')
+    expect(screen.getByRole('timer', { name: /^Time / })).toHaveTextContent('1:05.37')
     await userEvent.click(screen.getByText('Log set 1'))
     const saved = JSON.parse(localStorage.getItem('athrion_workout'))
-    expect(saved.loggedSets[0]).toMatchObject({ ex: 'Plank', weight: 0, reps: 0, secs: 50 })
+    expect(saved.loggedSets[0]).toMatchObject({ ex: 'Plank', weight: 0, reps: 0, secs: 65.37 })
+  })
+
+  it('times a plank to the hundredth, pauses, resumes, and logs mid-hold', async () => {
+    localStorage.clear()
+    let t = 1000
+    vi.spyOn(performance, 'now').mockImplementation(() => t)
+    sb.set('fitness_plans', { data: null, error: null })
+    sb.set('workout_logs', { data: [], error: null })
+    show({ pendingWorkout: { name: 'Core', planExercises: [{ name: 'Plank', sets: 2, reps: '30-60s', restSeconds: 30 }] } })
+    await userEvent.click(await screen.findByRole('button', { name: 'Start timer' }))
+    expect(screen.getByRole('timer', { name: /^Time / })).toHaveTextContent('0:00.00')
+    t += 12_340
+    await userEvent.click(screen.getByRole('button', { name: 'Pause' }))
+    expect(screen.getByRole('timer', { name: /^Time / })).toHaveTextContent('0:12.34')
+    expect(screen.getByText('18s to go')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Resume' }))
+    t += 20_000
+    await userEvent.click(screen.getByText('Log set 1')) // stops the clock and logs the exact time
+    const saved = JSON.parse(localStorage.getItem('athrion_workout'))
+    expect(saved.loggedSets[0]).toMatchObject({ ex: 'Plank', secs: 32.34 })
+    vi.restoreAllMocks()
   })
 
   it('asks bodyweight moves for added weight, not a weight', async () => {

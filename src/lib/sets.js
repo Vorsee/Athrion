@@ -15,10 +15,15 @@ export function exerciseMode(ex) {
 
 export const isTimedSet = s => Number(s?.secs) > 0
 
+// 45 → "45s", 90 → "1:30"; a stopwatch time keeps its hundredths: 45.37 → "45.37s", 65.5 → "1:05.50"
 export function fmtSecs(secs) {
-  const t = Math.round(Number(secs) || 0)
-  return t < 60 ? `${t}s` : `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`
+  const cs = Math.round((Number(secs) || 0) * 100)
+  const t = Math.floor(cs / 100), frac = cs % 100 ? `.${String(cs % 100).padStart(2, '0')}` : ''
+  return t < 60 ? `${t}${frac}s` : `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}${frac}`
 }
+
+// Seconds to the hundredth, as the stopwatch logs them
+export const roundSecs = v => Math.round((Number(v) || 0) * 100) / 100
 
 // "45s", "1:30", "20 kg · 45s", "60 kg × 8", "12 reps"; fmt turns lb into the person's unit
 export function setText(s, fmt) {

@@ -16,7 +16,7 @@ import { guidePlan } from '../lib/guidePlans.js'
 import { syncOpenWorkout, clearOpenWorkout } from '../lib/notifications.js'
 import TrainingCalendar from '../components/TrainingCalendar.jsx'
 import { CoachNote } from '../components/CoachVideo.jsx'
-import { exerciseMode, isTimedSet, setText, setShort, parseTimeTarget, fmtSecs } from '../lib/sets.js'
+import { exerciseMode, isTimedSet, setText, setShort, parseTimeTarget, fmtSecs, roundSecs } from '../lib/sets.js'
 import { useBackHandler, useFocusMode, notifySession, readSession, setSessionMinimised } from '../lib/shell.js'
 import { HeaderBar } from '../components/Nav.jsx'
 
@@ -350,7 +350,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
   // i indexes loggedSets; weight comes in the person's unit
   function handleEditSet(i, { weight: w, reps: r }) {
     const next = loggedSets.map((s, j) => (j !== i ? s
-      : isTimedSet(s) ? { ...s, weight: toLb(parseFloat(w) || 0), secs: parseInt(r) || s.secs }
+      : isTimedSet(s) ? { ...s, weight: toLb(parseFloat(w) || 0), secs: roundSecs(r) || s.secs }
       : { ...s, weight: toLb(parseFloat(w) || 0), reps: parseInt(r) || 0 }))
     setLoggedSets(next)
     persistWorkout({ loggedSets: next })
@@ -473,12 +473,13 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       onEditSet={handleEditSet} onDeleteSet={handleDeleteSet}
       reps={reps} setReps={setReps}
       freeWorkout={freeWorkout}
-      onLog={() => {
+      onLog={stopwatchSecs => {
         const w = toLb(parseFloat(weight) || 0) // typed in the person's unit, stored in lb
-        const r = parseInt(reps) || 0
         const ex = activeExercises[exIdx]
-        // Timed moves: the reps box holds seconds
-        const set = exerciseMode(ex) === 'time'
+        const timedMove = exerciseMode(ex) === 'time'
+        // Timed moves: the reps box holds seconds (to the hundredth), or the stopwatch just stopped hands them over
+        const r = stopwatchSecs ?? (timedMove ? roundSecs(reps) : parseInt(reps) || 0)
+        const set = timedMove
           ? { ex: ex.name, set: setIdx + 1, weight: w, reps: 0, secs: r }
           : { ex: ex.name, set: setIdx + 1, weight: w, reps: r }
         const newLog = [...loggedSets, set]
@@ -976,6 +977,8 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
   const timed = mode === 'time' ? parseTimeTarget(ex.reps) : null
   const suggestion = suggestNext(pastSessions, { ...parseRepRange(ex.reps), unit, timed })
   const lastSameSet = lastSession?.sets?.[setIdx] ?? null
+  const [holding, setHolding] = useState(false) // the stopwatch is running
+  const stopHold = useRef(null) // stops it and returns the exact time
 
   // Fill the boxes so logging is one tap: the set before it today, else the suggestion
   // from last time (a timed move with no history starts at the bottom of its target).
@@ -1057,7 +1060,8 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
           </div>
         )}
         {mode === 'time' ? (
-          <HoldInput secs={reps} setSecs={setReps} weight={weight} setWeight={setWeight} key={`${ex.name}-${setIdx}`} />
+          <HoldInput secs={reps} setSecs={setReps} weight={weight} setWeight={setWeight} target={timed}
+            onRunningChange={setHolding} stopRef={stopHold} key={`${ex.name}-${setIdx}`} />
         ) : (
           <div className="grid grid-cols-2 gap-3 mb-4">
             <div>
@@ -1072,7 +1076,9 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
             </div>
           </div>
         )}
-        <Button full icon="mdi:check" onClick={onLog} disabled={mode === 'time' && !(parseInt(reps) > 0)}>Log set {setIdx + 1}</Button>
+        {/* Logging mid-hold stops the clock and logs the exact time */}
+        <Button full icon="mdi:check" onClick={() => onLog(holding ? stopHold.current?.() : undefined)}
+          disabled={mode === 'time' && !holding && !(parseFloat(reps) > 0)}>Log set {setIdx + 1}</Button>
         <div className="flex gap-2 mt-3">
           <Button variant="secondary" size="sm" icon="mdi:plus" className="flex-1" onClick={onAddSet}>Add a set</Button>
           <Button variant="secondary" size="sm" iconRight="mdi:skip-next" className="flex-1" onClick={onFinishExercise}>
@@ -1107,43 +1113,148 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
   )
 }
 
-// Timed sets (plank, wall sit, jump rope): a stopwatch that fills in the seconds, which can
-// also be typed. Added weight is optional, for weighted carries or a plate on the back.
-function HoldInput({ secs, setSecs, weight, setWeight }) {
+const pad2 = n => String(n).padStart(2, '0')
+// 65.37 → ['1:05', '.37']: the clock face, minutes always shown
+function clockFace(secs) {
+  const cs = Math.round(secs * 100)
+  return [`${Math.floor(cs / 6000)}:${pad2(Math.floor(cs / 100) % 60)}`, `.${pad2(cs % 100)}`]
+}
+
+// Timed sets (plank, wall sit, jump rope): a stopwatch to the hundredth of a second, with pause,
+// resume and reset, and a bar toward the exercise's target. The time can also be typed as minutes
+// and seconds. Added weight is optional, for weighted carries or a plate on the back.
+// stopRef.current() stops a running clock and returns the exact seconds, so "Log set" works mid-hold.
+function HoldInput({ secs, setSecs, weight, setWeight, target, onRunningChange, stopRef }) {
   const { unit } = useUnit()
-  const [startedAt, setStartedAt] = useState(null)
+  // base: seconds banked before this run; since: performance.now() when it started (null = stopped)
+  const [clock, setClock] = useState({ base: 0, since: null })
+  const [now, setNow] = useState(0)
+  const [owned, setOwned] = useState(false) // the time on the clock came from the stopwatch
+  const [typing, setTyping] = useState(null) // { m, s } while typing the time
   const [showWeight, setShowWeight] = useState(Number(weight) > 0)
+  const running = clock.since != null
+  const buzzed = useRef(false)
+
+  const shown = running ? clock.base + (now - clock.since) / 1000 : Number(secs) || 0
+  const reached = !!target && shown >= target.min
+
   useEffect(() => {
-    if (!startedAt) return
-    const t = setInterval(() => setSecs(String(Math.floor((Date.now() - startedAt) / 1000))), 250)
-    return () => clearInterval(t)
-  }, [startedAt])
-  const running = !!startedAt
+    if (!running) return
+    let raf
+    const tick = () => { setNow(performance.now()); raf = requestAnimationFrame(tick) }
+    tick()
+    return () => cancelAnimationFrame(raf)
+  }, [running])
+
+  // One short buzz when the hold reaches its target
+  useEffect(() => {
+    if (running && reached && !buzzed.current) { buzzed.current = true; navigator.vibrate?.(200) }
+  }, [running, reached])
+
+  useEffect(() => { onRunningChange?.(running) }, [running])
+  useEffect(() => () => onRunningChange?.(false), [])
+
+  function start() {
+    const t = performance.now()
+    if (!owned) buzzed.current = false
+    setClock({ base: owned ? Number(secs) || 0 : 0, since: t })
+    setNow(t); setOwned(true); setTyping(null)
+  }
+  function stop() {
+    const v = roundSecs(clock.base + (performance.now() - clock.since) / 1000)
+    setClock({ base: 0, since: null })
+    setSecs(String(v))
+    return v
+  }
+  function reset() {
+    setSecs(''); setOwned(false); buzzed.current = false
+  }
+  if (stopRef) stopRef.current = running ? stop : null
+
+  function typed(next) {
+    setTyping(next)
+    setSecs(String(roundSecs((parseInt(next.m) || 0) * 60 + (parseFloat(next.s) || 0))))
+    setOwned(false)
+  }
+  function openTyping() {
+    const v = Number(secs) || 0, m = Math.floor(v / 60)
+    setTyping({ m: m ? String(m) : '', s: v ? String(roundSecs(v - m * 60)) : '' })
+  }
+
+  const [main, hundredths] = clockFace(shown)
+  const field = 'w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-3 py-2.5 text-lg font-bold tabular-nums text-center outline-none transition-colors'
   return (
     <div className="mb-4 space-y-3">
-      <div className="flex items-end gap-3">
-        <label className="flex-1">
-          <span className="text-sm font-semibold text-ink-2 block mb-1">Seconds</span>
-          <input type="number" inputMode="numeric" placeholder="0" aria-label="Seconds" value={secs} min="1" readOnly={running}
-            onChange={e => setSecs(e.target.value)}
-            className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-2xl font-bold tabular-nums text-center outline-none transition-colors" />
-        </label>
-        <Button variant={running ? 'danger' : 'secondary'} icon={running ? 'mdi:stop' : 'mdi:timer-play-outline'} className="h-[60px] flex-1"
-          onClick={() => (running ? setStartedAt(null) : (setSecs('0'), setStartedAt(Date.now())))}>
-          {running ? `Stop · ${fmtSecs(secs)}` : 'Start timer'}
-        </Button>
+      <div className={`rounded-2xl border p-4 transition-colors ${running ? 'border-neon-stroke/50 bg-neon-tint' : 'border-line bg-raised'}`}>
+        <div role="timer" aria-label={`Time ${fmtSecs(roundSecs(shown))}`} className="text-center font-bold tabular-nums leading-none">
+          <span className={`text-[3.5rem] tracking-tight ${reached ? 'text-neon-ink' : 'text-ink'}`}>{main}</span>
+          <span className="text-2xl text-muted">{hundredths}</span>
+        </div>
+
+        {target && (
+          <div className="mt-4">
+            <div className="relative h-2 rounded-full bg-line overflow-hidden" aria-hidden="true">
+              <div className="h-full rounded-full bg-neon" style={{ width: `${Math.min(100, (shown / target.max) * 100)}%` }} />
+              {target.min < target.max && (
+                <span className="absolute top-0 bottom-0 w-0.5 bg-canvas" style={{ left: `${(target.min / target.max) * 100}%` }} />
+              )}
+            </div>
+            <div className="flex flex-wrap justify-between gap-x-2 mt-1.5 text-xs">
+              <span className="text-muted">Target {target.min === target.max ? fmtSecs(target.min) : target.max <= 60 ? `${target.min}–${target.max}s` : `${fmtSecs(target.min)}–${fmtSecs(target.max)}`}</span>
+              <span className={`font-semibold tabular-nums ${reached ? 'text-neon-ink' : 'text-ink-2'}`}>
+                {reached ? 'Target reached' : `${fmtSecs(Math.ceil(target.min - shown))} to go`}
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2 mt-4">
+          {owned && !running && (
+            <Button variant="secondary" icon="mdi:restart" onClick={reset} className="grow basis-24">Reset</Button>
+          )}
+          <Button variant={running ? 'secondary' : 'primary'} icon={running ? 'mdi:pause' : 'mdi:play'}
+            onClick={running ? stop : start} className="grow-[2] basis-32">
+            {running ? 'Pause' : owned ? 'Resume' : 'Start timer'}
+          </Button>
+        </div>
       </div>
-      {showWeight ? (
+
+      {typing && !running && (
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="text-sm font-semibold text-ink-2 block mb-1">Minutes</span>
+            <input type="number" inputMode="numeric" placeholder="0" aria-label="Minutes" value={typing.m} min="0"
+              onChange={e => typed({ ...typing, m: e.target.value })} className={field} />
+          </label>
+          <label className="block">
+            <span className="text-sm font-semibold text-ink-2 block mb-1">Seconds</span>
+            <input type="number" inputMode="decimal" placeholder="0" aria-label="Seconds" value={typing.s} min="0" step="0.01"
+              onChange={e => typed({ ...typing, s: e.target.value })} className={field} />
+          </label>
+        </div>
+      )}
+
+      {showWeight && (
         <label className="block">
           <span className="text-sm font-semibold text-ink-2 block mb-1">Added weight ({unit})</span>
           <input type="number" inputMode="decimal" placeholder="None" aria-label={`Added weight in ${unit}`} value={weight} min="0" step={unit === 'kg' ? 0.25 : 0.5}
-            onChange={e => setWeight(e.target.value)}
-            className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-2.5 text-lg font-bold tabular-nums text-center outline-none transition-colors" />
+            onChange={e => setWeight(e.target.value)} className={field} />
         </label>
-      ) : (
-        <button type="button" onClick={() => setShowWeight(true)} className="press text-xs font-semibold text-neon-ink min-h-[44px] inline-flex items-center gap-1">
-          <Icon icon="mdi:plus" width={16} aria-hidden="true" />Add weight
-        </button>
+      )}
+
+      {(!typing || !showWeight) && !running && (
+        <div className="flex flex-wrap gap-x-4">
+          {!typing && (
+            <button type="button" onClick={openTyping} className="press text-xs font-semibold text-neon-ink min-h-[44px] inline-flex items-center gap-1">
+              <Icon icon="mdi:pencil-outline" width={16} aria-hidden="true" />Type the time
+            </button>
+          )}
+          {!showWeight && (
+            <button type="button" onClick={() => setShowWeight(true)} className="press text-xs font-semibold text-neon-ink min-h-[44px] inline-flex items-center gap-1">
+              <Icon icon="mdi:plus" width={16} aria-hidden="true" />Add weight
+            </button>
+          )}
+        </div>
       )}
     </div>
   )
@@ -1169,7 +1280,7 @@ function LoggedSets({ sets, onEdit, onDelete }) {
                     onChange={e => setDraft(d => ({ ...d, weight: e.target.value }))} className={`${field} mt-1`} />
                 </label>
                 <label className="flex-1 text-xs text-muted">{draft.timed ? 'Seconds' : 'Reps'}
-                  <input type="number" min="1" value={draft.reps}
+                  <input type="number" min={draft.timed ? '0.01' : '1'} step={draft.timed ? '0.01' : '1'} value={draft.reps}
                     onChange={e => setDraft(d => ({ ...d, reps: e.target.value }))} className={`${field} mt-1`} />
                 </label>
                 <Button size="sm" type="submit">Save</Button>

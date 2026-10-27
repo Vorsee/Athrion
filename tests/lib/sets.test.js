@@ -18,6 +18,7 @@ describe('timed and bodyweight sets', () => {
     expect([parseTimeTarget('30-60s'), parseTimeTarget('5-10 min'), parseTimeTarget('1:30'), parseTimeTarget('8-12')])
       .toEqual([{ min: 30, max: 60 }, { min: 300, max: 600 }, { min: 90, max: 90 }, null])
     expect([fmtSecs(45), fmtSecs(90), fmtSecs(605)]).toEqual(['45s', '1:30', '10:05'])
+    expect([fmtSecs(45.37), fmtSecs(65.5), fmtSecs(12.004)]).toEqual(['45.37s', '1:05.50', '12s'])
     expect(setText({ weight: 0, reps: 0, secs: 45 }, fmt)).toBe('45s')
     expect(setText({ weight: 20, reps: 0, secs: 30 }, fmt)).toBe('20 lb · 30s')
     expect(setText({ weight: 100, reps: 8 }, fmt)).toBe('100 lb × 8')
