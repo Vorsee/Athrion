@@ -97,6 +97,13 @@ body {
 }
 
 @layer utilities {
+  /* Screens outside the app shell sit under the status bar (viewport-fit=cover, black-translucent):
+     keep their content below the notch and above the home indicator */
+  .pt-safe    { padding-top: env(safe-area-inset-top); }
+  .pb-safe    { padding-bottom: env(safe-area-inset-bottom); }
+  .pt-safe-10 { padding-top: calc(2.5rem + env(safe-area-inset-top)); }
+  .pb-safe-10 { padding-bottom: calc(2.5rem + env(safe-area-inset-bottom)); }
+  .pb-safe-16 { padding-bottom: calc(4rem + env(safe-area-inset-bottom)); }
   .font-dm    { font-family: 'DM Sans Variable', 'DM Sans', sans-serif; }
 }
 

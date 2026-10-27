@@ -25,10 +25,10 @@ const FREE = ['Workout log with PRs and last-session numbers', 'Calorie and macr
 // The public page in front of sign-in: what ATHRION is, for whom, and what it costs
 export default function Landing({ onCreateAccount, onSignIn }) {
   return (
-    <div className="min-h-dvh bg-canvas text-ink font-dm">
+    <div className="min-h-dvh bg-canvas text-ink font-dm pt-safe pb-safe">
       <header className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
         <Brand />
-        <button onClick={onSignIn} className="press min-h-[44px] px-3 text-sm font-semibold text-ink-2 hover:text-ink">Sign in</button>
+        <button onClick={onSignIn} className="press min-h-[44px] px-4 rounded-xl border border-line-strong text-sm font-semibold text-ink hover:border-muted/50">Sign in</button>
       </header>
 
       <main>

@@ -55,7 +55,7 @@ export default function Guide({ signedIn = false, isPro = false, initialPick, on
   }
 
   return (
-    <div className="min-h-dvh bg-canvas text-ink font-dm">
+    <div className="min-h-dvh bg-canvas text-ink font-dm pt-safe">
       <header className="max-w-2xl mx-auto px-4 h-16 flex items-center justify-between">
         <Brand />
         {signedIn

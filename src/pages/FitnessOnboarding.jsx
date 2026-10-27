@@ -449,7 +449,7 @@ export default function FitnessOnboarding({ existingProfile, saved = null, isPro
   ]
 
   return (
-    <div className="min-h-screen bg-canvas flex flex-col items-center justify-start px-4 pt-10 pb-16 relative overflow-hidden">
+    <div className="min-h-screen bg-canvas flex flex-col items-center justify-start px-4 pt-safe-10 pb-safe-16 relative overflow-hidden">
 
       <div className="relative z-10 w-full max-w-sm">
         <div className="relative text-center mb-6 slide-up">

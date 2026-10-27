@@ -66,7 +66,7 @@ export default function Auth({ initialMode = 'login', onBack }) {
   }
 
   return (
-    <div className="min-h-screen bg-canvas flex flex-col items-center justify-center px-4 py-10 relative overflow-hidden">
+    <div className="min-h-screen bg-canvas flex flex-col items-center justify-center px-4 pt-safe-10 pb-safe-10 relative overflow-hidden">
 
       <div className="relative z-10 w-full max-w-sm slide-up">
         {onBack && <BackLink onClick={onBack} className="mb-4">About ATHRION</BackLink>}

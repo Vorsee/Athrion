@@ -280,7 +280,7 @@ export default function Onboarding({ onComplete, initialValues = null }) {
   ]
 
   return (
-    <div className="min-h-screen bg-canvas flex flex-col items-center justify-center px-4 relative overflow-hidden">
+    <div className="min-h-screen bg-canvas flex flex-col items-center justify-center px-4 pt-safe pb-safe relative overflow-hidden">
 
       <div className="relative z-10 w-full max-w-sm">
         {/* Logo */}

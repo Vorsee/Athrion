@@ -46,7 +46,7 @@ export default function ConsentScreen() {
   }
 
   return (
-    <div className="min-h-screen bg-canvas flex items-center justify-center px-4 py-10">
+    <div className="min-h-screen bg-canvas flex items-center justify-center px-4 pt-safe-10 pb-safe-10">
       <div className="w-full max-w-sm slide-up">
         <div className="font-bold text-[2rem] leading-tight text-ink">Before you continue</div>
         <p className="text-sm text-muted mt-2 mb-6">
