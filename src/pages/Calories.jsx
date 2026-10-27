@@ -79,14 +79,17 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
     requestAnimationFrame(() => document.getElementById(`meal-${meal}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'center' }))
   }
 
-  // Plan nutrition targets when there is a plan, otherwise profile-based (or custom) goals
+  // Pro with a plan: the plan's targets (adaptive, Pro). Everyone else: their own targets,
+  // typed in or calculated from the profile. A free account that answered the plan questions
+  // still has a nutrition_targets row; it mustn't lock them out of editing.
+  const planTargets = isPro ? planNutrition : null
   const baseGoals = localGoals ?? resolveGoals(profile)
-  const activeGoals = planNutrition
-    ? { calories: planNutrition.calorie_target, protein: planNutrition.protein_grams, carbs: planNutrition.carb_grams }
+  const activeGoals = planTargets
+    ? { calories: planTargets.calorie_target, protein: planTargets.protein_grams, carbs: planTargets.carb_grams }
     : baseGoals
   const goals = activeGoals
-  const fatGoal = planNutrition?.fat_grams
-    ? planNutrition.fat_grams
+  const fatGoal = planTargets?.fat_grams
+    ? planTargets.fat_grams
     : Math.max(30, Math.round((goals.calories - goals.protein * 4 - goals.carbs * 4) / 9))
 
   useEffect(() => {
@@ -182,7 +185,7 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
 
       {/* Ring + macros */}
       <Card hero>
-        <SectionTitle action={planNutrition
+        <SectionTitle action={planTargets
           ? <SectionLink icon="mdi:clipboard-text-outline" onClick={onGoToPlan}>From plan</SectionLink>
           : <SectionLink icon="mdi:pencil-outline" onClick={() => setEditingGoals(true)}>Edit targets</SectionLink>}>
           Today
@@ -212,7 +215,7 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
         </div>
       </Card>
 
-      {planNutrition && (
+      {planTargets && (
         <AdaptiveNutritionCard calorieLogs={logs} current={planNutrition} profile={profile} onApplied={setPlanNutrition} />
       )}
 
