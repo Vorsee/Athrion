@@ -10,10 +10,11 @@ const TABS = [
   { id: 'plan',     label: 'Plan',     icon: 'mdi:calendar-check-outline', pro: true },
   { id: 'calories', label: 'Food',     icon: 'mdi:food-apple-outline' },
   { id: 'progress', label: 'Progress', icon: 'mdi:chart-line' },
+  { id: 'shop',     label: 'Coaches',  icon: 'mdi:whistle-outline' },
 ]
 
 // Pages opened from inside a tab, rather than from the bottom bar
-export const PARENT_TAB = { library: 'workout', group: 'workout', coach: 'workout' }
+export const PARENT_TAB = { library: 'workout', group: 'workout', coach: 'shop' }
 
 // Header title per page. `large`: the page shows its own big title at the top of
 // the content, so the bar title only fades in once that has scrolled away.
@@ -25,6 +26,7 @@ const PAGE_META = {
   library:  { title: 'Library', large: true },
   group:    { title: 'Train together', large: true },
   coach:    { title: 'Coach', large: true },
+  shop:     { title: 'Coaches', large: true },
 }
 
 export const pageTitle = id => PAGE_META[id]?.title ?? ''
@@ -94,7 +96,8 @@ function PageHeader({ page, setPage, session, isPro, onProfileClick, unread = 0,
         <button onClick={shell.action.onClick}
           className="press flex-shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-xl text-sm font-semibold text-ink bg-raised border border-line-strong hover:border-muted/50 transition-colors">
           <Icon icon={shell.action.icon} width={18} aria-hidden="true" />
-          {shell.action.label}
+          {/* Icon only on a narrow screen, so the page title keeps its room */}
+          <span className="max-[340px]:sr-only">{shell.action.label}</span>
         </button>
       )}
 
@@ -187,7 +190,7 @@ export default function Nav({ page, setPage, session, isPro, onProfileClick, unr
         )}
         <nav aria-label="Main" className="bg-canvas/95 backdrop-blur border-t border-line"
           style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-          <div className="grid grid-cols-4 max-w-lg mx-auto h-14">
+          <div className="grid grid-cols-5 max-w-lg mx-auto h-14">
             {TABS.map(t => {
               const active = activeTab === t.id
               const locked = t.pro && !isPro
@@ -197,7 +200,8 @@ export default function Nav({ page, setPage, session, isPro, onProfileClick, unr
                   <span aria-hidden="true"
                     className={`absolute top-0 left-1/2 -translate-x-1/2 w-7 h-[3px] rounded-b-full bg-neon transition-opacity duration-200 ${active ? 'opacity-100' : 'opacity-0'}`} />
                   <Icon icon={t.icon} width={24} aria-hidden="true" />
-                  <span className="flex items-center gap-0.5 text-xs font-semibold">
+                  {/* Five labels don't fit a very narrow screen (or big phone text): icons only, names kept for screen readers */}
+                  <span className="flex items-center gap-0.5 text-xs font-semibold max-[319px]:sr-only">
                     <span>{t.label}</span>
                     {locked && <><Icon icon="mdi:lock-outline" width={12} aria-hidden="true" /><span className="sr-only">, Pro</span></>}
                   </span>

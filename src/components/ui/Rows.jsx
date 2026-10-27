@@ -32,16 +32,22 @@ export function IconButton({ icon, label, onClick, disabled, tone = 'default', c
 }
 
 // One line per exercise: neon icon, bold name, neon value, then any actions
+// On a narrow screen (or big phone text) the value and buttons wrap under the name rather than
+// squeezing it to a letter per line: the name keeps at least about one word's width.
 export function ExerciseRow({ icon, name, meta, value, muted = false, children, className = '' }) {
   return (
-    <div className={`flex items-center gap-3 bg-raised rounded-xl px-3 py-2.5 ${muted ? 'opacity-50' : ''} ${className}`}>
+    <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 bg-raised rounded-xl px-3 py-2.5 ${muted ? 'opacity-50' : ''} ${className}`}>
       {icon && <Icon icon={icon} width={22} className="flex-shrink-0 text-neon-ink" aria-hidden="true" />}
-      <div className="flex-1 min-w-0">
+      <div className="grow basis-0 min-w-[5.5rem]">
         <div className="text-sm font-semibold text-ink leading-snug break-words">{name}</div>
         {meta && <div className="text-xs text-muted">{meta}</div>}
       </div>
-      {value != null && <span className="text-sm font-bold text-neon-ink tabular-nums flex-shrink-0">{value}</span>}
-      {children && <div className="flex items-center gap-1 flex-shrink-0">{children}</div>}
+      {(value != null || children) && (
+        <div className="ml-auto max-w-full flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+          {value != null && <span className="text-sm font-bold text-neon-ink tabular-nums">{value}</span>}
+          {children && <div className="flex items-center gap-1">{children}</div>}
+        </div>
+      )}
     </div>
   )
 }
@@ -74,10 +80,11 @@ export function BigNumber({ value, unit, className = '' }) {
 // Small figure tiles in a row (protein / carbs / fat, sets / volume / time)
 export function StatTiles({ items, className = '' }) {
   return (
-    <div className={`grid gap-2 ${className}`} style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}>
+    // Tiles keep a readable width and wrap to a second row rather than cutting the figure off
+    <div className={`grid gap-2 ${className}`} style={{ gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, 4.75rem), 1fr))` }}>
       {items.map(([label, val]) => (
         <div key={label} className="bg-raised rounded-xl px-3 py-2">
-          <div className="font-bold text-lg text-ink tabular-nums leading-tight truncate">{val}</div>
+          <div className="font-bold text-lg text-ink tabular-nums leading-tight break-words">{val}</div>
           <div className="text-xs text-muted">{label}</div>
         </div>
       ))}

@@ -191,7 +191,8 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
           : <SectionLink icon="mdi:pencil-outline" onClick={() => setEditingGoals(true)}>Edit targets</SectionLink>}>
           Today
         </SectionTitle>
-        <div className="flex items-center gap-5">
+        {/* The figures drop under the ring when there's no room beside it (narrow screen, big text) */}
+        <div className="flex flex-wrap items-center justify-center gap-5">
           <div className="relative w-36 h-36 flex-shrink-0">
             <svg className="w-36 h-36 -rotate-90" viewBox="0 0 160 160">
               <circle cx="80" cy="80" r={rv} fill="none" className="stroke-line" strokeWidth="10"/>
@@ -204,7 +205,7 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
               <div className="text-xs font-medium text-muted">eaten</div>
             </div>
           </div>
-          <div className="flex-1 min-w-0 space-y-3">
+          <div className="grow basis-0 min-w-[7rem] space-y-3">
             <div>
               <div className="font-bold text-3xl tabular-nums leading-none" style={{ color: ringText }}>{remaining}</div>
               <div className="text-xs text-muted mt-1">kcal left of <span className="font-semibold text-ink-2 tabular-nums">{goals.calories}</span></div>
@@ -707,7 +708,7 @@ function MacroBar({ label, val, goal, color }) {
   const p = Math.min(100, Math.round((val / goal) * 100))
   return (
     <div>
-      <div className="flex justify-between text-xs mb-1">
+      <div className="flex flex-wrap justify-between gap-x-2 text-xs mb-1">
         <span style={{ color: tok(color) }}>{label}</span>
         <span className="text-muted tabular-nums">{val}g/{goal}g</span>
       </div>

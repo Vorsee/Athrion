@@ -9,8 +9,8 @@ const VARIANTS = {
   danger:    'bg-danger/12 text-danger border border-danger/25 hover:bg-danger/20',
 }
 const SIZES = {
-  md: 'h-12 px-5 text-sm gap-2 rounded-xl',
-  sm: 'h-9 px-3 text-xs gap-1.5 rounded-md',
+  md: 'min-h-[3rem] py-2 px-5 text-sm gap-2 rounded-xl',
+  sm: 'min-h-[2.25rem] py-1.5 px-3 text-xs gap-1.5 rounded-md',
 }
 
 export default function Button({
@@ -20,7 +20,7 @@ export default function Button({
   const iconSize = size === 'sm' ? 16 : 18
   return (
     <button type={type} {...rest}
-      className={`press inline-flex items-center justify-center font-semibold select-none transition-colors
+      className={`press inline-flex items-center justify-center text-center leading-tight font-semibold select-none transition-colors
         disabled:opacity-40 disabled:cursor-default disabled:active:scale-100
         ${VARIANTS[variant]} ${SIZES[size]} ${full ? 'w-full' : ''} ${className}`}>
       {icon && <Icon icon={icon} width={iconSize} className="flex-shrink-0" aria-hidden="true" />}

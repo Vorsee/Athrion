@@ -261,6 +261,19 @@ describe('Upgrade sheet before Stripe', () => {
 })
 
 describe('Library and Group live inside Workout', () => {
+  it('opens Train together straight on Friends or the leaderboard', async () => {
+    sb.supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: 't' } } })
+    sb.set('user_profiles', { data: profile, error: null })
+    sb.set('fitness_profiles', { data: fitnessProfile, error: null })
+    sb.set('subscriptions', { data: { status: 'pro' }, error: null })
+    sb.set('fitness_plans', { data: planRow, error: null })
+    render(<P.App />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Leaderboard' }))
+    expect(await screen.findByRole('tab', { name: 'Leaderboard' })).toHaveAttribute('aria-selected', 'true')
+    await userEvent.click(screen.getByLabelText('Back to Train'))
+    await userEvent.click(await screen.findByRole('button', { name: 'Friends' }))
+    expect(await screen.findByRole('tab', { name: 'Friends' })).toHaveAttribute('aria-selected', 'true')
+  })
   it('opens from cards on the Workout tab and has a way back', async () => {
     sb.supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: 't' } } })
     sb.set('user_profiles', { data: profile, error: null })
@@ -268,7 +281,7 @@ describe('Library and Group live inside Workout', () => {
     sb.set('subscriptions', { data: { status: 'pro' }, error: null })
     sb.set('fitness_plans', { data: planRow, error: null })
     render(<P.App />)
-    await userEvent.click(await screen.findByText('Train together'))
+    await userEvent.click(await screen.findByRole('button', { name: 'Rooms' }))
     expect(await screen.findByText('Host a room')).toBeInTheDocument()
     await userEvent.click(screen.getByLabelText('Back to Train'))
     expect(await screen.findByText('Exercise library')).toBeInTheDocument()
@@ -280,7 +293,7 @@ describe('Library and Group live inside Workout', () => {
     sb.set('subscriptions', { data: { status: 'pro' }, error: null })
     sb.set('fitness_plans', { data: planRow, error: null })
     render(<P.App />)
-    await userEvent.click(await screen.findByText('Train together'))
+    await userEvent.click(await screen.findByRole('button', { name: 'Rooms' }))
     expect(await screen.findByText('Host a room')).toBeInTheDocument()
     await waitFor(() => expect(window.history.state?.page).toBe('group'))
     act(() => window.history.back())
@@ -306,7 +319,7 @@ describe('Library', () => {
 describe('Group', () => {
   it('shows host and join options and rejects an unknown room code', async () => {
     sb.supabase.rpc.mockResolvedValue({ data: null, error: { code: 'P0002', message: 'Room not found' } })
-    render(<P.Group session={{ name: 'Sam', email: USER.email }} />)
+    render(<P.Group session={{ name: 'Sam', email: USER.email }} intent={{ tab: 'rooms' }} />)
     expect(screen.getByText('Host a room')).toBeInTheDocument()
     await userEvent.type(screen.getByPlaceholderText('ABC123'), 'ZZZZZZ')
     const join = screen.getAllByRole('button').find(b => /join/i.test(b.textContent) && b.textContent !== 'Join a room')

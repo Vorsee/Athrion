@@ -31,7 +31,7 @@ describe('Train together: sets one by one', () => {
   })
 
   it('lets the host add and remove sets, and give each its own reps and rest', async () => {
-    render(<Group session={{ name: 'Sam' }} />)
+    render(<Group session={{ name: 'Sam' }} intent={{ tab: 'rooms' }} />)
     await userEvent.click(screen.getByText('Create a room'))
     await screen.findByText('Room code')
     await userEvent.type(screen.getByPlaceholderText('Search exercises'), 'Front Squat')
@@ -54,7 +54,7 @@ describe('Train together: sets one by one', () => {
   it('shows the set target and the rest that follows while training', async () => {
     const plan = [{ name: 'Front Squat', sets: [{ reps: 5, rest: 150 }, { reps: 3, rest: 60 }] }]
     sb.set('group_sessions', { data: { id: 's1', code: 'ABC234', host_id: USER.id, status: 'lobby', plan, exercises: ['Front Squat'], total_sets: 2, rest_secs: 150 }, error: null })
-    render(<Group session={{ name: 'Sam' }} />)
+    render(<Group session={{ name: 'Sam' }} intent={{ tab: 'rooms' }} />)
     await userEvent.click(screen.getByText('Create a room'))
     await screen.findByText('Room code')
     // A new room starts empty; reload it as joined to pick up the saved plan

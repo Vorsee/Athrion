@@ -202,7 +202,7 @@ function AdaptCard({ plan, checkin, checkinFresh, generating, onAdapt, onCheckin
           </InfoButton>
         )}
       </div>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 8rem), 1fr))' }}>
         <Button variant={checkinFresh ? 'secondary' : 'primary'} icon={checkinFresh ? 'mdi:check' : 'mdi:clipboard-text-outline'} onClick={onCheckin}>
           {checkinFresh ? 'Checked in' : 'Check in'}
         </Button>

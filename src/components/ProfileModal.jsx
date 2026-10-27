@@ -357,7 +357,7 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
             {profile && (
               <>
                 <div className="text-lg leading-[1.3] font-semibold text-ink mb-2">Body stats</div>
-                <div className="grid grid-cols-5 gap-2 mb-5">
+                <div className="grid gap-2 mb-5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 3.5rem), 1fr))' }}>
                   {[
                     ['Height', fmtHeight(profile.height_cm, profile.weight_unit)],
                     ['Weight', fmtWeight(profile.weight_lb, profile.weight_unit === 'kg' ? 'kg' : 'lb')],
@@ -366,9 +366,9 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
                     ['Sex',    profile.sex === 'other' ? 'N/A'
                       : profile.sex.charAt(0).toUpperCase() + profile.sex.slice(1)],
                   ].map(([label, val]) => (
-                    <div key={label} className="bg-inset rounded-xl p-3 text-center">
+                    <div key={label} className="bg-inset rounded-xl px-1.5 py-3 text-center">
                       <div className="font-bold text-lg text-ink leading-tight">{val}</div>
-                      <div className="text-2xs text-muted mt-0.5">{label}</div>
+                      <div className="text-xs text-muted mt-0.5">{label}</div>
                     </div>
                   ))}
                 </div>

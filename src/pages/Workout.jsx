@@ -37,7 +37,7 @@ function matchPlanExercises(planExercises) {
 
 const SESSION_SCREENS = ['training', 'rest', 'exercise-picker']
 
-export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgrade, onOpenPage, onOpenGuide, resumeTick = 0 }) {
+export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgrade, onOpenPage, onOpenGroup, onOpenGuide, resumeTick = 0 }) {
   const { unit, toLb } = useUnit()
   const [screen, setScreen]                   = useState('home')
   const [activeExercises, setActiveExercises] = useState([])
@@ -385,6 +385,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       isPro={isPro}
       onUpgrade={onUpgrade}
       onOpenPage={onOpenPage}
+      onOpenGroup={onOpenGroup}
       onOpenGuide={onOpenGuide}
       pendingCount={pendingCount}
       onRetryPending={retryPending}
@@ -580,7 +581,7 @@ function starterSession(done) {
   return { title: s.title, starter: true, workout: { exercises: s.exercises.map(e => ({ name: e.name, sets: e.sets, reps: e.reps, restSeconds: restSecs(e.rest) })) } }
 }
 
-function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade, onOpenPage, onOpenGuide, pendingCount = 0, onRetryPending }) {
+function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade, onOpenPage, onOpenGroup, onOpenGuide, pendingCount = 0, onRetryPending }) {
   const { fmtVolume } = useUnit()
   const [selectedSession, setSelectedSession] = useState(null)
 
@@ -716,28 +717,31 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
       </Card>
       )}
 
-      {/* ── Train together: a headline feature, so it gets its own neon card ── */}
-      {onOpenPage && (
-        <button type="button" onClick={() => onOpenPage('group')}
-          className="press w-full text-left rounded-2xl border border-neon-stroke/40 p-4 transition-colors hover:border-neon-stroke"
+      {/* ── Train together: a headline feature, so it gets its own neon card. Each button opens
+           its tab directly: friends first, then this month's leaderboard, then live rooms ── */}
+      {onOpenGroup && (
+        <section aria-labelledby="train-together" className="rounded-2xl border border-neon-stroke/40 p-4"
           style={{ background: 'linear-gradient(135deg, rgb(var(--neon-tint)), rgb(var(--surface)))' }}>
           <div className="flex items-center gap-3">
-            <span className="w-12 h-12 rounded-xl bg-neon text-on-neon flex items-center justify-center flex-shrink-0">
-              <Icon icon="mdi:account-group" width={26} aria-hidden="true" />
+            <span className="w-11 h-11 rounded-xl bg-neon text-on-neon flex items-center justify-center flex-shrink-0">
+              <Icon icon="mdi:account-group" width={24} aria-hidden="true" />
             </span>
             <div className="flex-1 min-w-0">
-              <div className="font-bold text-lg text-ink leading-tight">Train together</div>
-              <div className="flex flex-wrap gap-1.5 mt-1.5">
-                <Fact icon="mdi:trophy-outline">Leaderboard</Fact>
-                <Fact icon="mdi:account-multiple-outline">Friends</Fact>
-              </div>
+              <h2 id="train-together" className="font-bold text-lg text-ink leading-tight">Train together</h2>
+              <div className="text-xs text-muted">Friends, monthly points and live rooms</div>
             </div>
-            <Icon icon="mdi:chevron-right" width={24} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
           </div>
-          <div className="mt-3 h-11 rounded-xl border-2 border-neon-stroke text-neon-ink text-sm font-semibold flex items-center justify-center gap-2">
-            <Icon icon="mdi:plus" width={18} aria-hidden="true" />Rooms, friends and leaderboard
+          {/* Three across; stacked rows on a narrow screen (or big phone text) */}
+          <div className="grid grid-cols-3 max-[340px]:grid-cols-1 gap-2 mt-3">
+            {[['friends', 'Friends', 'mdi:account-multiple-outline'], ['ranks', 'Leaderboard', 'mdi:trophy-outline'], ['rooms', 'Rooms', 'mdi:broadcast']].map(([tab, label, icon], i) => (
+              <button key={tab} type="button" onClick={() => onOpenGroup(tab)}
+                className={`press min-h-[3.25rem] max-[340px]:min-h-[2.75rem] rounded-xl px-1 py-2 max-[340px]:px-4 flex flex-col max-[340px]:flex-row items-center justify-center max-[340px]:justify-start gap-0.5 max-[340px]:gap-2.5 text-xs max-[340px]:text-sm font-semibold transition-colors ${
+                  i === 0 ? 'bg-neon text-on-neon active:bg-neon-press' : 'bg-surface border border-neon-stroke/30 text-ink hover:border-neon-stroke'}`}>
+                <Icon icon={icon} width={20} aria-hidden="true" />{label}
+              </button>
+            ))}
           </div>
-        </button>
+        </section>
       )}
 
       <TrainingCalendar history={history} planSchedule={planSchedule} onOpenSession={setSelectedSession} />

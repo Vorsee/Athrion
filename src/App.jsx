@@ -32,6 +32,7 @@ const Group             = lazy(() => import('./pages/Group.jsx'))
 const Plan              = lazy(() => import('./pages/Plan.jsx'))
 const Progress          = lazy(() => import('./pages/Progress.jsx'))
 const Coach             = lazy(() => import('./pages/Coach.jsx'))
+const Coaches           = lazy(() => import('./pages/Coaches.jsx'))
 const ProfileModal      = lazy(() => import('./components/ProfileModal.jsx'))
 const UpgradeSheet      = lazy(() => import('./components/UpgradeSheet.jsx'))
 const NotificationsSheet = lazy(() => import('./components/NotificationsSheet.jsx'))
@@ -49,7 +50,7 @@ const onGuidePath = () => /^\/(workout|guide)\/?$/.test(window.location.pathname
 // athrion.app/add/<nickname>: a friend invite
 const INVITE_PATH = /^\/add\/@?([A-Za-z0-9_]{3,20})\/?$/
 
-const PAGES = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan, progress: Progress, coach: Coach }
+const PAGES = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan, progress: Progress, coach: Coach, shop: Coaches }
 
 export default function App() {
   // undefined = auth not yet resolved; null = logged out; object = logged in
@@ -86,7 +87,7 @@ export default function App() {
   const [checkout, setCheckout] = useState({ open: false, busy: false, error: '' })
   const [planSetup, setPlanSetup] = useState(false) // free user answering the plan questions
   const [foodIntent, setFoodIntent] = useState(null) // 'goals': open the targets editor on Food
-  const [shopIntent, setShopIntent] = useState(null) // { product, paid } or { coach }: open it in Library → Coaches
+  const [shopIntent, setShopIntent] = useState(null) // { product, paid } or { coach }: open it on the Coaches tab
   const [resumeTick, setResumeTick] = useState(0)    // bumped when the session bar is tapped
   const minimised = useMinimisedSession()
   const [unread, setUnread] = useUnreadCount(!!session)
@@ -225,7 +226,7 @@ export default function App() {
       setShopIntent(kind === 'shopcoach' ? { coach: id } : { product: id || null, paid: paid === 'paid' })
       clearShopLink()
       if (parseShopPath(window.location.pathname)) window.history.replaceState(window.history.state, '', '/')
-      navigate('library')
+      navigate('shop')
     }
   }
 
@@ -345,9 +346,10 @@ export default function App() {
   )
 
   const pageProps = {
-    workout: { pendingWorkout, onClearPending: () => setPendingWorkout(null), isPro, onUpgrade: goUpgrade, onOpenPage: navigate, onOpenGuide: openGuide, resumeTick },
-    library: { onStartWorkout: handleStartFromLibrary, onStartPlanDay: handleStartPlanDay, onOpenCoach: () => navigate('coach'), shopIntent, onShopIntentDone: () => setShopIntent(null) },
-    coach: { onOpenShop: () => { setShopIntent({ product: null }); navigate('library') } },
+    workout: { pendingWorkout, onClearPending: () => setPendingWorkout(null), isPro, onUpgrade: goUpgrade, onOpenPage: navigate, onOpenGroup: tab => setGroupIntent({ tab }), onOpenGuide: openGuide, resumeTick },
+    library: { onStartWorkout: handleStartFromLibrary },
+    shop: { onStartPlanDay: handleStartPlanDay, onOpenCoach: () => navigate('coach'), shopIntent, onShopIntentDone: () => setShopIntent(null) },
+    coach: { onOpenShop: () => navigate('shop') },
     calories: { profile, isPro, onUpgrade: goUpgrade, onGoToPlan: () => navigate('plan'), intent: foodIntent, onIntentHandled: () => setFoodIntent(null) },
     group: { session, intent: groupIntent, onIntentDone: () => setGroupIntent(null) },
     progress: { profile, onProfileChange: refreshProfile },

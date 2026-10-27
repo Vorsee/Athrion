@@ -43,7 +43,7 @@ function buildExerciseLeaderboard(allSets, exerciseName) {
 // Main component
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TABS = [['rooms', 'Rooms'], ['ranks', 'Leaderboard'], ['friends', 'Friends']]
+const TABS = [['friends', 'Friends'], ['ranks', 'Leaderboard'], ['rooms', 'Rooms']]
 
 // intent: { tab, invite } from App, e.g. after opening an athrion.app/add/<nickname> link
 export default function Group({ session, intent, onIntentDone }) {
@@ -65,7 +65,7 @@ export default function Group({ session, intent, onIntentDone }) {
   const [startTime, setStartTime] = useState(null)
   const [restLeft, setRestLeft] = useState(60)
   const [confirmEnd, setConfirmEnd] = useState(false)
-  const [tab, setTab] = useState(intent?.tab || 'rooms')
+  const [tab, setTab] = useState(intent?.tab || 'friends')
   const [me, setMe] = useState(undefined) // undefined = loading, null = no nickname yet
   const [editingNick, setEditingNick] = useState(false)
   const [invite, setInvite] = useState(intent?.invite || null)
@@ -358,8 +358,9 @@ export default function Group({ session, intent, onIntentDone }) {
     <div className="space-y-4 py-4 slide-up">
       <PageHeader icon="mdi:account-group-outline" title="Train together"
         facts={<>
-          <Fact icon="mdi:lightning-bolt">Live rooms</Fact>
+          <Fact icon="mdi:account-multiple-outline">Friends</Fact>
           <Fact icon="mdi:trophy-outline">Monthly leaderboard</Fact>
+          <Fact icon="mdi:lightning-bolt">Live rooms</Fact>
         </>} />
       <Segmented label="Train together" options={TABS} value={tab} onChange={t => { setTab(t); setEditingNick(false) }} />
 

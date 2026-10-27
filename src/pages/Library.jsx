@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Icon } from '@iconify/react'
 import { useBackHandler } from '../lib/shell.js'
 import { Button, Segmented, Chip, Sheet, EmptyState, PageHeader, Fact, InfoButton, SectionTitle } from '../components/ui/index.js'
@@ -6,7 +6,6 @@ import { EXERCISES, MUSCLES, getExerciseIcon } from '../lib/data.js'
 import { WORKOUT_LIBRARY } from '../lib/library.js'
 import { saveCustomWorkout } from '../lib/api.js'
 import { tok } from '../lib/tokens.js'
-import Shop from '../components/Shop.jsx'
 
 const diffStyle = c => ({ background: tok(c, 0.12), color: tok(c) })
 const DIFF_COLORS = {
@@ -17,12 +16,8 @@ const DIFF_COLORS = {
 
 const PAGE_SIZE = 20
 
-// shopIntent: { product } when coming back from buying a coach's workout
-export default function Library({ onStartWorkout, onStartPlanDay, onOpenCoach, shopIntent, onShopIntentDone }) {
-  const [tab, setTab]                   = useState(shopIntent ? 'shop' : 'routines')
-  useEffect(() => { if (shopIntent) setTab('shop') }, [shopIntent])
-  const [shopDeep, setShopDeep]         = useState(false) // a coach or product is open in the shop
-  const showTop = !(tab === 'shop' && shopDeep)
+export default function Library({ onStartWorkout }) {
+  const [tab, setTab]                   = useState('routines')
   const [selectedRoutine, setSelectedRoutine] = useState(null)
   const [selectedEx, setSelectedEx]     = useState(null)
   useBackHandler(!!selectedRoutine, () => setSelectedRoutine(null), 'Library', selectedRoutine?.name)
@@ -60,21 +55,15 @@ export default function Library({ onStartWorkout, onStartPlanDay, onOpenCoach, s
   return (
     <div className="space-y-4 py-4 slide-up">
       {/* Header */}
-      {showTop && <>
       <PageHeader icon="mdi:book-open-variant" title="Library"
         facts={tab === 'routines'
           ? <Fact icon="mdi:clipboard-list-outline">{WORKOUT_LIBRARY.length} routines</Fact>
-          : tab === 'shop'
-          ? <Fact icon="mdi:whistle-outline">Workouts from coaches</Fact>
           : <Fact icon="mdi:dumbbell">{filtered.length} exercises</Fact>} />
 
       {/* Tab switcher */}
-      <Segmented options={[['routines', 'Routines'], ['shop', 'Coaches'], ['exercises', 'Exercises']]} value={tab} onChange={setTab} label="Library view" />
-      </>}
+      <Segmented options={[['routines', 'Routines'], ['exercises', 'Exercises']]} value={tab} onChange={setTab} label="Library view" />
 
-      {tab === 'shop' ? (
-        <Shop onStartPlanDay={onStartPlanDay} onOpenCoach={onOpenCoach} intent={shopIntent} onIntentDone={onShopIntentDone} onDeepChange={setShopDeep} />
-      ) : tab === 'routines' ? (
+      {tab === 'routines' ? (
         <>
           {/* Tag filter */}
           <div className="flex gap-1.5 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>

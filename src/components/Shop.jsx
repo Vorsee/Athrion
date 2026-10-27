@@ -63,7 +63,7 @@ function ShareButton({ url, text }) {
 // Matches a product or coach against the search: title, coach name, specialty, level or kind
 const matches = (q, ...fields) => fields.some(f => f && String(f).toLowerCase().includes(q))
 
-// The shop tab in Library. intent: { product, paid } after a Stripe checkout (paid: it went through),
+// The shop on the Coaches tab. intent: { product, paid } after a Stripe checkout (paid: it went through),
 // or { coach } from a shared coach link.
 // onDeepChange(true) while a coach or product is open, so Library can hide its own header
 export default function Shop({ onStartPlanDay, onOpenCoach, intent, onIntentDone, onDeepChange }) {
@@ -89,8 +89,8 @@ export default function Shop({ onStartPlanDay, onOpenCoach, intent, onIntentDone
   }, [intent])
 
   useEffect(() => { onDeepChange?.(!!(coachId || productId)) }, [coachId, productId])
-  useBackHandler(!!coachId && !productId, () => setCoachId(null), 'Shop', 'Coach')
-  useBackHandler(!!productId, () => { setProductId(null); setJustBought(false) }, 'Shop', 'Workout')
+  useBackHandler(!!coachId && !productId, () => setCoachId(null), 'Coaches', 'Coach')
+  useBackHandler(!!productId, () => { setProductId(null); setJustBought(false) }, 'Coaches', 'Workout')
 
   const coachOf = id => shop?.coaches.find(c => c.user_id === id)
 
@@ -177,10 +177,10 @@ export default function Shop({ onStartPlanDay, onOpenCoach, intent, onIntentDone
         </>
       )}
 
-      <button type="button" onClick={onOpenCoach}
+      {coachesWithProducts.length > 0 && <button type="button" onClick={onOpenCoach}
         className="press w-full min-h-[44px] text-sm font-semibold text-ink-2 hover:text-ink inline-flex items-center justify-center gap-1.5">
         <Icon icon="mdi:whistle-outline" width={18} aria-hidden="true" />Are you a coach? Sell your workouts
-      </button>
+      </button>}
     </div>
   )
 }

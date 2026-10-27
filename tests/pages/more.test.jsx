@@ -114,7 +114,7 @@ describe('Group', () => {
   it('hosts a session and shows the room code', async () => {
     sb.set('group_sessions', { data: { id: 's1', code: 'ABC234', host_id: USER.id, status: 'lobby', exercises: [], total_sets: 3, rest_secs: 60 }, error: null })
     sb.set('group_participants', q => q.ops.some(o => o[0] === 'insert') ? { data: null, error: null } : { data: [{ user_id: USER.id, display_name: 'Sam' }], error: null })
-    render(<Group session={{ name: 'Sam', email: USER.email }} />)
+    render(<Group session={{ name: 'Sam', email: USER.email }} intent={{ tab: 'rooms' }} />)
     await userEvent.click(screen.getByText('Create a room'))
     expect(await screen.findByText('Room code')).toBeInTheDocument()
     expect(screen.getByText('ABC234')).toBeInTheDocument()

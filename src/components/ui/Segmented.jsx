@@ -7,13 +7,13 @@ export default function Segmented({ options, value, onChange, label, kind = 'tab
   return (
     <div className={`relative ${className}`}>
       <div role={radio ? 'radiogroup' : 'tablist'} aria-label={label}
-        className={`flex gap-1 bg-raised border border-line rounded-xl p-1 ${scroll ? 'overflow-x-auto' : ''}`}
-        style={scroll ? { scrollbarWidth: 'none' } : undefined}>
+        className="flex gap-1 bg-raised border border-line rounded-xl p-1 overflow-x-auto"
+        style={{ scrollbarWidth: 'none' }}>
         {options.map(([id, text]) => {
           const on = value === id
           return (
             <button key={id} type="button" role={radio ? 'radio' : 'tab'} aria-selected={radio ? undefined : on} aria-checked={radio ? on : undefined} onClick={() => onChange(id)}
-              className={`press ${scroll ? 'flex-shrink-0 px-4' : 'flex-1 px-2'} min-h-[40px] rounded-[10px] text-sm font-semibold whitespace-nowrap border transition-colors duration-200 ${
+              className={`press ${scroll ? 'flex-shrink-0 px-4' : 'flex-1 min-w-max px-2'} min-h-[40px] rounded-[10px] text-sm font-semibold whitespace-nowrap border transition-colors duration-200 ${
                 on ? 'bg-surface text-ink border-line-strong' : 'text-muted border-transparent hover:text-ink-2'
               }`}>
               {text}
