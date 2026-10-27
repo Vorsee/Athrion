@@ -25,6 +25,16 @@ export async function saveUserProfile({ sex, height_cm, weight_lb, age, weight_u
   return data
 }
 
+// A new weigh-in becomes the profile weight (shown in Profile, used for calculated targets)
+export async function saveProfileWeight(weight_lb) {
+  const { data: { user } } = await supabase.auth.getUser()
+  const { error } = await supabase
+    .from('user_profiles')
+    .update({ weight_lb, updated_at: new Date().toISOString() })
+    .eq('user_id', user.id)
+  if (error) throw error
+}
+
 export async function saveGoals({ calorie_goal, protein_goal, carb_goal }) {
   const { data: { user } } = await supabase.auth.getUser()
   const { data, error } = await supabase

@@ -3,7 +3,7 @@ import { Icon } from '@iconify/react'
 import { useBackHandler, useHeaderAction } from '../lib/shell.js'
 import { Button, Card, SectionTitle, Segmented, EmptyState, Skeleton, SkeletonRows, Sheet, PageHeader, Fact, InfoButton, BigNumber, StatTiles } from '../components/ui/index.js'
 import LineChart from '../components/LineChart.jsx'
-import { fetchWorkoutHistory } from '../lib/api.js'
+import { fetchWorkoutHistory, saveProfileWeight } from '../lib/api.js'
 import {
   fetchMeasurements, saveMeasurement, deleteMeasurement,
   fetchProgressPhotos, uploadProgressPhoto, deleteProgressPhoto,
@@ -85,8 +85,9 @@ const MEASURE_FIELDS = [
   ['arm_in', 'Arm (in)'], ['thigh_in', 'Thigh (in)'], ['body_fat_pct', 'Body fat %'],
 ]
 
-// Weigh-in form: on the Body tab and in the header's Log weight sheet
-function WeighInForm({ onSaved }) {
+// Weigh-in form: on the Body tab and in the header's Log weight sheet.
+// latestDate: the newest weigh-in so far; one on or after it also updates the profile weight.
+function WeighInForm({ onSaved, latestDate, onProfileChange }) {
   const { unit, toLb } = useUnit()
   const [form, setForm] = useState({ date: today(), weight_lb: '' })
   const [showMore, setShowMore] = useState(false)
@@ -101,6 +102,9 @@ function WeighInForm({ onSaved }) {
       for (const [k] of MEASURE_FIELDS) row[k] = num(form[k])
       if (Object.entries(row).every(([k, v]) => k === 'date' || v == null)) throw new Error('Enter at least one value')
       await saveMeasurement(row)
+      if (row.weight_lb != null && (!latestDate || row.date >= latestDate)) {
+        await saveProfileWeight(row.weight_lb).then(() => onProfileChange?.()).catch(() => {})
+      }
       setForm({ date: today(), weight_lb: '' })
       setShowMore(false)
       onSaved()
@@ -136,7 +140,7 @@ function WeighInForm({ onSaved }) {
   )
 }
 
-function Body({ measurements, checkinWeights, onSaved }) {
+function Body({ measurements, checkinWeights, onSaved, latestDate, onProfileChange }) {
   const { unit, fromLb } = useUnit()
 
   // Measurements take precedence over check-in weights on the same day
@@ -162,7 +166,7 @@ function Body({ measurements, checkinWeights, onSaved }) {
 
       <Card>
         <SectionTitle>Log a weigh-in</SectionTitle>
-        <WeighInForm onSaved={onSaved} />
+        <WeighInForm onSaved={onSaved} latestDate={latestDate} onProfileChange={onProfileChange} />
       </Card>
 
       {measurements.some(m => MEASURE_FIELDS.some(([k]) => m[k] != null)) && (
@@ -460,7 +464,7 @@ const TABS = [
   ['overview', 'Overview'], ['body', 'Body'], ['lifts', 'Lifts'], ['photos', 'Photos'], ['health', 'Health'],
 ]
 
-export default function Progress() {
+export default function Progress({ onProfileChange }) {
   const [tab, setTab] = useState('overview')
   const [history, setHistory] = useState([])
   const [measurements, setMeasurements] = useState([])
@@ -497,6 +501,7 @@ export default function Progress() {
   }
 
   useEffect(() => { load() }, [])
+  const latestDate = [...measurements.filter(m => m.weight_lb != null).map(m => m.date), ...checkinWeights.map(c => c.date)].sort().at(-1) ?? null
 
   return (
     <div className="space-y-4 pt-2 pb-4">
@@ -513,7 +518,7 @@ export default function Progress() {
       ) : (
         <>
           {tab === 'overview' && <Overview history={history} badges={badges} />}
-          {tab === 'body' && <Body measurements={measurements} checkinWeights={checkinWeights} onSaved={load} />}
+          {tab === 'body' && <Body measurements={measurements} checkinWeights={checkinWeights} onSaved={load} latestDate={latestDate} onProfileChange={onProfileChange} />}
           {tab === 'lifts' && <Lifts history={history} />}
           {tab === 'photos' && <Photos photos={photos} onChanged={load} />}
           {tab === 'health' && <Health health={health} onChanged={load} />}
@@ -522,7 +527,7 @@ export default function Progress() {
 
       {logWeight && (
         <Sheet title="Log weight" onClose={() => setLogWeight(false)}>
-          <WeighInForm onSaved={() => { setLogWeight(false); load() }} />
+          <WeighInForm onSaved={() => { setLogWeight(false); load() }} latestDate={latestDate} onProfileChange={onProfileChange} />
         </Sheet>
       )}
     </div>

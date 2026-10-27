@@ -1,6 +1,6 @@
 // Deeper flows on Progress, Group and the barcode scanner
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { sb, USER } from '../helpers/supabaseMock.js'
 
@@ -37,6 +37,26 @@ describe('Progress', () => {
     await waitFor(() => expect(sb.queriesFor('body_measurements').some(q => sb.op(q, 'upsert'))).toBe(true))
     const row = sb.op(sb.queriesFor('body_measurements').find(q => sb.op(q, 'upsert')), 'upsert')[0]
     expect(row).toMatchObject({ weight_lb: 179, user_id: USER.id })
+  })
+  it('makes a new weigh-in the profile weight, but not an older one typed in later', async () => {
+    sb.set('body_measurements', q => (sb.op(q, 'upsert') ? { data: { id: 'm2' }, error: null } : { data: [{ id: 'm1', date: '2026-10-20', weight_lb: 182 }], error: null }))
+    sb.set('user_profiles', { data: null, error: null })
+    const onProfileChange = vi.fn()
+    render(<Progress onProfileChange={onProfileChange} />)
+    await userEvent.click(await screen.findByText('Body'))
+    await userEvent.type(screen.getByLabelText('Weight (lb)'), '179')
+    await userEvent.click(screen.getByText('Save'))
+    await waitFor(() => expect(onProfileChange).toHaveBeenCalled())
+    const update = sb.queriesFor('user_profiles').map(q => sb.op(q, 'update')?.[0]).find(Boolean)
+    expect(update).toMatchObject({ weight_lb: 179 })
+
+    sb.state.queries.length = 0
+    onProfileChange.mockClear()
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-10-01' } })
+    await userEvent.type(screen.getByLabelText('Weight (lb)'), '190')
+    await userEvent.click(screen.getByText('Save'))
+    await waitFor(() => expect(sb.queriesFor('body_measurements').some(q => sb.op(q, 'upsert'))).toBe(true))
+    expect(sb.queriesFor('user_profiles').some(q => sb.op(q, 'update'))).toBe(false)
   })
   it('shows lift history and records', async () => {
     sb.set('workout_logs', { data: history, error: null })

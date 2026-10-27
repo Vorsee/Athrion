@@ -9,7 +9,7 @@ import {
   fetchFitnessProfile, saveFitnessProfile, saveNutritionTarget, generatePlan,
   dbProfileToPayload, dbNutritionToPayload, updatePlanData,
 } from '../lib/fitnessApi.js'
-import { saveGoals } from '../lib/api.js'
+import { saveGoals, saveProfileWeight } from '../lib/api.js'
 import { calculateNutritionTargets, GOAL_LABELS, GOAL_ICONS } from '../lib/nutrition.js'
 import { SAMPLE_PLAN } from '../lib/samplePlan.js'
 import ProLock from '../components/ProLock.jsx'
@@ -340,7 +340,7 @@ const SLIDER_FIELDS = [
   { key: 'stressLevel',  label: 'Stress level',   min: 1, max: 5 },
 ]
 
-function CheckinModal({ planId, onClose, onSaved }) {
+function CheckinModal({ planId, onClose, onSaved, onProfileChange }) {
   const { unit, toLb } = useUnit()
   const [vals, setVals]     = useState({ energyLevel: 3, sleepQuality: 3, soreness: 2, stressLevel: 2 })
   const [weight, setWeight] = useState('')
@@ -363,6 +363,8 @@ function CheckinModal({ planId, onClose, onSaved }) {
         workouts_completed: workouts ? Number(workouts) : null,
         notes: notes.trim().slice(0, 1000),
       })
+      // Today's weight is the newest one, so it's the profile weight now
+      if (weight) await saveProfileWeight(toLb(weight)).then(() => onProfileChange?.()).catch(() => {})
       onSaved()
       onClose()
     } catch (e) {
@@ -658,6 +660,7 @@ function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
       {showCheckin && (
         <CheckinModal
           planId={plan.id}
+          onProfileChange={onProfileChange}
           onClose={() => setShowCheckin(false)}
           onSaved={() => {
             fetchLatestCheckin().then(setCheckin).catch(() => {})
