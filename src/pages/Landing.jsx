@@ -1,6 +1,6 @@
 import { Icon } from '@iconify/react'
 import { Button } from '../components/ui/index.js'
-import { PLANS, PRO_FEATURES, TRIAL_DAYS, annualSavingPct, money, priceLine } from '../lib/pricing.js'
+import { PLANS, PRO_FEATURES, TRIAL_DAYS, COACH_FEE_RATE, annualSavingPct, money, priceLine } from '../lib/pricing.js'
 import Brand from '../components/Brand.jsx'
 
 const PAINS = [
@@ -84,6 +84,21 @@ export default function Landing({ onCreateAccount, onSignIn }) {
               </li>
             ))}
           </ol>
+        </section>
+
+        {/* Coach shop */}
+        <section className="max-w-5xl mx-auto px-4 pb-14" aria-labelledby="coaches">
+          <div className="bg-surface border border-line rounded-2xl p-5 xs:p-6 flex flex-col md:flex-row md:items-center gap-4">
+            <Icon icon="mdi:whistle-outline" width={32} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
+            <div className="flex-1">
+              <h2 id="coaches" className="font-bold text-xl text-ink">Workouts from real coaches</h2>
+              <p className="text-sm text-muted mt-1">
+                Buy a coach's workout or week plan once, with their tips and videos, and train it in the same log.
+                Coaches are reviewed before they sell and keep {Math.round((1 - COACH_FEE_RATE) * 100)}% of each sale.
+              </p>
+            </div>
+            <Button variant="secondary" onClick={onCreateAccount}>Create a free account</Button>
+          </div>
         </section>
 
         {/* Pricing */}

@@ -12,6 +12,7 @@ import HomeScreenPrompt from './components/HomeScreenPrompt.jsx'
 import { PageSkeleton } from './components/ui/States.jsx'
 import { readGuidePick, clearGuidePick } from './lib/guidePlans.js'
 import { rememberInvite, readInvite } from './lib/socialApi.js'
+import { parseShopPath, readShopLink, clearShopLink, shopTarget } from './lib/shopLink.js'
 import { useUnreadCount } from './lib/notifications.js'
 import { hasConsented } from './lib/legal.js'
 import Brand from './components/Brand.jsx'
@@ -20,6 +21,7 @@ import Brand from './components/Brand.jsx'
 const Auth              = lazy(() => import('./pages/Auth.jsx'))
 const Landing           = lazy(() => import('./pages/Landing.jsx'))
 const Guide             = lazy(() => import('./pages/Guide.jsx'))
+const ShopPreview       = lazy(() => import('./pages/ShopPreview.jsx'))
 const NewPasswordSheet  = lazy(() => import('./components/NewPasswordSheet.jsx'))
 const Onboarding        = lazy(() => import('./pages/Onboarding.jsx'))
 const ConsentScreen     = lazy(() => import('./components/LegalConsent.jsx'))
@@ -55,7 +57,7 @@ export default function App() {
   // Signed-out: landing page for new visitors, straight to sign in for people who've been here
   const [authMode, setAuthMode] = useState(() => {
     if (new URLSearchParams(window.location.search).has('signup')) return 'register'
-    if (onGuidePath()) return null
+    if (onGuidePath() || parseShopPath(window.location.pathname)) return null
     if (INVITE_PATH.test(window.location.pathname)) {
       try { return localStorage.getItem('athrion_signed_in_before') ? 'login' : 'register' } catch { return 'register' }
     }
@@ -64,6 +66,8 @@ export default function App() {
   const [recovering, setRecovering] = useState(false)
   // Open on /guide, or after "Start this plan free" until the new account has saved it
   const [guide, setGuide] = useState(() => onGuidePath() || !!readGuidePick())
+  // athrion.app/shop/<product> or /shop/coach/<coach>: a shared coach shop link (public preview signed out)
+  const [shopLink, setShopLink] = useState(() => parseShopPath(window.location.pathname))
   // A friend invite opens Train together → Friends once signed in; it survives sign-up
   const [groupIntent, setGroupIntent] = useState(() => {
     const m = window.location.pathname.match(INVITE_PATH)
@@ -82,17 +86,20 @@ export default function App() {
   const [checkout, setCheckout] = useState({ open: false, busy: false, error: '' })
   const [planSetup, setPlanSetup] = useState(false) // free user answering the plan questions
   const [foodIntent, setFoodIntent] = useState(null) // 'goals': open the targets editor on Food
-  const [shopIntent, setShopIntent] = useState(null) // { product, paid }: open a coach product in Library → Coaches
+  const [shopIntent, setShopIntent] = useState(null) // { product, paid } or { coach }: open it in Library → Coaches
   const [resumeTick, setResumeTick] = useState(0)    // bumped when the session bar is tapped
   const minimised = useMinimisedSession()
   const [unread, setUnread] = useUnreadCount(!!session)
   const [showInbox, setShowInbox] = useState(false)
   // Where a tapped notification points: /?open=friends | ranks | workout | progress | notifications | coach,
-  // or shop (&product=<id>, back from buying a coach's workout)
+  // or shop (&product=<id>, back from buying a coach's workout). A shared shop link, or one
+  // remembered through sign-up, opens that product or coach.
   const [pendingOpen, setPendingOpen] = useState(() => {
     const params = new URLSearchParams(window.location.search)
     const open = params.get('open')
-    return open === 'shop' && params.get('product') ? `shop:${params.get('product')}:${params.get('paid') ? 'paid' : ''}` : open
+    if (open) return open === 'shop' && params.get('product') ? `shop:${params.get('product')}:${params.get('paid') ? 'paid' : ''}` : open
+    const link = parseShopPath(window.location.pathname) || readShopLink()
+    return link ? shopTarget(link) : null
   })
   // Tidy the address once read. Not inside the initializer: StrictMode runs that twice in dev,
   // and the second run would find the link already gone.
@@ -214,8 +221,10 @@ export default function App() {
     else if (target === 'notifications') setShowInbox(true)
     else if (target === 'coach') navigate('coach')
     else if (target?.startsWith('shop')) {
-      const [, product, paid] = target.split(':')
-      setShopIntent({ product: product || null, paid: paid === 'paid' })
+      const [kind, id, paid] = target.split(':')
+      setShopIntent(kind === 'shopcoach' ? { coach: id } : { product: id || null, paid: paid === 'paid' })
+      clearShopLink()
+      if (parseShopPath(window.location.pathname)) window.history.replaceState(window.history.state, '', '/')
       navigate('library')
     }
   }
@@ -281,6 +290,9 @@ export default function App() {
         ? <Auth key={authMode} initialMode={authMode} onBack={() => setAuthMode(null)} />
         : guide
         ? <Guide onStart={() => setAuthMode('register')} onSignIn={() => setAuthMode('login')} />
+        : shopLink
+        ? <ShopPreview link={shopLink} onStart={() => setAuthMode('register')} onSignIn={() => setAuthMode('login')}
+            onHome={() => { clearShopLink(); setPendingOpen(null); window.history.replaceState(null, '', '/'); setShopLink(null) }} />
         : <Landing onCreateAccount={() => setAuthMode('register')} onSignIn={() => setAuthMode('login')} />}
     </Suspense>
   )

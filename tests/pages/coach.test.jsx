@@ -134,6 +134,64 @@ describe('Shop', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Become a coach' }))
     expect(onOpenCoach).toHaveBeenCalled()
   })
+  it('searches coaches and products by name, title or specialty', async () => {
+    shopData()
+    render(<Shop onStartPlanDay={() => {}} onOpenCoach={() => {}} />)
+    const search = await screen.findByRole('searchbox', { name: 'Search the shop' })
+    await userEvent.type(search, 'leg')
+    expect(screen.getByText('Leg day')).toBeInTheDocument()
+    expect(screen.queryByText('Maya Strong')).not.toBeInTheDocument()
+    await userEvent.clear(search)
+    await userEvent.type(search, 'strength')
+    expect(screen.getByText('Maya Strong')).toBeInTheDocument()
+    await userEvent.clear(search)
+    await userEvent.type(search, 'yoga')
+    expect(screen.getByText('Nothing matches "yoga".')).toBeInTheDocument()
+  })
+
+  it('opens a coach from a shared link and copies their link', async () => {
+    shopData()
+    const writeText = vi.fn(async () => {})
+    vi.stubGlobal('navigator', { ...navigator, share: undefined, clipboard: { writeText } })
+    render(<Shop onStartPlanDay={() => {}} onOpenCoach={() => {}} intent={{ coach: 'coach-1' }} />)
+    expect(await screen.findByText('I coach lifters.')).toBeInTheDocument()
+    expect(screen.getByText('Reviewed coach')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Share' }))
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/shop/coach/coach-1`)
+    expect(await screen.findByRole('button', { name: 'Link copied' })).toBeInTheDocument()
+  })
+})
+
+describe('Shared shop links', () => {
+  it('reads product and coach links, and nothing else', async () => {
+    const { parseShopPath } = await import('../../src/lib/shopLink.js')
+    expect(parseShopPath(`/shop/${PID}`)).toEqual({ kind: 'product', id: PID })
+    expect(parseShopPath(`/shop/coach/${PID.toUpperCase()}/`)).toEqual({ kind: 'coach', id: PID })
+    expect(parseShopPath('/shop/abc')).toBeNull()
+    expect(parseShopPath('/workout')).toBeNull()
+  })
+
+  it('shows a signed-out preview and remembers the link through sign-up', async () => {
+    const ShopPreview = (await import('../../src/pages/ShopPreview.jsx')).default
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ coach, products: [product] }) }))
+    vi.stubGlobal('fetch', fetchMock)
+    const onStart = vi.fn()
+    render(<ShopPreview link={{ kind: 'product', id: PID }} onStart={onStart} onSignIn={() => {}} onHome={() => {}} />)
+    expect(await screen.findByRole('heading', { name: 'Leg day' })).toBeInTheDocument()
+    expect(fetchMock.mock.calls[0][0]).toBe(`/api/shop-preview?product=${PID}`)
+    expect(screen.getByText('$10.00')).toBeInTheDocument()
+    expect(screen.getByText('Lunges')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Create a free account to buy' }))
+    expect(onStart).toHaveBeenCalled()
+    expect(JSON.parse(localStorage.getItem('athrion_shop_link'))).toEqual({ kind: 'product', id: PID })
+  })
+
+  it('says so when a shared product is gone', async () => {
+    const ShopPreview = (await import('../../src/pages/ShopPreview.jsx')).default
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 404, json: async () => ({}) })))
+    render(<ShopPreview link={{ kind: 'product', id: PID }} onStart={() => {}} onSignIn={() => {}} onHome={() => {}} />)
+    expect(await screen.findByText('Not available')).toBeInTheDocument()
+  })
 })
 
 describe('Coach page', () => {

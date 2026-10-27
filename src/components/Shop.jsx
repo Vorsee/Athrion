@@ -10,6 +10,7 @@ import {
 } from '../lib/coachApi.js'
 import { currentUserId } from '../lib/groupApi.js'
 import { CoachNote } from './CoachVideo.jsx'
+import { productLink, coachLink, shareLink } from '../lib/shopLink.js'
 
 export const KIND_LABEL = { workout: 'Workout', plan: 'Week plan' }
 
@@ -46,13 +47,31 @@ function ProductRow({ product, coach, onOpen, owned }) {
   )
 }
 
-// The shop tab in Library. intent: { product, paid } after a Stripe checkout (paid: it went through).
+// A small "Share" button for a product or coach link; says "Link copied" where there's no share sheet
+function ShareButton({ url, text }) {
+  const [copied, setCopied] = useState(false)
+  async function share() {
+    if (await shareLink(url, text)) { setCopied(true); setTimeout(() => setCopied(false), 2000) }
+  }
+  return (
+    <Button size="sm" variant="secondary" icon={copied ? 'mdi:check' : 'mdi:share-variant-outline'} onClick={share}>
+      {copied ? 'Link copied' : 'Share'}
+    </Button>
+  )
+}
+
+// Matches a product or coach against the search: title, coach name, specialty, level or kind
+const matches = (q, ...fields) => fields.some(f => f && String(f).toLowerCase().includes(q))
+
+// The shop tab in Library. intent: { product, paid } after a Stripe checkout (paid: it went through),
+// or { coach } from a shared coach link.
 // onDeepChange(true) while a coach or product is open, so Library can hide its own header
 export default function Shop({ onStartPlanDay, onOpenCoach, intent, onIntentDone, onDeepChange }) {
   const [shop, setShop] = useState(null)
   const [owned, setOwned] = useState(new Set())
   const [error, setError] = useState('')
-  const [coachId, setCoachId] = useState(null)
+  const [coachId, setCoachId] = useState(intent?.coach ?? null)
+  const [query, setQuery] = useState('')
   const [productId, setProductId] = useState(intent?.product ?? null)
   const [justBought, setJustBought] = useState(!!intent?.paid)
 
@@ -65,6 +84,7 @@ export default function Shop({ onStartPlanDay, onOpenCoach, intent, onIntentDone
   useEffect(load, [])
   useEffect(() => {
     if (intent?.product) { setProductId(intent.product); setJustBought(!!intent.paid) }
+    if (intent?.coach) { setProductId(null); setCoachId(intent.coach) }
     if (intent) onIntentDone?.()
   }, [intent])
 
@@ -93,6 +113,11 @@ export default function Shop({ onStartPlanDay, onOpenCoach, intent, onIntentDone
   const coachesWithProducts = shop.coaches
     .map(c => ({ ...c, count: shop.products.filter(p => p.coach_id === c.user_id).length }))
     .filter(c => c.count > 0)
+  const q = query.trim().toLowerCase()
+  const shownCoaches = q ? coachesWithProducts.filter(c => matches(q, c.display_name, c.credentials, ...c.specialties)) : coachesWithProducts
+  const shownProducts = q
+    ? shop.products.filter(p => matches(q, p.title, p.summary, p.level, KIND_LABEL[p.kind], coachOf(p.coach_id)?.display_name, ...(coachOf(p.coach_id)?.specialties ?? [])))
+    : shop.products.slice(0, 12)
 
   return (
     <div className="space-y-5">
@@ -112,10 +137,21 @@ export default function Shop({ onStartPlanDay, onOpenCoach, intent, onIntentDone
         </EmptyState>
       ) : (
         <>
-          <section>
+          <label className="relative block">
+            <span className="sr-only">Search the shop</span>
+            <Icon icon="mdi:magnify" width={20} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none" aria-hidden="true" />
+            <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search coaches, workouts, specialties"
+              className="w-full min-h-[44px] bg-surface border border-line rounded-2xl pl-11 pr-4 text-sm text-ink placeholder:text-muted focus:outline-none focus:border-neon-stroke/50" />
+          </label>
+
+          {q && shownCoaches.length === 0 && shownProducts.length === 0 && (
+            <p className="text-sm text-muted text-center py-4">Nothing matches "{query.trim()}".</p>
+          )}
+
+          {shownCoaches.length > 0 && <section>
             <SectionTitle>Coaches</SectionTitle>
             <div className="space-y-2">
-              {coachesWithProducts.map(c => (
+              {shownCoaches.map(c => (
                 <button key={c.user_id} type="button" onClick={() => setCoachId(c.user_id)}
                   className="press w-full text-left bg-surface border border-line hover:border-neon-stroke/30 rounded-2xl px-4 py-3 flex items-center gap-3 transition-colors">
                   <Avatar coach={c} size={44} />
@@ -128,16 +164,16 @@ export default function Shop({ onStartPlanDay, onOpenCoach, intent, onIntentDone
                 </button>
               ))}
             </div>
-          </section>
+          </section>}
 
-          <section>
-            <SectionTitle>New in the shop</SectionTitle>
+          {shownProducts.length > 0 && <section>
+            <SectionTitle>{q ? 'Workouts and plans' : 'New in the shop'}</SectionTitle>
             <div className="space-y-2">
-              {shop.products.slice(0, 12).map(p => (
+              {shownProducts.map(p => (
                 <ProductRow key={p.id} product={p} coach={coachOf(p.coach_id)} owned={owned.has(p.id)} onOpen={() => setProductId(p.id)} />
               ))}
             </div>
-          </section>
+          </section>}
         </>
       )}
 
@@ -154,14 +190,16 @@ function CoachPage({ coach, products, owned, onOpenProduct }) {
     <div className="space-y-4">
       <div className="flex items-center gap-4">
         <Avatar coach={coach} size={72} />
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h2 className="font-bold text-2xl text-ink leading-tight break-words">{coach.display_name}</h2>
           {coach.credentials && <div className="text-sm text-muted mt-0.5">{coach.credentials}</div>}
         </div>
       </div>
-      {coach.specialties.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">{coach.specialties.map(s => <Fact key={s}>{s}</Fact>)}</div>
-      )}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Fact icon="mdi:check-decagram-outline">Reviewed coach</Fact>
+        {coach.specialties.map(s => <Fact key={s}>{s}</Fact>)}
+      </div>
+      <ShareButton url={coachLink(coach.user_id)} text={`${coach.display_name}'s workouts on ATHRION`} />
       {coach.bio && <p className="text-sm text-ink-2 whitespace-pre-line">{coach.bio}</p>}
       {coach.links && <p className="text-sm text-muted break-words">{coach.links}</p>}
 
@@ -285,6 +323,8 @@ function ProductPage({ productId, coach: knownCoach, justBought, onStartPlanDay,
       )}
 
       {product.summary && <p className="text-base text-ink-2">{product.summary}</p>}
+
+      {product.published && <ShareButton url={productLink(product.id)} text={`${product.title} on ATHRION`} />}
 
       {!has && (
         <Card hero className="space-y-3">
