@@ -18,7 +18,7 @@ const USER_ROWS = [
   ['friendships', 'requester'], ['friendships', 'addressee'],
   ['notifications', 'user_id'], ['open_workouts', 'user_id'], ['monthly_scores', 'user_id'],
   ['social_profiles', 'user_id'], ['push_subscriptions', 'user_id'], ['reminder_settings', 'user_id'],
-  ['user_badges', 'user_id'], ['daily_health', 'user_id'], ['progress_photos', 'user_id'],
+  ['user_badges', 'user_id'], ['daily_health', 'user_id'], ['cardio_logs', 'user_id'], ['progress_photos', 'user_id'],
   ['body_measurements', 'user_id'], ['progress_checkins', 'user_id'], ['nutrition_targets', 'user_id'],
   ['fitness_plans', 'user_id'], ['fitness_profiles', 'user_id'], ['calorie_logs', 'user_id'],
   ['workout_logs', 'user_id'], ['custom_workouts', 'user_id'], ['subscriptions', 'user_id'],

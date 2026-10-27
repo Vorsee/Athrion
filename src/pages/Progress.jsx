@@ -8,7 +8,9 @@ import {
   fetchMeasurements, saveMeasurement, deleteMeasurement,
   fetchProgressPhotos, uploadProgressPhoto, deleteProgressPhoto,
   fetchDailyHealth, saveDailyHealth, fetchBadges, awardBadges, fetchCheckinWeights,
+  fetchCardio, saveCardio, deleteCardio,
 } from '../lib/progressApi.js'
+import { KINDS, cardioUnits, parseDuration, fmtDuration, fmtDistance, paceSecs, cardioSummary } from '../lib/cardio.js'
 import { buildExerciseHistory, getRecords, e1rm, weeklyStreak } from '../lib/progress.js'
 import { useUnit } from '../lib/units.js'
 import { BADGES, computeEarnedBadges } from '../lib/badges.js'
@@ -16,7 +18,8 @@ import { getExerciseIcon, todayKey } from '../lib/data.js'
 import { healthSyncAvailable, syncHealthData } from '../lib/health.js'
 
 const today = () => todayKey()
-const fmtDate = d => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+// A bare YYYY-MM-DD is read as local noon; new Date('2026-10-27') would be UTC midnight, the day before in the Americas
+const fmtDate = d => new Date(/^\d{4}-\d{2}-\d{2}$/.test(d) ? `${d}T12:00:00` : d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 
 function NumField({ label, value, onChange, step = '0.1', placeholder = '' }) {
   return (
@@ -375,6 +378,129 @@ function Health({ health, onChanged }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Cardio: runs and swims with pace, this week's totals and bests
+// ─────────────────────────────────────────────────────────────────────────────
+function Cardio({ logs, onChanged }) {
+  const { unit } = useUnit()
+  const [kind, setKind] = useState('run')
+  const [form, setForm] = useState({ date: today(), distance: '', time: '', notes: '' })
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+  const u = cardioUnits(kind, unit)
+  const sum = cardioSummary(logs, kind)
+  const mine = logs.filter(l => l.kind === kind)
+  const pace = l => `${fmtDuration(paceSecs(l, u))} /${u.per}`
+
+  const distance = parseFloat(form.distance)
+  const seconds = parseDuration(form.time)
+  const preview = distance > 0 && seconds ? pace({ seconds, distance_m: u.toM(distance) }) : null
+
+  async function save() {
+    setSaving(true); setErr('')
+    try {
+      if (!(distance > 0)) throw new Error(`Enter the distance in ${u.dist}`)
+      if (!seconds) throw new Error('Enter the time, like 32:15 or 1:05:00')
+      await saveCardio({ date: form.date, kind, distance_m: Math.round(u.toM(distance) * 10) / 10, seconds, notes: form.notes.trim().slice(0, 300) })
+      setForm({ date: today(), distance: '', time: '', notes: '' })
+      onChanged()
+    } catch (e) {
+      setErr(e.message || 'Could not save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const chart = [...mine].reverse().map(l => ({ date: l.date, value: Math.round(u.fromM(l.distance_m) * 100) / 100 }))
+
+  return (
+    <div className="space-y-4">
+      <Segmented options={Object.entries(KINDS).map(([id, k]) => [id, k.label])} value={kind}
+        onChange={k => { setKind(k); setForm(f => ({ ...f, distance: '', time: '', notes: '' })); setErr('') }} label="Cardio type" kind="choice" />
+
+      <Card hero>
+        <SectionTitle action={<Fact icon="mdi:calendar-week">This week</Fact>}>{KINDS[kind].label}s</SectionTitle>
+        <StatTiles items={[
+          ['Distance', sum.week.sessions ? fmtDistance(sum.week.distance_m, u) : '–'],
+          ['Time', sum.week.sessions ? fmtDuration(sum.week.seconds) : '–'],
+          [kind === 'run' ? 'Runs' : 'Swims', sum.week.sessions],
+        ]} />
+      </Card>
+
+      <Card>
+        <SectionTitle>Log a {kind}</SectionTitle>
+        <div className="grid grid-cols-2 gap-3">
+          <NumField label={`Distance (${u.dist})`} step={u.dist === 'km' || u.dist === 'mi' ? '0.01' : '25'} value={form.distance}
+            onChange={v => setForm(f => ({ ...f, distance: v }))} placeholder={kind === 'run' ? (u.dist === 'km' ? '5' : '3.1') : (u.dist === 'm' ? '1500' : '1650')} />
+          <label className="block">
+            <span className="text-xs text-muted">Time</span>
+            <input inputMode="numeric" value={form.time} placeholder={kind === 'run' ? '28:30' : '32:00'} aria-label="Time"
+              onChange={e => setForm(f => ({ ...f, time: e.target.value.replace(/[^\d:]/g, '').slice(0, 8) }))}
+              className="mt-1 w-full bg-raised border border-line rounded-xl px-3 py-2 text-sm text-ink placeholder:text-placeholder focus:outline-none focus:border-neon-stroke/40" />
+          </label>
+          <label className="block">
+            <span className="text-xs text-muted">Date</span>
+            <input type="date" value={form.date} max={today()} onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+              className="mt-1 w-full bg-raised border border-line rounded-xl px-3 py-2 text-sm text-ink focus:outline-none focus:border-neon-stroke/40" />
+          </label>
+          <div className="flex flex-col justify-end">
+            <span className="text-xs text-muted">Pace</span>
+            <span className="mt-1 h-[38px] flex items-center text-sm font-bold text-neon-ink tabular-nums">{preview ?? '–'}</span>
+          </div>
+        </div>
+        <input value={form.notes} maxLength={300} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+          placeholder={kind === 'run' ? 'Notes: easy run, intervals, hills' : 'Notes: freestyle, drills, open water'} aria-label="Notes"
+          className="mt-3 w-full bg-raised border border-line rounded-xl px-3 py-2 text-sm text-ink placeholder:text-placeholder focus:outline-none focus:border-neon-stroke/40" />
+        <Button full onClick={save} disabled={saving} className="mt-3">{saving ? 'Saving...' : `Save ${kind}`}</Button>
+        {err && <p className="text-xs text-danger mt-2">{err}</p>}
+      </Card>
+
+      {sum.count > 0 && (
+        <Card>
+          <SectionTitle>Bests</SectionTitle>
+          <StatTiles items={[
+            ['Longest', fmtDistance(sum.longest.distance_m, u)],
+            [`Fastest per ${u.per}`, sum.fastest ? fmtDuration(paceSecs(sum.fastest, u)) : '–'],
+            ['All time', `${sum.count} ${kind === 'run' ? (sum.count === 1 ? 'run' : 'runs') : (sum.count === 1 ? 'swim' : 'swims')}`],
+          ]} />
+        </Card>
+      )}
+
+      {chart.length > 1 && (
+        <Card>
+          <SectionTitle>Distance</SectionTitle>
+          <LineChart data={chart} unit={u.dist} label="Distance" />
+        </Card>
+      )}
+
+      {mine.length > 0 ? (
+        <Card>
+          <SectionTitle>History</SectionTitle>
+          <div className="divide-y divide-line">
+            {mine.slice(0, 30).map(l => (
+              <div key={l.id} className="flex items-center gap-3 py-2.5">
+                <Icon icon={KINDS[kind].icon} width={22} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-ink tabular-nums">{fmtDistance(l.distance_m, u)} · {fmtDuration(l.seconds)}</div>
+                  <div className="text-xs text-muted truncate">{fmtDate(l.date)} · {pace(l)}{l.notes ? ` · ${l.notes}` : ''}</div>
+                </div>
+                <button onClick={() => deleteCardio(l.id).then(onChanged)} aria-label={`Delete ${kind} on ${fmtDate(l.date)}`}
+                  className="press w-9 h-9 inline-flex items-center justify-center rounded-md text-muted hover:text-danger hover:bg-danger/12">
+                  <Icon icon="mdi:close" width={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : (
+        <EmptyState icon={KINDS[kind].icon} title={`No ${kind}s yet`}>
+          Log one above to see your pace, weekly distance and bests.
+        </EmptyState>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Lifts: per-exercise records and estimated 1RM trend
 // ─────────────────────────────────────────────────────────────────────────────
 function Lifts({ history }) {
@@ -461,7 +587,7 @@ function Lifts({ history }) {
 // Page
 // ─────────────────────────────────────────────────────────────────────────────
 const TABS = [
-  ['overview', 'Overview'], ['body', 'Body'], ['lifts', 'Lifts'], ['photos', 'Photos'], ['health', 'Health'],
+  ['overview', 'Overview'], ['body', 'Body'], ['lifts', 'Lifts'], ['cardio', 'Cardio'], ['health', 'Health'],
 ]
 
 export default function Progress({ profile, onProfileChange }) {
@@ -470,6 +596,7 @@ export default function Progress({ profile, onProfileChange }) {
   const [measurements, setMeasurements] = useState([])
   const [checkinWeights, setCheckinWeights] = useState([])
   const [photos, setPhotos] = useState([])
+  const [cardio, setCardio] = useState([])
   const [health, setHealth] = useState([])
   const [badges, setBadges] = useState([])
   const [loading, setLoading] = useState(true)
@@ -477,6 +604,7 @@ export default function Progress({ profile, onProfileChange }) {
   useHeaderAction('mdi:scale-bathroom', 'Log weight', () => setLogWeight(true))
 
   async function load() {
+    fetchCardio().then(setCardio).catch(() => setCardio([]))
     const [h, m, cw, p, hl, earnedRows] = await Promise.all([
       fetchWorkoutHistory().catch(() => []),
       fetchMeasurements().catch(() => []),
@@ -529,8 +657,10 @@ export default function Progress({ profile, onProfileChange }) {
         <>
           {tab === 'overview' && <Overview history={history} badges={badges} />}
           {tab === 'body' && <Body measurements={measurements} checkinWeights={checkinWeights} onSaved={load} latestDate={latestDate} onProfileChange={onProfileChange} />}
+          {/* Photos left the tabs for Cardio; anyone who already has some still sees them under Body */}
+          {tab === 'body' && photos.length > 0 && <Photos photos={photos} onChanged={load} />}
           {tab === 'lifts' && <Lifts history={history} />}
-          {tab === 'photos' && <Photos photos={photos} onChanged={load} />}
+          {tab === 'cardio' && <Cardio logs={cardio} onChanged={load} />}
           {tab === 'health' && <Health health={health} onChanged={load} />}
         </>
       )}

@@ -54,6 +54,33 @@ export async function saveDailyHealth(rows) {
   if (error) throw error
 }
 
+// ── Cardio: runs and swims (distance in metres, time in seconds) ──────────────
+
+export async function fetchCardio(limit = 200) {
+  const { data, error } = await supabase
+    .from('cardio_logs')
+    .select('*')
+    .order('date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return data
+}
+
+export async function saveCardio({ date, kind, distance_m, seconds, notes = '' }) {
+  const uid = await userId()
+  const { data, error } = await supabase.from('cardio_logs')
+    .insert({ user_id: uid, date, kind, distance_m, seconds, notes })
+    .select().single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteCardio(id) {
+  const { error } = await supabase.from('cardio_logs').delete().eq('id', id)
+  if (error) throw error
+}
+
 // ── Progress photos (private bucket, one folder per user) ─────────────────────
 
 const PHOTO_BUCKET = 'progress-photos'
