@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Icon } from '@iconify/react'
 import { Button, BackLink } from '../components/ui/index.js'
-import { calculateNutritionTargets, GOAL_LABELS, GOAL_ICONS } from '../lib/nutrition.js'
+import { calculateNutritionTargets, GOAL_LABELS, GOAL_ICONS, HEALTH_OPTS, DIET_OPTS, chipsFrom } from '../lib/nutrition.js'
 import { saveFitnessProfile, saveNutritionTarget, generatePlan } from '../lib/fitnessApi.js'
 import { saveGoals } from '../lib/api.js'
 import { TRIAL_DAYS } from '../lib/pricing.js'
@@ -12,7 +12,7 @@ import Brand from '../components/Brand.jsx'
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TOTAL_STEPS = 4
+const TOTAL_STEPS = 5
 
 const ACTIVITY_OPTS = [
   { id: 'sedentary',         label: 'Sedentary',          sub: 'Little or no exercise, desk job' },
@@ -34,6 +34,8 @@ const LOCATION_OPTS = [
   { id: 'outdoors',label: 'Outdoors', icon: 'mdi:pine-tree' },
   { id: 'any',     label: 'Flexible', icon: 'mdi:shuffle-variant' },
 ]
+
+const OTHER_PREFIX = 'Other: '
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
@@ -229,7 +231,56 @@ function WorkoutSetupStep({ workoutDays, setWorkoutDays, sessionDuration, setSes
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Step 4 — Review & Generate
+// Step 4 — Health and diet (optional)
+// ─────────────────────────────────────────────────────────────────────────────
+function HealthStep({ health, setHealth, diet, setDiet, other, setOther, onNext, onBack }) {
+  const toggle = (list, set, id) => set(list.includes(id) ? list.filter(x => x !== id) : [...list, id])
+  const doctor = HEALTH_OPTS.some(o => o.doctor && health.includes(o.id))
+  return (
+    <div className="space-y-5">
+      <div>
+        <BackLink onClick={onBack} className="mb-3" />
+        <div className="font-bold text-3xl text-ink leading-tight">Anything your plan<br/>should work around?</div>
+        <div className="text-sm text-muted mt-1">Step 4 of {TOTAL_STEPS} · Optional, skip if none apply</div>
+      </div>
+
+      <div>
+        <div className="text-sm font-semibold text-ink-2 mb-2">Health</div>
+        <div className="flex flex-wrap gap-2">
+          {HEALTH_OPTS.map(o => <ToggleChip key={o.id} active={health.includes(o.id)} onClick={() => toggle(health, setHealth, o.id)}>{o.label}</ToggleChip>)}
+        </div>
+      </div>
+
+      <div>
+        <div className="text-sm font-semibold text-ink-2 mb-2">How you eat</div>
+        <div className="flex flex-wrap gap-2">
+          {DIET_OPTS.map(o => <ToggleChip key={o.id} active={diet.includes(o.id)} onClick={() => toggle(diet, setDiet, o.id)}>{o.label}</ToggleChip>)}
+        </div>
+      </div>
+
+      <label className="block">
+        <span className="text-sm font-semibold text-ink-2">Anything else? <span className="font-normal text-muted">(optional)</span></span>
+        <textarea value={other} maxLength={300} onChange={e => setOther(e.target.value)}
+          placeholder="Like an old ankle sprain, or exercises you can't do"
+          className="mt-2 w-full min-h-[80px] bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-sm outline-none transition-colors" />
+      </label>
+
+      {doctor && (
+        <div role="note" className="flex gap-2 bg-warn/10 border border-warn/25 rounded-xl px-3 py-2.5 text-xs text-ink-2">
+          <Icon icon="mdi:stethoscope" width={18} className="text-warn flex-shrink-0" aria-hidden="true" />
+          <span>Check with your doctor before starting a new programme. Your plan will go easier on what you ticked, but it's general guidance, not medical advice.</span>
+        </div>
+      )}
+
+      <p className="text-xs text-muted">Only used to shape your plan and targets. See the <a href="/privacypolicy.html#health-data" target="_blank" rel="noreferrer" className="underline underline-offset-2">Privacy policy</a>.</p>
+
+      <Button full onClick={onNext} iconRight="mdi:arrow-right">{health.length || diet.length || other.trim() ? 'Continue' : 'None of these, continue'}</Button>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Step 5 — Review & Generate
 // ─────────────────────────────────────────────────────────────────────────────
 function ReviewStep({ data, nutritionPreview, onGenerate, generating, error, onBack, isPro, onNotNow }) {
   const { goal, activityLevel, workoutDays, experienceLevel, location } = data
@@ -242,7 +293,7 @@ function ReviewStep({ data, nutritionPreview, onGenerate, generating, error, onB
       <div>
         <BackLink onClick={onBack} className="mb-3" />
         <div className="font-bold text-3xl text-ink">Ready to build<br/>your plan</div>
-        <div className="text-sm text-muted mt-1">Step 4 of {TOTAL_STEPS} · Review your plan</div>
+        <div className="text-sm text-muted mt-1">Step {TOTAL_STEPS} of {TOTAL_STEPS} · Review your plan</div>
       </div>
 
       <div className="bg-raised border border-line rounded-2xl p-4 space-y-3">
@@ -349,6 +400,9 @@ export default function FitnessOnboarding({ existingProfile, saved = null, isPro
   const [sessionDuration, setSessionDuration]   = useState(sv.preferred_session_duration ?? 45)
   const [location, setLocation]                 = useState(sv.workout_location ?? 'gym')
   const [trainingDays, setTrainingDays]         = useState(sv.preferred_training_days ?? [])
+  const [health, setHealth]                     = useState(() => chipsFrom(`${sv.injuries ?? ''} ${sv.medical_notes ?? ''}`, HEALTH_OPTS))
+  const [diet, setDiet]                         = useState(() => chipsFrom(sv.limitations, DIET_OPTS))
+  const [other, setOther]                       = useState(() => (sv.injuries ?? '').split(OTHER_PREFIX)[1] ?? '')
   const [generating, setGenerating]             = useState(false)
   const [genError, setGenError]                 = useState('')
 
@@ -362,9 +416,21 @@ export default function FitnessOnboarding({ existingProfile, saved = null, isPro
   const nutritionPreview = goal && ep.sex && ep.weight_lb && ep.height_cm && ep.age
     ? calculateNutritionTargets({
         sex: ep.sex, weightLb: ep.weight_lb, heightCm: ep.height_cm, age: ep.age,
-        activityLevel, primaryGoal: goal,
+        activityLevel, primaryGoal: goal, health,
       })
     : null
+
+  // Chips and the free text as the sentences the plan reads; labels also let them come back on edit
+  function healthText() {
+    const labels = field => HEALTH_OPTS.filter(o => o.field === field && health.includes(o.id)).map(o => o.label)
+    const injuries = [...labels('injuries'), ...(other.trim() ? [`${OTHER_PREFIX}${other.trim()}`] : [])].join('; ')
+    const dietLabels = DIET_OPTS.filter(o => diet.includes(o.id)).map(o => o.label)
+    return {
+      injuries,
+      medicalNotes: labels('medicalNotes').join('; '),
+      limitations: dietLabels.length ? `Diet: ${dietLabels.join('; ')}` : '',
+    }
+  }
 
   // then: 'plan' (Pro: generate), 'trial' (free: open the upgrade sheet), 'close' (free: just save)
   async function handleGenerate(then = isPro ? 'plan' : 'trial') {
@@ -384,9 +450,7 @@ export default function FitnessOnboarding({ existingProfile, saved = null, isPro
         preferredTrainingDays: trainingDays,
         preferredRestDays: DAYS_OF_WEEK.filter(d => !trainingDays.includes(d)),
         sessionPreference: 'both',
-        injuries: '',
-        limitations: '',
-        medicalNotes: '',
+        ...healthText(),
         likedExercises: '',
         dislikedExercises: '',
         onboardingCompleted: then === 'plan', // a free user's answers wait for the plan
@@ -403,6 +467,7 @@ export default function FitnessOnboarding({ existingProfile, saved = null, isPro
         age: ep.age ?? 30,
         activityLevel,
         primaryGoal: goal,
+        health,
       })
 
       await Promise.all([
@@ -440,6 +505,8 @@ export default function FitnessOnboarding({ existingProfile, saved = null, isPro
       sessionDuration={sessionDuration} setSessionDuration={setSessionDuration}
       location={location} setLocation={setLocation}
       trainingDays={trainingDays} setTrainingDays={setTrainingDays}
+      onNext={goNext} onBack={goBack} />,
+    <HealthStep health={health} setHealth={setHealth} diet={diet} setDiet={setDiet} other={other} setOther={setOther}
       onNext={goNext} onBack={goBack} />,
     <ReviewStep
       data={{ goal, activityLevel, workoutDays, experienceLevel, location }}

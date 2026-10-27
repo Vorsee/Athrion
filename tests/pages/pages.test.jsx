@@ -326,6 +326,7 @@ describe('Onboarding', () => {
     const saved = { primary_goal: 'build_muscle', activity_level: 'moderately_active', experience_level: 'beginner', workout_days_per_week: 3 }
     render(<P.FitnessOnboarding existingProfile={profile} saved={saved} isPro={false} onUpgrade={onUpgrade} onCancel={onCancel} />)
     for (let i = 0; i < 3; i++) await userEvent.click(await screen.findByText('Continue'))
+    await userEvent.click(await screen.findByText('None of these, continue'))
     expect(await screen.findByText(/not medical advice/)).toBeInTheDocument()
     await userEvent.click(screen.getByText('Start 7-day free trial'))
     await waitFor(() => expect(onUpgrade).toHaveBeenCalled())
@@ -340,7 +341,29 @@ describe('Onboarding', () => {
     expect(screen.getByText(/main goal/)).toBeInTheDocument()
     expect(screen.getByText('Continue')).toBeEnabled() // the saved goal is already picked
     for (let i = 0; i < 3; i++) await userEvent.click(await screen.findByText('Continue'))
+    await userEvent.click(await screen.findByText('None of these, continue'))
     expect(await screen.findByText('Build my plan')).toBeInTheDocument()
+  })
+  it('asks about health and diet, tells the plan, and keeps pregnancy out of a deficit', async () => {
+    sb.set('fitness_profiles', { data: {}, error: null })
+    sb.set('nutrition_targets', { data: {}, error: null })
+    sb.set('user_profiles', { data: {}, error: null })
+    const saved = { primary_goal: 'lose_weight', activity_level: 'moderately_active', experience_level: 'beginner', workout_days_per_week: 3 }
+    render(<P.FitnessOnboarding existingProfile={profile} saved={saved} isPro={false} onUpgrade={() => {}} onCancel={() => {}} />)
+    for (let i = 0; i < 3; i++) await userEvent.click(await screen.findByText('Continue'))
+    await userEvent.click(await screen.findByText('Pregnant'))
+    await userEvent.click(screen.getByText('Knee pain'))
+    await userEvent.click(screen.getByText('Vegan'))
+    await userEvent.type(screen.getByPlaceholderText(/old ankle sprain/), 'Bad left wrist')
+    expect(screen.getByRole('note')).toHaveTextContent('Check with your doctor')
+    await userEvent.click(screen.getByText('Continue'))
+    await userEvent.click(await screen.findByText('Not now, just save my targets'))
+    await waitFor(() => expect(sb.queriesFor('fitness_profiles').some(q => sb.op(q, 'upsert'))).toBe(true))
+    const upsert = sb.op(sb.queriesFor('fitness_profiles').find(q => sb.op(q, 'upsert')), 'upsert')[0]
+    expect(upsert).toMatchObject({ injuries: 'Knee pain; Other: Bad left wrist', medical_notes: 'Pregnant', limitations: 'Diet: Vegan' })
+    const q = sb.queriesFor('nutrition_targets').find(q => sb.op(q, 'insert') || sb.op(q, 'upsert'))
+    const target = (sb.op(q, 'insert') ?? sb.op(q, 'upsert'))[0]
+    expect(target.goal_adjustment).toBe(0) // lose weight, but pregnant: no deficit
   })
 })
 

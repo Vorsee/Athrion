@@ -3,7 +3,7 @@
 export const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 export const GOAL_LABELS: Record<string, string> = {
-  lose_weight: 'Weight Loss', build_muscle: 'Muscle Building',
+  lose_weight: 'Weight Loss', gain_weight: 'Weight Gain', build_muscle: 'Muscle Building',
   improve_strength: 'Strength', improve_endurance: 'Endurance',
   athletic_performance: 'Athletic Performance', maintain_weight: 'Maintenance',
   general_fitness: 'General Fitness', mobility_flexibility: 'Mobility',
@@ -13,6 +13,7 @@ export const GOAL_LABELS: Record<string, string> = {
 // different goals are structurally different, not just renamed.
 export const GOAL_PROGRAMMING: Record<string, string> = {
   lose_weight: 'Fat loss while keeping muscle. Full-body or upper/lower strength work at 10-15 reps with short rest (45-75s), plus 1-2 dedicated conditioning sessions (intervals or circuits). Add daily step/NEAT guidance on rest days.',
+  gain_weight: 'Healthy weight gain for someone who finds it hard to put on weight. Full-body or upper/lower strength work 3-4x/week, compound lifts at 6-12 reps, 60-120s rest. Keep cardio light so calories go to growth. Recovery notes should mention eating enough and regular meals.',
   build_muscle: 'Hypertrophy. Use a body-part split appropriate to the day count (e.g. push/pull/legs or upper/lower). 3-4 sets of 6-12 reps at RPE 7-9, 60-120s rest, 5-7 exercises per session. Hit each muscle group about twice per week. Minimal cardio.',
   improve_strength: 'Maximal strength. Organise sessions around the main lifts (squat, bench press, deadlift, overhead press, or the closest equipment-appropriate variants). Main lift 3-5 sets of 3-6 reps at RPE 7-8 with 2-4 min rest, then 2-3 accessories at 6-10 reps.',
   improve_endurance: 'Cardiovascular and muscular endurance. Mix steady-state zone 2 sessions, interval/tempo sessions, and a high-rep muscular endurance circuit. Durations and reps written as time where it makes sense. Short rests.',
@@ -35,6 +36,8 @@ Rules:
 - Give each workout day a distinct title and exercise list that matches its focus. Do not repeat the same session on every day unless the goal calls for it.
 - Include a warm-up and cool-down for every workout day, and an easier and harder version for every exercise.
 - Do not diagnose medical conditions, promise specific results, recommend extreme calorie restriction, or recommend unsupported supplements.
+- Medical notes and limitations come from the person. Pain or injury: avoid loading that area and give pain-free alternatives. Pregnant: moderate intensity, no lying flat on the back after the first trimester, no breath-holding or heavy maxes. Postpartum: start with core and pelvic floor friendly work and build gradually. Heart or blood pressure: moderate intensity, no breath-holding. Diabetes or PCOS: regular strength training and steady activity. In these cases add a warning to check with a doctor first.
+- Limitations may give a diet (vegetarian, vegan, halal) or fasting; keep any food tips consistent with it and put hard sessions outside fasting hours when fasting is mentioned.
 - For rest and active-recovery days use empty warmup, exercises and cooldown arrays and fill recoveryNotes.
 - weeklySchedule has exactly 7 entries, Monday through Sunday, in order.`
 
@@ -401,7 +404,7 @@ const COOLDOWN = [
 ]
 
 export function makeFallbackPlan(fp: any, nt: any): any {
-  const goal = SESSIONS[fp.primaryGoal] ? fp.primaryGoal : 'general_fitness'
+  const goal = SESSIONS[fp.primaryGoal] ? fp.primaryGoal : fp.primaryGoal === 'gain_weight' ? 'build_muscle' : 'general_fitness'
   const label = GOAL_LABELS[goal]
   const days = Math.min(Math.max(fp.workoutDaysPerWeek ?? 3, 1), 7)
   const useGym = fp.workoutLocation === 'gym' || fp.workoutLocation === 'any'

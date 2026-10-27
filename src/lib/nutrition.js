@@ -21,6 +21,7 @@ const ACTIVITY_MULTIPLIERS = {
 // Daily kcal adjustment from TDEE, by primary goal. Conservative limits.
 const GOAL_ADJUSTMENTS = {
   lose_weight:          -400,
+  gain_weight:          +450,
   build_muscle:         +250,
   improve_strength:     +150,
   improve_endurance:       0,
@@ -43,6 +44,7 @@ const MIN_FAT_GRAMS = 40
 // Protein per lb of body weight, by goal.
 const PROTEIN_PER_LB = {
   lose_weight:          1.00,
+  gain_weight:          0.90,
   build_muscle:         1.00,
   improve_strength:     0.90,
   improve_endurance:    0.70,
@@ -55,6 +57,7 @@ const PROTEIN_PER_LB = {
 // Fat as a fraction of total calories, by goal.
 const FAT_FRACTION = {
   lose_weight:          0.25,
+  gain_weight:          0.30,
   build_muscle:         0.25,
   improve_strength:     0.30,
   improve_endurance:    0.20,
@@ -119,13 +122,17 @@ export { GOAL_ADJUSTMENTS }
  *   safetyFlags: string[]
  * }}
  */
-export function calculateNutritionTargets({ sex, weightLb, heightCm, age, activityLevel, primaryGoal }) {
+// health: conditions from the plan questions (HEALTH_OPTS ids). Pregnancy gets no deficit;
+// postpartum and diabetes get a gentler one, and both are flagged so the app can say why.
+export function calculateNutritionTargets({ sex, weightLb, heightCm, age, activityLevel, primaryGoal, health = [] }) {
   const safetyFlags = []
 
   const bmr = calcBMR({ sex, weightLb, heightCm, age })
   const activityMultiplier = ACTIVITY_MULTIPLIERS[activityLevel] ?? ACTIVITY_MULTIPLIERS.moderately_active
   const tdee = Math.round(bmr * activityMultiplier)
-  const goalAdj = GOAL_ADJUSTMENTS[primaryGoal] ?? 0
+  let goalAdj = GOAL_ADJUSTMENTS[primaryGoal] ?? 0
+  if (goalAdj < 0 && health.includes('pregnant')) { goalAdj = 0; safetyFlags.push('no_deficit_pregnancy') }
+  else if (goalAdj < -250 && (health.includes('postpartum') || health.includes('diabetes'))) { goalAdj = -250; safetyFlags.push('gentle_deficit') }
 
   // Age-based safety flags
   if (age < 16) safetyFlags.push('minor_professional_advice_recommended')
@@ -154,6 +161,7 @@ export function calculateNutritionTargets({ sex, weightLb, heightCm, age, activi
 
 export const GOAL_LABELS = {
   lose_weight:          'Lose weight',
+  gain_weight:          'Gain weight',
   build_muscle:         'Build muscle',
   improve_strength:     'Improve strength',
   improve_endurance:    'Improve endurance',
@@ -165,6 +173,7 @@ export const GOAL_LABELS = {
 
 export const GOAL_ICONS = {
   lose_weight:          'mdi:fire',
+  gain_weight:          'mdi:food-drumstick-outline',
   build_muscle:         'mdi:arm-flex-outline',
   improve_strength:     'mdi:weight-lifter',
   improve_endurance:    'mdi:run',
@@ -173,3 +182,29 @@ export const GOAL_ICONS = {
   general_fitness:      'mdi:heart-pulse',
   mobility_flexibility: 'mdi:yoga',
 }
+
+// ── Plan questions: health and diet ─────────────────────────────────────────
+// Health and diet answers go to the plan as injuries / medicalNotes / limitations (plain text the
+// AI reads), and pregnancy, postpartum and diabetes also soften a calorie deficit (nutrition.js)
+export const HEALTH_OPTS = [
+  { id: 'back',       label: 'Lower back pain',            field: 'injuries' },
+  { id: 'knee',       label: 'Knee pain',                  field: 'injuries' },
+  { id: 'shoulder',   label: 'Shoulder pain',              field: 'injuries' },
+  { id: 'injury',     label: 'Recent injury or surgery',   field: 'injuries', doctor: true },
+  { id: 'pregnant',   label: 'Pregnant',                   field: 'medicalNotes', doctor: true },
+  { id: 'postpartum', label: 'Had a baby in the last year', field: 'medicalNotes', doctor: true },
+  { id: 'pcos',       label: 'PCOS',                       field: 'medicalNotes' },
+  { id: 'diabetes',   label: 'Diabetes or pre-diabetes',   field: 'medicalNotes', doctor: true },
+  { id: 'heart',      label: 'Heart or blood pressure',    field: 'medicalNotes', doctor: true },
+]
+export const DIET_OPTS = [
+  { id: 'vegetarian', label: 'Vegetarian' },
+  { id: 'vegan',      label: 'Vegan' },
+  { id: 'halal',      label: 'Halal' },
+  { id: 'fasting',    label: 'I fast (intermittent or Ramadan)' },
+]
+
+// Saved answers are text; chips come back from the labels in it
+export const chipsFrom = (text, opts) => opts.filter(o => (text ?? '').includes(o.label)).map(o => o.id)
+// Condition ids from a saved fitness profile, for calculateNutritionTargets({ health })
+export const healthFrom = fp => chipsFrom(`${fp?.injuries ?? ''} ${fp?.medicalNotes ?? fp?.medical_notes ?? ''}`, HEALTH_OPTS)

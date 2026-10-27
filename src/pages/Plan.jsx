@@ -10,7 +10,7 @@ import {
   dbProfileToPayload, dbNutritionToPayload, updatePlanData,
 } from '../lib/fitnessApi.js'
 import { saveGoals, saveProfileWeight } from '../lib/api.js'
-import { calculateNutritionTargets, GOAL_LABELS, GOAL_ICONS } from '../lib/nutrition.js'
+import { calculateNutritionTargets, GOAL_LABELS, GOAL_ICONS, healthFrom } from '../lib/nutrition.js'
 import { SAMPLE_PLAN } from '../lib/samplePlan.js'
 import ProLock from '../components/ProLock.jsx'
 import { useUnit } from '../lib/units.js'
@@ -578,6 +578,7 @@ function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
           age:      profile?.age ?? 30,
           activityLevel: profilePayload.activityLevel ?? 'moderately_active',
           primaryGoal: goal,
+          health: healthFrom(profilePayload),
         })
         await Promise.all([
           saveNutritionTarget(nutritionPayload),

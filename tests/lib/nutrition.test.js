@@ -74,3 +74,20 @@ describe('goals.js (legacy calorie goals)', () => {
     expect(resolveGoals(null).isCustom).toBe(false)
   })
 })
+
+describe('gain weight and health limits', () => {
+  const base = { sex: 'female', weightLb: 150, heightCm: 165, age: 30, activityLevel: 'moderately_active' }
+  it('gives people gaining weight a real surplus', async () => {
+    const { calculateNutritionTargets } = await import('../../src/lib/nutrition.js')
+    const t = calculateNutritionTargets({ ...base, primaryGoal: 'gain_weight' })
+    expect(t.goalAdjustment).toBe(450)
+    expect(t.calorieTarget).toBe(t.tdee + 450)
+  })
+  it('keeps pregnancy out of a deficit and softens it after a baby or with diabetes', async () => {
+    const { calculateNutritionTargets, healthFrom } = await import('../../src/lib/nutrition.js')
+    expect(calculateNutritionTargets({ ...base, primaryGoal: 'lose_weight', health: ['pregnant'] })).toMatchObject({ goalAdjustment: 0, safetyFlags: ['no_deficit_pregnancy'] })
+    expect(calculateNutritionTargets({ ...base, primaryGoal: 'lose_weight', health: ['postpartum'] }).goalAdjustment).toBe(-250)
+    expect(calculateNutritionTargets({ ...base, primaryGoal: 'lose_weight', health: ['knee'] }).goalAdjustment).toBe(-400)
+    expect(healthFrom({ injuries: 'Knee pain; Other: wrist', medical_notes: 'Had a baby in the last year' })).toEqual(['knee', 'postpartum'])
+  })
+})
