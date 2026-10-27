@@ -175,7 +175,7 @@ describe('Coach page', () => {
     expect(saved).toMatchObject({ coach_id: USER.id, kind: 'workout', title: 'Leg day', price_cents: 0, published: true, outline: ['Front Squat'] })
     expect(saved.id).toMatch(/^[0-9a-f-]{36}$/)
     const body = sb.op(sb.queriesFor('coach_product_content')[0], 'upsert')[0]
-    expect(body.content.exercises[0]).toMatchObject({ name: 'Front Squat', sets: 3, reps: '8-12', restSeconds: 90, tip: 'Brace first.' })
+    expect(body.content.exercises[0]).toMatchObject({ name: 'Front Squat', sets: 3, reps: '5-10', restSeconds: 90, tip: 'Brace first.' })
   })
 
   it("won't publish a paid workout before payouts are set up", async () => {

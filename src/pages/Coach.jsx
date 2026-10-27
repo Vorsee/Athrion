@@ -458,7 +458,11 @@ function ExerciseList({ productId, items, onChange, onUploading }) {
   const matches = q ? EXERCISES.filter(e => e.name.toLowerCase().includes(q)).slice(0, 5) : []
   const exact = EXERCISES.some(e => e.name.toLowerCase() === q)
 
-  const add = name => { onChange([...items, { name, sets: 3, reps: '8-12', restSeconds: 90, tip: '', video: null }]); setQuery('') }
+  // A library move brings its usual target ("30-60s" for a plank, which logs as a hold)
+  const add = name => {
+    const known = EXERCISES.find(e => e.name === name)
+    onChange([...items, { name, sets: 3, reps: known?.reps ?? '8-12', restSeconds: known?.muscle === 'Mobility' ? 15 : 90, tip: '', video: null }]); setQuery('')
+  }
   const change = (i, patch) => onChange(items.map((x, j) => (j === i ? { ...x, ...patch } : x)))
   const move = (i, d) => {
     const next = [...items]; const [x] = next.splice(i, 1); next.splice(i + d, 0, x); onChange(next)
@@ -538,8 +542,8 @@ function ExerciseEditor({ e, index, count, productId, onChange, onRemove, onMove
                 onChange={ev => onChange({ sets: Math.max(1, Math.min(10, parseInt(ev.target.value) || 1)) })} />
             </label>
             <label className="block">
-              <span className="block text-xs text-muted mb-1">Reps</span>
-              <input className={`${SMALL} text-center`} maxLength={12} value={e.reps} onChange={ev => onChange({ reps: ev.target.value })} placeholder="8-12" />
+              <span className="block text-xs text-muted mb-1">Reps or time</span>
+              <input className={`${SMALL} text-center`} maxLength={12} value={e.reps} onChange={ev => onChange({ reps: ev.target.value })} placeholder="8-12 or 45s" aria-label="Reps, or a time like 45s" />
             </label>
             <label className="block">
               <span className="block text-xs text-muted mb-1">Rest</span>

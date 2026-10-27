@@ -10,6 +10,7 @@ import {
   fetchDailyHealth, saveDailyHealth, fetchBadges, awardBadges, fetchCheckinWeights,
   fetchCardio, saveCardio, deleteCardio,
 } from '../lib/progressApi.js'
+import { fmtSecs, setShort } from '../lib/sets.js'
 import { KINDS, cardioUnits, parseDuration, fmtDuration, fmtDistance, paceSecs, cardioSummary } from '../lib/cardio.js'
 import { buildExerciseHistory, getRecords, e1rm, weeklyStreak } from '../lib/progress.js'
 import { useUnit } from '../lib/units.js'
@@ -524,10 +525,12 @@ function Lifts({ history }) {
   if (selected) {
     const sessions = byEx[selected]
     const rec = getRecords(sessions)
-    const weighted = rec.maxWeight > 0
+    const held = rec.maxSecs > 0
+    const weighted = !held && rec.maxWeight > 0
     const series = sessions.map(s => ({
       date: s.createdAt,
-      value: weighted ? fromLb(Math.max(...s.sets.map(x => e1rm(x.weight, x.reps)))) : Math.max(...s.sets.map(x => x.reps)),
+      value: held ? Math.max(...s.sets.map(x => x.secs ?? 0))
+        : weighted ? fromLb(Math.max(...s.sets.map(x => e1rm(x.weight, x.reps)))) : Math.max(...s.sets.map(x => x.reps)),
     }))
     return (
       <div className="space-y-4">
@@ -535,12 +538,14 @@ function Lifts({ history }) {
           <Icon icon={getExerciseIcon({ name: selected })} width={28} className="text-neon-ink flex-shrink-0" />
           <div className="font-bold text-xl text-ink leading-tight break-words">{selected}</div>
         </div>
-        <StatTiles items={weighted
+        <StatTiles items={held
+          ? [['Longest hold', fmtSecs(rec.maxSecs)], ['Sessions', sessions.length], ['Sets', sessions.reduce((a, s) => a + s.sets.length, 0)]]
+          : weighted
           ? [['Heaviest', `${fromLb(rec.maxWeight)}×${rec.maxWeightReps}`], ['Est. 1RM', Math.round(fromLb(rec.bestE1rm))], ['Best volume', Math.round(fromLb(rec.bestVolume))]]
           : [['Most reps', rec.maxReps], ['Sessions', sessions.length], ['Best volume', '–']]} />
         <Card>
-          <SectionTitle>{weighted ? 'Estimated 1-rep max' : 'Best set (reps)'}</SectionTitle>
-          <LineChart data={series} unit={weighted ? unit : 'reps'} label={weighted ? 'Est. 1RM' : 'Reps'} />
+          <SectionTitle>{held ? 'Longest hold (seconds)' : weighted ? 'Estimated 1-rep max' : 'Best set (reps)'}</SectionTitle>
+          <LineChart data={series} unit={held ? 's' : weighted ? unit : 'reps'} label={held ? 'Seconds' : weighted ? 'Est. 1RM' : 'Reps'} />
         </Card>
         <Card>
           <SectionTitle>Sessions</SectionTitle>
@@ -548,7 +553,7 @@ function Lifts({ history }) {
             {[...sessions].reverse().slice(0, 15).map((s, i) => (
               <div key={i} className="flex items-start justify-between gap-3 py-1 border-b border-line last:border-0">
                 <span className="text-xs text-muted flex-shrink-0">{fmtDate(s.createdAt)}</span>
-                <span className="text-xs text-ink text-right break-words">{s.sets.map(x => `${fromLb(x.weight)}×${x.reps}`).join(', ')}</span>
+                <span className="text-xs text-ink text-right break-words">{s.sets.map(x => setShort(x, fromLb)).join(', ')}</span>
               </div>
             ))}
           </div>
@@ -573,7 +578,7 @@ function Lifts({ history }) {
               <div className="text-xs text-muted">{byEx[name].length} sessions</div>
             </div>
             <div className="text-right flex-shrink-0">
-              <div className="font-bold text-lg text-neon-ink leading-none">{rec.maxWeight > 0 ? fmt(rec.maxWeight) : `${rec.maxReps} reps`}</div>
+              <div className="font-bold text-lg text-neon-ink leading-none">{rec.maxSecs > 0 ? fmtSecs(rec.maxSecs) : rec.maxWeight > 0 ? fmt(rec.maxWeight) : `${rec.maxReps} reps`}</div>
               <div className="text-xs font-medium text-muted">best</div>
             </div>
           </button>

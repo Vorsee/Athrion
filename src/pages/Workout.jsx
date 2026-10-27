@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Icon } from '@iconify/react'
 import { Button, Card, SectionTitle, SectionLink, Skeleton, Chip, Sheet, Segmented, InlineError, InfoButton, Fact, PageHeader, IconButton, ExerciseRow, ActionRow, StatTiles } from '../components/ui/index.js'
 import { EXERCISES, getTodaysExercises, todayKey, fmtTime, getExerciseIcon } from '../lib/data.js'
@@ -16,6 +16,7 @@ import { guidePlan } from '../lib/guidePlans.js'
 import { syncOpenWorkout, clearOpenWorkout } from '../lib/notifications.js'
 import TrainingCalendar from '../components/TrainingCalendar.jsx'
 import { CoachNote } from '../components/CoachVideo.jsx'
+import { exerciseMode, isTimedSet, setText, setShort, parseTimeTarget, fmtSecs } from '../lib/sets.js'
 import { useBackHandler, useFocusMode, notifySession, readSession, setSessionMinimised } from '../lib/shell.js'
 import { HeaderBar } from '../components/Nav.jsx'
 
@@ -348,7 +349,9 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
 
   // i indexes loggedSets; weight comes in the person's unit
   function handleEditSet(i, { weight: w, reps: r }) {
-    const next = loggedSets.map((s, j) => (j === i ? { ...s, weight: toLb(parseFloat(w) || 0), reps: parseInt(r) || 0 } : s))
+    const next = loggedSets.map((s, j) => (j !== i ? s
+      : isTimedSet(s) ? { ...s, weight: toLb(parseFloat(w) || 0), secs: parseInt(r) || s.secs }
+      : { ...s, weight: toLb(parseFloat(w) || 0), reps: parseInt(r) || 0 }))
     setLoggedSets(next)
     persistWorkout({ loggedSets: next })
   }
@@ -472,7 +475,12 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       onLog={() => {
         const w = toLb(parseFloat(weight) || 0) // typed in the person's unit, stored in lb
         const r = parseInt(reps) || 0
-        const newLog = [...loggedSets, { ex: activeExercises[exIdx].name, set: setIdx + 1, weight: w, reps: r }]
+        const ex = activeExercises[exIdx]
+        // Timed moves: the reps box holds seconds
+        const set = exerciseMode(ex) === 'time'
+          ? { ex: ex.name, set: setIdx + 1, weight: w, reps: 0, secs: r }
+          : { ex: ex.name, set: setIdx + 1, weight: w, reps: r }
+        const newLog = [...loggedSets, set]
         setLoggedSets(newLog)
         const thisRest = restPerExercise[exIdx] ?? restDuration
         localStorage.setItem('athrion_rest_end', String(Date.now() + thisRest * 1000))
@@ -960,18 +968,26 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
   const pastSessions = exerciseHistory?.[ex.name] ?? []
   const lastSession = pastSessions[pastSessions.length - 1]
   const records = pastSessions.length ? getRecords(pastSessions) : null
-  const suggestion = suggestNext(pastSessions, { ...parseRepRange(ex.reps), unit })
+  const mode = exerciseMode(ex)
+  const timed = mode === 'time' ? parseTimeTarget(ex.reps) : null
+  const suggestion = suggestNext(pastSessions, { ...parseRepRange(ex.reps), unit, timed })
   const lastSameSet = lastSession?.sets?.[setIdx] ?? null
 
   // Fill the boxes so logging is one tap: the set before it today, else the suggestion
-  // from last time. Only on a fresh set, so nothing the person typed is overwritten.
+  // from last time (a timed move with no history starts at the bottom of its target).
+  // Only while the boxes are empty or still hold what was filled in, so nothing typed is
+  // overwritten; history that arrives after the screen opened still fills them.
+  const autoFill = useRef(null)
   useEffect(() => {
-    if (weight !== '' || reps !== '') return
+    const untouched = (weight === '' && reps === '') || (autoFill.current?.w === weight && autoFill.current?.r === reps)
+    if (!untouched) return
     const from = prev ?? suggestion
-    if (!from) return
-    setWeight(from.weight > 0 ? String(fromLb(from.weight)) : '')
-    setReps(from.reps > 0 ? String(from.reps) : '')
-  }, [ex.name, setIdx])
+    const w = from?.weight > 0 ? String(fromLb(from.weight)) : ''
+    const n = from ? (mode === 'time' ? from.secs : from.reps) : timed?.min
+    const r = n > 0 ? String(n) : ''
+    autoFill.current = { w, r }
+    setWeight(w); setReps(r)
+  }, [ex.name, setIdx, pastSessions.length])
 
   return (
     <div className="space-y-4 py-4 slide-in">
@@ -1002,8 +1018,9 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
         </div>
         <div className="flex flex-wrap gap-1.5 mt-2">
           <Fact icon="mdi:repeat">Set {setIdx + 1} of {totalSets}</Fact>
-          {ex.reps && <Fact icon="mdi:target">{ex.reps} reps</Fact>}
-          {records?.maxWeight > 0 && <Fact icon="mdi:trophy-outline">PR {fmt(records.maxWeight)} × {records.maxWeightReps}</Fact>}
+          {ex.reps && <Fact icon={timed ? 'mdi:timer-outline' : 'mdi:target'}>{timed ? `Hold ${ex.reps.replace(/\s*s$/, ' s')}` : `${ex.reps} reps`}</Fact>}
+          {records?.maxSecs > 0 ? <Fact icon="mdi:trophy-outline">Best {fmtSecs(records.maxSecs)}</Fact>
+            : records?.maxWeight > 0 && <Fact icon="mdi:trophy-outline">PR {fmt(records.maxWeight)} × {records.maxWeightReps}</Fact>}
         </div>
         <div className="flex gap-1.5 mt-4" aria-hidden="true">
           {Array.from({ length: totalSets }, (_, i) => (
@@ -1021,33 +1038,37 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
             <div className="min-w-0">
               <div className="text-xs font-semibold text-neon-ink">Try today</div>
               <div className="font-bold text-2xl text-ink tabular-nums leading-tight">
-                {suggestion.weight > 0 ? `${fmt(suggestion.weight)} × ${suggestion.reps}` : `${suggestion.reps} reps`}
+                {setText(suggestion, fmt)}
               </div>
-              <div className="text-xs text-muted mt-0.5 truncate">Last time: {lastSession.sets.map(st => st.weight > 0 ? `${fromLb(st.weight)}×${st.reps}` : `${st.reps}`).join(', ')}</div>
+              <div className="text-xs text-muted mt-0.5 truncate">Last time: {lastSession.sets.map(st => setShort(st, fromLb)).join(', ')}</div>
             </div>
-            <InfoButton title="Why this weight">
+            <InfoButton title={mode === 'time' ? 'Why this time' : 'Why this weight'}>
               <p className="text-sm text-ink-2">{suggestion.reason}. It's filled in below; change it if today feels different.</p>
             </InfoButton>
           </div>
         ) : lastSameSet && (
           <div className="mb-4 flex items-center gap-2 text-xs text-muted">
             <Icon icon="mdi:history" width={16} aria-hidden="true" />
-            <span>Last time, set {setIdx + 1}: <span className="font-semibold text-ink-2 tabular-nums">{lastSameSet.weight > 0 ? `${fmt(lastSameSet.weight)} × ${lastSameSet.reps}` : `${lastSameSet.reps} reps`}</span></span>
+            <span>Last time, set {setIdx + 1}: <span className="font-semibold text-ink-2 tabular-nums">{setText(lastSameSet, fmt)}</span></span>
           </div>
         )}
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div>
-            <label className="text-sm font-semibold text-ink-2 block mb-1">Weight ({unit})</label>
-            <input type="number" inputMode="decimal" placeholder="0" aria-label={`Weight in ${unit}`} value={weight} onChange={e => setWeight(e.target.value)} min="0" step={unit === 'kg' ? 0.25 : 0.5}
-              className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-2xl font-bold tabular-nums text-center outline-none transition-colors" />
+        {mode === 'time' ? (
+          <HoldInput secs={reps} setSecs={setReps} weight={weight} setWeight={setWeight} key={`${ex.name}-${setIdx}`} />
+        ) : (
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div>
+              <label className="text-sm font-semibold text-ink-2 block mb-1">{mode === 'bodyweight' ? `Added weight (${unit})` : `Weight (${unit})`}</label>
+              <input type="number" inputMode="decimal" placeholder={mode === 'bodyweight' ? 'None' : '0'} aria-label={mode === 'bodyweight' ? `Added weight in ${unit}` : `Weight in ${unit}`} value={weight} onChange={e => setWeight(e.target.value)} min="0" step={unit === 'kg' ? 0.25 : 0.5}
+                className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-2xl font-bold tabular-nums text-center outline-none transition-colors" />
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-ink-2 block mb-1">Reps</label>
+              <input type="number" inputMode="numeric" placeholder="0" aria-label="Reps" value={reps} onChange={e => setReps(e.target.value)} min="1"
+                className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-2xl font-bold tabular-nums text-center outline-none transition-colors" />
+            </div>
           </div>
-          <div>
-            <label className="text-sm font-semibold text-ink-2 block mb-1">Reps</label>
-            <input type="number" inputMode="numeric" placeholder="0" aria-label="Reps" value={reps} onChange={e => setReps(e.target.value)} min="1"
-              className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-2xl font-bold tabular-nums text-center outline-none transition-colors" />
-          </div>
-        </div>
-        <Button full icon="mdi:check" onClick={onLog}>Log set {setIdx + 1}</Button>
+        )}
+        <Button full icon="mdi:check" onClick={onLog} disabled={mode === 'time' && !(parseInt(reps) > 0)}>Log set {setIdx + 1}</Button>
         <div className="flex gap-2 mt-3">
           <Button variant="secondary" size="sm" icon="mdi:plus" className="flex-1" onClick={onAddSet}>Add a set</Button>
           <Button variant="secondary" size="sm" iconRight="mdi:skip-next" className="flex-1" onClick={onFinishExercise}>
@@ -1082,6 +1103,48 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
   )
 }
 
+// Timed sets (plank, wall sit, jump rope): a stopwatch that fills in the seconds, which can
+// also be typed. Added weight is optional, for weighted carries or a plate on the back.
+function HoldInput({ secs, setSecs, weight, setWeight }) {
+  const { unit } = useUnit()
+  const [startedAt, setStartedAt] = useState(null)
+  const [showWeight, setShowWeight] = useState(Number(weight) > 0)
+  useEffect(() => {
+    if (!startedAt) return
+    const t = setInterval(() => setSecs(String(Math.floor((Date.now() - startedAt) / 1000))), 250)
+    return () => clearInterval(t)
+  }, [startedAt])
+  const running = !!startedAt
+  return (
+    <div className="mb-4 space-y-3">
+      <div className="flex items-end gap-3">
+        <label className="flex-1">
+          <span className="text-sm font-semibold text-ink-2 block mb-1">Seconds</span>
+          <input type="number" inputMode="numeric" placeholder="0" aria-label="Seconds" value={secs} min="1" readOnly={running}
+            onChange={e => setSecs(e.target.value)}
+            className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-2xl font-bold tabular-nums text-center outline-none transition-colors" />
+        </label>
+        <Button variant={running ? 'danger' : 'secondary'} icon={running ? 'mdi:stop' : 'mdi:timer-play-outline'} className="h-[60px] flex-1"
+          onClick={() => (running ? setStartedAt(null) : (setSecs('0'), setStartedAt(Date.now())))}>
+          {running ? `Stop · ${fmtSecs(secs)}` : 'Start timer'}
+        </Button>
+      </div>
+      {showWeight ? (
+        <label className="block">
+          <span className="text-sm font-semibold text-ink-2 block mb-1">Added weight ({unit})</span>
+          <input type="number" inputMode="decimal" placeholder="None" aria-label={`Added weight in ${unit}`} value={weight} min="0" step={unit === 'kg' ? 0.25 : 0.5}
+            onChange={e => setWeight(e.target.value)}
+            className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-2.5 text-lg font-bold tabular-nums text-center outline-none transition-colors" />
+        </label>
+      ) : (
+        <button type="button" onClick={() => setShowWeight(true)} className="press text-xs font-semibold text-neon-ink min-h-[44px] inline-flex items-center gap-1">
+          <Icon icon="mdi:plus" width={16} aria-hidden="true" />Add weight
+        </button>
+      )}
+    </div>
+  )
+}
+
 // Sets logged for the current exercise; each can be corrected or removed
 function LoggedSets({ sets, onEdit, onDelete }) {
   const { unit, fromLb, fmt } = useUnit()
@@ -1101,7 +1164,7 @@ function LoggedSets({ sets, onEdit, onDelete }) {
                   <input type="number" min="0" step={unit === 'kg' ? 0.25 : 0.5} value={draft.weight} autoFocus
                     onChange={e => setDraft(d => ({ ...d, weight: e.target.value }))} className={`${field} mt-1`} />
                 </label>
-                <label className="flex-1 text-xs text-muted">Reps
+                <label className="flex-1 text-xs text-muted">{draft.timed ? 'Seconds' : 'Reps'}
                   <input type="number" min="1" value={draft.reps}
                     onChange={e => setDraft(d => ({ ...d, reps: e.target.value }))} className={`${field} mt-1`} />
                 </label>
@@ -1111,8 +1174,8 @@ function LoggedSets({ sets, onEdit, onDelete }) {
             ) : (
               <div className="flex items-center gap-2">
                 <span className="w-7 h-7 rounded-full bg-neon text-on-neon text-xs font-bold flex items-center justify-center flex-shrink-0" aria-label={`Set ${s.set}`}>{s.set}</span>
-                <span className="flex-1 text-base font-bold text-ink tabular-nums">{s.weight > 0 ? `${fmt(s.weight)} × ${s.reps}` : `${s.reps} reps`}</span>
-                <button aria-label={`Edit set ${s.set}`} onClick={() => { setDraft({ weight: String(fromLb(s.weight)), reps: String(s.reps) }); setEditing(s.i) }}
+                <span className="flex-1 text-base font-bold text-ink tabular-nums">{setText(s, fmt)}</span>
+                <button aria-label={`Edit set ${s.set}`} onClick={() => { setDraft({ weight: String(fromLb(s.weight)), reps: String(isTimedSet(s) ? s.secs : s.reps), timed: isTimedSet(s) }); setEditing(s.i) }}
                   className="press w-11 h-11 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-raised">
                   <Icon icon="mdi:pencil-outline" width={18} />
                 </button>
@@ -1372,7 +1435,7 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
             const exSets = loggedSets.filter(s => s.ex === name)
             return (
               <ExerciseRow key={name} icon={getExerciseIcon(EXERCISES.find(e => e.name === name))} name={name}
-                meta={exSets.map(s => s.weight > 0 ? `${fmt(s.weight)} × ${s.reps}` : `${s.reps} reps`).join(' · ')}
+                meta={exSets.map(s => setText(s, fmt)).join(' · ')}
                 value={`${exSets.length} ${exSets.length === 1 ? 'set' : 'sets'}`} />
             )
           })}
@@ -1450,6 +1513,7 @@ function SessionModal({ session, onClose, history }) {
     const pct = prevAvg != null && prevAvg > 0 ? Math.round(((curAvg - prevAvg) / prevAvg) * 100) : null
     const setRows = exSets.map((s, i) => {
       const p = prevSets?.[i] ?? null
+      if (isTimedSet(s)) return { set: i + 1, curSecs: s.secs, prevSecs: p?.secs ?? null, delta: p?.secs ? s.secs - p.secs : null }
       return { set: i + 1, curWeight: s.weight, curReps: s.reps, prevWeight: p?.weight ?? null, prevReps: p?.reps ?? null, delta: p != null ? s.weight - p.weight : null }
     })
     return { name, curAvg, prevAvg, pct, setRows }
@@ -1508,14 +1572,22 @@ function SessionModal({ session, onClose, history }) {
                     {c.setRows.map(row => (
                       <div key={row.set} className="grid grid-cols-[1.8rem_1fr_3rem] gap-1 items-center px-3 py-1 border-t border-line last:pb-2">
                         <span className="text-2xs text-muted">{row.set}</span>
-                        <div className="flex items-center gap-1">
-                          <span className="text-xs text-muted">{row.prevWeight != null ? `${fromLb(row.prevWeight)}` : '—'}</span>
-                          <Icon icon="mdi:arrow-right" width={12} className="text-muted" aria-label="to" />
-                          <span className="text-xs font-bold text-ink">{fmt(row.curWeight)}</span>
-                          <span className="text-2xs text-muted">×{row.curReps}</span>
-                        </div>
+                        {row.curSecs ? (
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-muted">{row.prevSecs ? fmtSecs(row.prevSecs) : '—'}</span>
+                            <Icon icon="mdi:arrow-right" width={12} className="text-muted" aria-label="to" />
+                            <span className="text-xs font-bold text-ink">{fmtSecs(row.curSecs)}</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-muted">{row.prevWeight != null ? `${fromLb(row.prevWeight)}` : '—'}</span>
+                            <Icon icon="mdi:arrow-right" width={12} className="text-muted" aria-label="to" />
+                            <span className="text-xs font-bold text-ink">{fmt(row.curWeight)}</span>
+                            <span className="text-2xs text-muted">×{row.curReps}</span>
+                          </div>
+                        )}
                         <div className={`text-xs font-bold text-right ${row.delta > 0 ? 'text-neon-ink' : row.delta < 0 ? 'text-danger' : 'text-muted'}`}>
-                          {row.delta == null ? '' : row.delta === 0 ? '=' : `${row.delta > 0 ? '+' : ''}${fromLb(row.delta)}`}
+                          {row.delta == null ? '' : row.delta === 0 ? '=' : `${row.delta > 0 ? '+' : ''}${row.curSecs ? `${row.delta}s` : fromLb(row.delta)}`}
                         </div>
                       </div>
                     ))}
@@ -1534,7 +1606,7 @@ function SessionModal({ session, onClose, history }) {
         <div className="space-y-2">
           {Object.entries(byExercise).map(([exName, exSets]) => (
             <ExerciseRow key={exName} icon={getExerciseIcon(EXERCISES.find(e => e.name === exName))} name={exName}
-              meta={exSets.map(s => s.weight > 0 ? `${fmt(s.weight)} × ${s.reps}` : `${s.reps} reps`).join(' · ')}
+              meta={exSets.map(s => setText(s, fmt)).join(' · ')}
               value={`${exSets.length} ${exSets.length === 1 ? 'set' : 'sets'}`} />
           ))}
         </div>

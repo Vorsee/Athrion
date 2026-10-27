@@ -243,6 +243,32 @@ describe('Workout tab — session shell', () => {
     expect(JSON.parse(localStorage.getItem('athrion_workout'))).toMatchObject({ minimised: true, screen: 'training' })
   })
 
+  it('logs a plank as seconds held, with the stopwatch or typed', async () => {
+    localStorage.clear()
+    sb.set('fitness_plans', { data: null, error: null })
+    sb.set('workout_logs', { data: [{ id: 'old', date: '2026-10-20', name: 'Core', created_at: '2026-10-20T18:00:00Z',
+      sets: [{ ex: 'Plank', set: 1, weight: 0, reps: 0, secs: 40 }] }], error: null })
+    show({ pendingWorkout: { name: 'Core', planExercises: [{ name: 'Plank', sets: 2, reps: '30-60s', restSeconds: 30 }] } })
+    expect(await screen.findByText('Hold 30-60 s')).toBeInTheDocument()
+    expect(screen.getByText('Best 40s')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Reps')).toBeNull()
+    expect(screen.getByLabelText('Seconds')).toHaveValue(45) // 5 seconds longer than last time
+    expect(screen.getByRole('button', { name: /Start timer/ })).toBeInTheDocument()
+    await userEvent.clear(screen.getByLabelText('Seconds'))
+    await userEvent.type(screen.getByLabelText('Seconds'), '50')
+    await userEvent.click(screen.getByText('Log set 1'))
+    const saved = JSON.parse(localStorage.getItem('athrion_workout'))
+    expect(saved.loggedSets[0]).toMatchObject({ ex: 'Plank', weight: 0, reps: 0, secs: 50 })
+  })
+
+  it('asks bodyweight moves for added weight, not a weight', async () => {
+    localStorage.clear()
+    sb.set('fitness_plans', { data: null, error: null })
+    show({ pendingWorkout: { name: 'Bar', planExercises: [{ name: 'Pull-Up', sets: 3, reps: '6-10', restSeconds: 90 }] } })
+    expect(await screen.findByLabelText('Added weight in lb')).toHaveAttribute('placeholder', 'None')
+    expect(screen.getByLabelText('Reps')).toBeInTheDocument()
+  })
+
   it('starts a plan day handed over from the Plan tab straight into training', async () => {
     sb.set('fitness_plans', { data: null, error: null })
     const day = withWorkoutOn('Friday').plan_data.weeklySchedule.find(d => d.day === 'Friday')
