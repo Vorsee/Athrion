@@ -115,6 +115,7 @@ export default function Guide({ signedIn = false, isPro = false, initialPick, on
           {!signedIn && <>
             <Button full onClick={start}>Start this plan free</Button>
             <p className="text-xs text-muted text-center">Free account, no card. The {sessions.length} workouts land in your Train tab.</p>
+            <p className="text-xs text-muted text-center">General fitness guidance, not medical advice. If you're pregnant, injured or have a health condition, check with a doctor first. <a href="/terms.html#health" className="underline underline-offset-2">More</a></p>
           </>}
           {signedIn && save.step === 'done' && <>
             <p role="status" className="text-sm text-ink text-center">

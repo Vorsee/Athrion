@@ -654,6 +654,7 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
                 <div className="space-y-3 text-sm text-ink-2">
                   <p>Three beginner-friendly full-body sessions that take turns, so every muscle gets trained through the week. Do whichever comes up next, two or three times a week.</p>
                   <p>Want sessions for your goal, or for training at home? Pick a free 7-day plan. Or save your own workout with Set up workout.</p>
+                  <p className="text-xs text-muted">General fitness guidance, not medical advice. Stop if something hurts, and check with a doctor first if you're pregnant, injured or have a health condition.</p>
                   {onOpenGuide && <Button full icon="mdi:calendar-week" onClick={onOpenGuide}>Pick a free 7-day plan</Button>}
                 </div>
               </InfoButton>

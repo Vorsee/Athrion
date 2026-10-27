@@ -4,6 +4,7 @@ import { todayKey } from '../lib/data.js'
 import { supabase } from '../lib/supabase.js'
 import { fetchTodayCalorieLog, saveTodayCalorieLog, fetchCalorieLogs, saveGoals } from '../lib/api.js'
 import { resolveGoals } from '../lib/goals.js'
+import { MIN_CALORIES } from '../lib/nutrition.js'
 import { fetchLatestNutritionTarget } from '../lib/fitnessApi.js'
 import AdaptiveNutritionCard from '../components/AdaptiveNutritionCard.jsx'
 import BarcodeScanner from '../components/BarcodeScanner.jsx'
@@ -423,6 +424,7 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
         <GoalEditSheet
           goals={goals}
           calculated={resolveGoals(profile).calculated}
+          minCalories={MIN_CALORIES[profile?.sex] ?? MIN_CALORIES.other}
           onClose={() => setEditingGoals(false)}
           onSave={async (form) => {
             const payload = {
@@ -625,7 +627,7 @@ function DayModal({ log, onClose }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Goal Edit Sheet
 // ─────────────────────────────────────────────────────────────────────────────
-function GoalEditSheet({ goals, calculated, onSave, onReset, onClose }) {
+function GoalEditSheet({ goals, calculated, minCalories, onSave, onReset, onClose }) {
   const [form, setForm] = useState({
     calories: String(goals.calories),
     protein:  String(goals.protein),
@@ -639,7 +641,15 @@ function GoalEditSheet({ goals, calculated, onSave, onReset, onClose }) {
     { key: 'carbs',    label: 'Carbs',    unit: 'g / day',  color: 'warn', calc: calculated.carbs },
   ]
 
+  const kcal = parseInt(form.calories) || 0
+  const protein = parseInt(form.protein) || 0, carbs = parseInt(form.carbs) || 0
+  const tooLow = form.calories !== '' && kcal < minCalories
+  const tooHigh = kcal > 7000
+  const fat = Math.max(0, Math.round((kcal - protein * 4 - carbs * 4) / 9))
+  const macrosOver = kcal > 0 && protein * 4 + carbs * 4 > kcal
+
   async function handleSave() {
+    if (tooLow || tooHigh || macrosOver) return
     setSaving(true)
     try { await onSave(form) } finally { setSaving(false) }
   }
@@ -647,12 +657,12 @@ function GoalEditSheet({ goals, calculated, onSave, onReset, onClose }) {
   return (
     <Sheet title="Daily targets" onClose={onClose} bodyClassName="" footer={
       <>
-        <Button full onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save targets'}</Button>
+        <Button full onClick={handleSave} disabled={saving || tooLow || tooHigh || macrosOver}>{saving ? 'Saving...' : 'Save targets'}</Button>
         <Button variant="ghost" full onClick={onReset} className="mt-2">Reset to calculated values</Button>
       </>
     }>
         <div className="text-xs text-muted mb-5 leading-relaxed">
-          Calculated via Mifflin-St Jeor × 1.55 (moderate activity). Adjust to fit your goal.
+          The auto values are estimated from your body stats and a moderate activity level. Change them to fit your goal. This is general guidance, not medical advice.
         </div>
 
         <div className="space-y-4">
@@ -676,6 +686,16 @@ function GoalEditSheet({ goals, calculated, onSave, onReset, onClose }) {
           ))}
         </div>
 
+        {kcal > 0 && !macrosOver && (
+          <p className="text-xs text-muted mt-4">Fat fills the rest: about <span className="font-semibold text-ink-2 tabular-nums">{fat} g</span> a day.</p>
+        )}
+        {tooLow && (
+          <p role="alert" className="text-xs text-danger mt-3">
+            {minCalories} kcal is the lowest target ATHRION will set. Going lower than that should be planned with a doctor or dietitian.
+          </p>
+        )}
+        {tooHigh && <p role="alert" className="text-xs text-danger mt-3">That's more than 7000 kcal. Check the number.</p>}
+        {macrosOver && <p role="alert" className="text-xs text-danger mt-3">Protein and carbs add up to more than your calories. Lower one of them.</p>}
     </Sheet>
   )
 }

@@ -31,8 +31,9 @@ const GOAL_ADJUSTMENTS = {
   mobility_flexibility:    0,
 }
 
-// Safety floor: minimum calories the system will ever recommend, by sex.
-const MIN_CALORIES = {
+// Safety floor: minimum calories the system will ever recommend, by sex. Typed-in targets
+// can't go below it either (Food > Edit targets).
+export const MIN_CALORIES = {
   male:   1500,
   female: 1200,
   other:  1350,
