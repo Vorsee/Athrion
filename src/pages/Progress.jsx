@@ -464,7 +464,7 @@ const TABS = [
   ['overview', 'Overview'], ['body', 'Body'], ['lifts', 'Lifts'], ['photos', 'Photos'], ['health', 'Health'],
 ]
 
-export default function Progress({ onProfileChange }) {
+export default function Progress({ profile, onProfileChange }) {
   const [tab, setTab] = useState('overview')
   const [history, setHistory] = useState([])
   const [measurements, setMeasurements] = useState([])
@@ -486,6 +486,7 @@ export default function Progress({ onProfileChange }) {
       fetchBadges().catch(() => []),
     ])
     setHistory(h); setMeasurements(m); setCheckinWeights(cw); setPhotos(p); setHealth(hl)
+    syncProfileWeight(m)
 
     // Award anything newly earned
     let b = earnedRows
@@ -501,6 +502,15 @@ export default function Progress({ onProfileChange }) {
   }
 
   useEffect(() => { load() }, [])
+
+  // Catch up a weigh-in the profile missed (logged before weigh-ins updated it, or on another
+  // device): the newest one wins if it was entered after the profile was last saved
+  function syncProfileWeight(m) {
+    const latest = m.filter(x => x.weight_lb != null).sort((a, b) => (a.date < b.date ? 1 : -1))[0]
+    if (!latest || !profile || Number(latest.weight_lb) === Number(profile.weight_lb)) return
+    if (profile.updated_at && latest.created_at && Date.parse(latest.created_at) < Date.parse(profile.updated_at)) return
+    saveProfileWeight(Number(latest.weight_lb)).then(() => onProfileChange?.()).catch(() => {})
+  }
   const latestDate = [...measurements.filter(m => m.weight_lb != null).map(m => m.date), ...checkinWeights.map(c => c.date)].sort().at(-1) ?? null
 
   return (

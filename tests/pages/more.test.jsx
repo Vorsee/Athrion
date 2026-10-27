@@ -38,6 +38,20 @@ describe('Progress', () => {
     const row = sb.op(sb.queriesFor('body_measurements').find(q => sb.op(q, 'upsert')), 'upsert')[0]
     expect(row).toMatchObject({ weight_lb: 179, user_id: USER.id })
   })
+  it('catches up a weigh-in the profile missed, but keeps a weight edited in Profile since', async () => {
+    sb.set('body_measurements', { data: [{ id: 'm1', date: '2026-10-22', weight_lb: 176, created_at: '2026-10-22T08:00:00Z' }], error: null })
+    sb.set('user_profiles', { data: null, error: null })
+    const onProfileChange = vi.fn()
+    const { unmount } = render(<Progress profile={{ weight_lb: 182, updated_at: '2026-10-01T00:00:00Z' }} onProfileChange={onProfileChange} />)
+    await waitFor(() => expect(onProfileChange).toHaveBeenCalled())
+    expect(sb.queriesFor('user_profiles').map(q => sb.op(q, 'update')?.[0]).find(Boolean)).toMatchObject({ weight_lb: 176 })
+    unmount()
+
+    sb.state.queries.length = 0
+    render(<Progress profile={{ weight_lb: 180, updated_at: '2026-10-23T09:00:00Z' }} onProfileChange={onProfileChange} />)
+    await screen.findByText('Body')
+    expect(sb.queriesFor('user_profiles').some(q => sb.op(q, 'update'))).toBe(false)
+  })
   it('makes a new weigh-in the profile weight, but not an older one typed in later', async () => {
     sb.set('body_measurements', q => (sb.op(q, 'upsert') ? { data: { id: 'm2' }, error: null } : { data: [{ id: 'm1', date: '2026-10-20', weight_lb: 182 }], error: null }))
     sb.set('user_profiles', { data: null, error: null })
