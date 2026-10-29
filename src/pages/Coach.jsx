@@ -580,7 +580,7 @@ function ExerciseEditor({ e, index, count, productId, onChange, onRemove, onMove
 // Admin: review coach applications
 // ─────────────────────────────────────────────────────────────────────────────
 
-function Applications() {
+export function Applications() {
   const [list, setList] = useState(null)
   const [notes, setNotes] = useState({})
   const [busy, setBusy] = useState(null)

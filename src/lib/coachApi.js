@@ -8,7 +8,7 @@ export const COACH_COLUMNS = 'user_id, display_name, bio, credentials, specialti
 const PRODUCT_COLUMNS = 'id, coach_id, kind, title, summary, description, level, price_cents, minutes, outline, published, created_at, updated_at'
 
 export const LEVELS = ['All levels', 'Beginner', 'Intermediate', 'Advanced']
-export const SPECIALTIES = ['Strength', 'Muscle', 'Fat loss', 'Mobility', 'Running', 'Home workouts', 'Beginners', 'Sport']
+export const SPECIALTIES = ['Strength', 'Muscle', 'Fat loss', 'Mobility', 'Running', 'Swimming', 'Home workouts', 'Beginners', 'Sport']
 export const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 export const MAX_VIDEO_MB = 100
 

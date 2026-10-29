@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Icon } from '@iconify/react'
 import { useBackHandler } from '../lib/shell.js'
-import { Button, Card, SectionTitle, Segmented, EmptyState, SkeletonRows, InlineError, PageHeader, Fact, InfoButton } from '../components/ui/index.js'
+import { Button, Card, SectionTitle, Segmented, EmptyState, SkeletonRows, InlineError, PageHeader, Fact, InfoButton, ListRow } from '../components/ui/index.js'
 import { fetchCardio, saveCardio, deleteCardio } from '../lib/progressApi.js'
 import { cardioUnits, parseDuration, fmtDuration, fmtDistance, paceSecs } from '../lib/cardio.js'
 import { STROKES, strokeLabel, strokeStats, daysAgo, swimInviteLink, clearSwimInvite } from '../lib/swim.js'
@@ -10,6 +10,8 @@ import {
   respondToSwimmer, fetchMyTeam, teamByCode, leaveTeam, searchTeams, joinTeam,
 } from '../lib/swimApi.js'
 import { shareLink } from '../lib/shopLink.js'
+import { fetchMyCoach, saveCoachProfile, fetchIsAdmin } from '../lib/coachApi.js'
+import { Applications } from './Coach.jsx'
 import { useUnit } from '../lib/units.js'
 import { todayKey } from '../lib/data.js'
 
@@ -320,28 +322,92 @@ function FindTeam({ onJoined }) {
   )
 }
 
-function StartTeam({ onStarted }) {
+// Running a team takes an approved coach application (the same one as the shop's, 014/018)
+function CoachApplyForm({ coach, onSaved, onCancel }) {
+  const [f, setF] = useState({
+    display_name: coach?.display_name ?? '', credentials: coach?.credentials ?? '', bio: coach?.bio ?? '',
+  })
+  const [agree, setAgree] = useState(!!coach)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const ok = f.display_name.trim().length >= 2 && f.credentials.trim() && f.bio.trim().length >= 20 && agree
+
+  async function send(e) {
+    e.preventDefault()
+    if (!ok) return
+    setBusy(true); setErr('')
+    try {
+      const specialties = [...new Set([...(coach?.specialties ?? []), 'Swimming'])].slice(0, 6)
+      onSaved(await saveCoachProfile(
+        { display_name: f.display_name.trim(), credentials: f.credentials.trim(), bio: f.bio.trim(), specialties },
+        { isNew: !coach, reapply: coach?.status === 'rejected' }))
+    } catch (x) {
+      setErr(x.message || "Couldn't send it"); setBusy(false)
+    }
+  }
+
+  return (
+    <form onSubmit={send} className="space-y-3">
+      <label className="block">
+        <span className="text-xs text-muted">Coach name</span>
+        <input value={f.display_name} maxLength={40} onChange={e => setF(v => ({ ...v, display_name: e.target.value }))} placeholder="How your swimmers will see you" className={`mt-1 ${inputCls}`} />
+      </label>
+      <label className="block">
+        <span className="text-xs text-muted">Qualifications</span>
+        <input value={f.credentials} maxLength={500} onChange={e => setF(v => ({ ...v, credentials: e.target.value }))} placeholder="ASCA level 2, 5 years coaching masters" className={`mt-1 ${inputCls}`} />
+      </label>
+      <label className="block">
+        <span className="text-xs text-muted">About you and your team (at least 20 characters)</span>
+        <textarea value={f.bio} maxLength={1000} onChange={e => setF(v => ({ ...v, bio: e.target.value }))} className={`mt-1 min-h-[90px] ${inputCls}`} />
+      </label>
+      {!coach && (
+        <label className="flex items-start gap-3 text-xs text-muted leading-relaxed cursor-pointer min-h-[44px] py-1">
+          <input type="checkbox" checked={agree} onChange={e => setAgree(e.target.checked)} className="mt-0.5 w-5 h-5 flex-shrink-0 accent-neon rounded" />
+          <span>I'm 18 or older and agree to the <a href="/terms.html#coaches" target="_blank" rel="noreferrer" className="underline underline-offset-2 text-ink-2">coach terms</a>. My advice is safe and honest.</span>
+        </label>
+      )}
+      <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 8rem), 1fr))' }}>
+        <Button type="submit" icon="mdi:send-outline" disabled={!ok || busy}>{busy ? 'Sending...' : coach?.status === 'rejected' ? 'Apply again' : 'Send application'}</Button>
+        <Button variant="secondary" onClick={onCancel}>Cancel</Button>
+      </div>
+      {err && <p role="alert" className="text-xs text-danger">{err}</p>}
+    </form>
+  )
+}
+
+function StartTeam({ coach, onCoachChange, onStarted }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const status = coach?.status ?? null
+
   async function start(e) {
     e.preventDefault()
     if (name.trim().length < 2) { setErr('Give the team a name of at least 2 letters'); return }
     setBusy(true); setErr('')
-    try { await saveTeam(name.trim()); onStarted() } catch (x) { setErr(x.message) } finally { setBusy(false) }
+    try { await saveTeam(name.trim()); onStarted() } catch (x) { setErr(x.message); setBusy(false) }
   }
+
+  const head = {
+    null: ['Coach a team', 'Apply as a coach. Once an admin approves you, start a team and invite your swimmers.', 'Become a coach'],
+    pending: ['Application sent', 'An admin is reviewing it. You get a notification when it is done, then you can start your team.', 'Edit application'],
+    rejected: ['Not approved yet', coach?.review_note ? `Why: ${coach.review_note}` : 'Update your application and send it again.', 'Update and apply again'],
+    suspended: ['Coaching paused', 'Email athrionsportapp@gmail.com to find out more.', null],
+    approved: ['You are an approved coach', 'Start your team, then invite swimmers with a link.', 'Start my team'],
+  }[status] ?? ['Coach a team', '', null]
+
   return (
     <Card className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
-        <Icon icon="mdi:whistle-outline" width={26} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
+        <Icon icon={status === 'pending' ? 'mdi:progress-clock' : 'mdi:whistle-outline'} width={26} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
         <div className="grow basis-0 min-w-[8rem]">
-          <div className="text-sm font-semibold text-ink">Coach a team</div>
-          <div className="text-xs text-muted">Invite your swimmers and follow every stroke they log.</div>
+          <div className="text-sm font-semibold text-ink">{head[0]}</div>
+          <div className="text-xs text-muted break-words">{head[1]}</div>
         </div>
-        {!open && <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>Become a coach</Button>}
+        {!open && head[2] && <Button size="sm" variant={status === 'approved' ? 'primary' : 'secondary'} onClick={() => setOpen(true)}>{head[2]}</Button>}
       </div>
-      {open && (
+      {open && status === 'approved' && (
         <form onSubmit={start} className="space-y-2">
           <label className="block">
             <span className="text-xs text-muted">Team name</span>
@@ -350,6 +416,9 @@ function StartTeam({ onStarted }) {
           <Button full type="submit" disabled={busy}>{busy ? 'Starting...' : 'Start my team'}</Button>
           {err && <p role="alert" className="text-xs text-danger">{err}</p>}
         </form>
+      )}
+      {open && status !== 'approved' && status !== 'suspended' && (
+        <CoachApplyForm coach={coach} onCancel={() => setOpen(false)} onSaved={c => { setOpen(false); onCoachChange(c) }} />
       )}
     </Card>
   )
@@ -537,8 +606,8 @@ function SwimmerPage({ swimmer, url, onRemoved }) {
   )
 }
 
-function Team({ invite, onInviteDone, onOpenSwimmer, reload, data }) {
-  const { coached, mine, roster, myPhoto, urls } = data
+function Team({ invite, onInviteDone, onOpenSwimmer, onOpenApplications, reload, data, setCoach }) {
+  const { coached, mine, roster, myPhoto, urls, coach, isAdmin } = data
   return (
     <div className="space-y-4">
       {invite && !coached && <InviteCard code={invite} onJoined={() => { onInviteDone(); reload() }} onDismiss={onInviteDone} />}
@@ -550,7 +619,12 @@ function Team({ invite, onInviteDone, onOpenSwimmer, reload, data }) {
         <FindTeam onJoined={reload} />
       )}
       <PhotoCard path={myPhoto} url={urls[myPhoto]} onChanged={reload} coach={!!coached} />
-      {!coached && !mine && <StartTeam onStarted={reload} />}
+      {!coached && !mine && <StartTeam coach={coach} onCoachChange={setCoach} onStarted={reload} />}
+      {isAdmin && (
+        <Card pad="sm">
+          <ListRow icon="mdi:account-check-outline" tile="info" title="Coach applications" meta="Approve or turn down new coaches" chevron onClick={onOpenApplications} />
+        </Card>
+      )}
     </div>
   )
 }
@@ -565,15 +639,18 @@ export default function Swim({ intent, onIntentDone }) {
   const [team, setTeam] = useState(null) // { coached, mine, roster, myPhoto, urls }
   const [teamState, setTeamState] = useState('loading') // loading | ready | error
   const [swimmer, setSwimmer] = useState(null)
+  const [applications, setApplications] = useState(false)
   const [invite, setInvite] = useState(intent?.invite ?? null)
 
   const loadSwims = () => fetchCardio(500).then(l => setSwims(l.filter(x => x.kind === 'swim'))).catch(() => setSwims([]))
   async function loadTeam() {
     try {
-      const [coached, mine, myPhoto] = await Promise.all([fetchCoachedTeam(), fetchMyTeam(), fetchMyPhoto()])
+      const [coached, mine, myPhoto, coach, isAdmin] = await Promise.all([
+        fetchCoachedTeam(), fetchMyTeam(), fetchMyPhoto(), fetchMyCoach().catch(() => null), fetchIsAdmin().catch(() => false),
+      ])
       const roster = coached ? await fetchRoster() : []
       const urls = await photoUrls([myPhoto, mine?.coach_photo, ...roster.map(r => r.photo_path)])
-      setTeam({ coached, mine, roster, myPhoto, urls })
+      setTeam({ coached, mine, roster, myPhoto, urls, coach, isAdmin })
       setTeamState('ready')
     } catch {
       setTeamState('error')
@@ -585,6 +662,9 @@ export default function Swim({ intent, onIntentDone }) {
   }, [intent])
 
   useBackHandler(!!swimmer, () => setSwimmer(null), 'Swim', swimmer ? `@${swimmer.nickname ?? 'swimmer'}` : '')
+  useBackHandler(applications, () => setApplications(false), 'Swim', 'Applications')
+
+  if (applications) return <Applications />
 
   if (swimmer) return (
     <SwimmerPage swimmer={swimmer} url={team?.urls[swimmer.photo_path]}
@@ -613,7 +693,8 @@ export default function Swim({ intent, onIntentDone }) {
       {tab === 'team' && (
         teamState === 'loading' ? <SkeletonRows rows={4} label="Loading your team" />
           : teamState === 'error' ? <InlineError onRetry={() => { setTeamState('loading'); loadTeam() }}>Couldn't load your team.</InlineError>
-          : <Team data={team} invite={invite} onInviteDone={() => setInvite(null)} onOpenSwimmer={setSwimmer} reload={loadTeam} />
+          : <Team data={team} invite={invite} onInviteDone={() => setInvite(null)} onOpenSwimmer={setSwimmer}
+              onOpenApplications={() => setApplications(true)} setCoach={coach => setTeam(t => ({ ...t, coach }))} reload={loadTeam} />
       )}
     </div>
   )
