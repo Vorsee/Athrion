@@ -4,11 +4,17 @@ import { Button } from '../components/ui/index.js'
 import { PLANS, PRO_FEATURES, TRIAL_DAYS, money } from '../lib/pricing.js'
 import Brand from '../components/Brand.jsx'
 
-// Three things ATHRION does, one line each
+// The three things ATHRION does
 const PILLARS = [
-  { icon: 'mdi:dumbbell', title: 'Train', body: 'A plan for your goal, every set logged, PRs tracked.' },
-  { icon: 'mdi:food-apple-outline', title: 'Eat', body: 'Calorie targets, a meal plan, barcode and photo logging.' },
-  { icon: 'mdi:chart-line', title: 'Progress', body: 'Your goal, your dates, your results, all in one place.' },
+  { icon: 'mdi:dumbbell', title: 'Train',
+    body: 'Get a weekly plan built for your goal, schedule and equipment. Log every set in seconds and see your last numbers and PRs as you lift. The plan adapts each week from how you trained.',
+    tags: ['Weekly plan', 'Set logging', 'PRs', 'Train with friends'] },
+  { icon: 'mdi:food-apple-outline', title: 'Eat',
+    body: 'Daily calories and protein worked out from your body and your goal. Follow a ready meal plan in grams, or log food by barcode, by hand or from a photo.',
+    tags: ['Calorie targets', 'Meal plan', 'Barcode', 'Photo logging'] },
+  { icon: 'mdi:chart-line', title: 'Progress',
+    body: 'Set a target weight and a date. A progress ring shows how far you are, whether you are on track, and every weigh-in and workout along the way.',
+    tags: ['Goal ring', 'Target date', 'Weight chart', 'Timeline'] },
 ]
 
 const FREE = ['Workout log with PRs', 'Calorie logging and barcode scanner', 'Progress and weight tracking', 'Swim log and teams', 'Train with friends']
@@ -31,8 +37,8 @@ export default function Landing({ onCreateAccount, onSignIn, onWriteReview }) {
               <span className="block">Eat.</span>
               <span className="block text-neon-ink">Progress.</span>
             </h1>
-            <div className="mt-10 max-w-xs">
-              <Button full onClick={onCreateAccount}>Start free</Button>
+            <div className="mt-10 max-w-xs mx-auto">
+              <Button full onClick={onCreateAccount}>Create free account</Button>
             </div>
           </div>
           <ProductPreview />
@@ -40,12 +46,17 @@ export default function Landing({ onCreateAccount, onSignIn, onWriteReview }) {
 
         {/* Pillars */}
         <section className="bg-surface border-y border-line">
-          <div className="max-w-5xl mx-auto px-4 py-14 grid gap-10 md:grid-cols-3">
+          <div className="max-w-5xl mx-auto px-4 py-16 grid gap-14 md:gap-8 md:grid-cols-3">
             {PILLARS.map(p => (
-              <div key={p.title}>
-                <Icon icon={p.icon} width={28} className="text-neon-ink" aria-hidden="true" />
-                <h2 className="font-bold text-2xl mt-3">{p.title}</h2>
-                <p className="text-ink-2 mt-1">{p.body}</p>
+              <div key={p.title} className="flex flex-col items-center text-center">
+                <span className="w-16 h-16 rounded-2xl bg-neon/10 border border-neon-stroke/30 flex items-center justify-center">
+                  <Icon icon={p.icon} width={32} className="text-neon-ink" aria-hidden="true" />
+                </span>
+                <h2 className="font-bold text-3xl mt-4">{p.title}</h2>
+                <p className="text-ink-2 mt-3 max-w-sm">{p.body}</p>
+                <ul className="flex flex-wrap justify-center gap-1.5 mt-4">
+                  {p.tags.map(t => <li key={t} className="text-xs font-semibold text-neon-ink border border-neon-stroke/30 rounded-md px-2 py-1">{t}</li>)}
+                </ul>
               </div>
             ))}
           </div>
@@ -59,6 +70,7 @@ export default function Landing({ onCreateAccount, onSignIn, onWriteReview }) {
               <h2 id="swim" className="font-bold text-2xl">Swim teams</h2>
               <p className="text-ink-2 mt-1">Every stroke, every PR. Coaches see their whole team.</p>
             </div>
+            <Button variant="secondary" icon="mdi:swim" onClick={onCreateAccount} className="w-full sm:w-auto">Start swimming</Button>
           </div>
         </section>
 
