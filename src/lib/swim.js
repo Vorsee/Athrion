@@ -30,6 +30,17 @@ export function strokeStats(swims) {
   return out
 }
 
+// The coach's leaderboard for one stroke: active swimmers with a PR in it, fastest pace first.
+// prs: my_team_prs rows (020), one per swimmer and stroke; roster: my_swim_roster rows.
+export function strokeBoard(prs, roster, stroke) {
+  const who = Object.fromEntries(roster.filter(r => r.status === 'active').map(r => [r.user_id, r]))
+  return prs
+    .filter(p => p.stroke === stroke && who[p.user_id] && Number(p.distance_m) > 0)
+    .map(p => ({ ...p, swimmer: who[p.user_id], perM: p.seconds / Number(p.distance_m) }))
+    .sort((a, b) => a.perM - b.perM || (a.date < b.date ? -1 : 1))
+    .map((p, i) => ({ ...p, place: i + 1 }))
+}
+
 // "today", "yesterday", "3 days ago", or the date
 export function daysAgo(date, now = new Date()) {
   if (!date) return null

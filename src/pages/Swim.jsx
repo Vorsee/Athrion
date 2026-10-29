@@ -4,10 +4,10 @@ import { useBackHandler } from '../lib/shell.js'
 import { Button, Card, SectionTitle, Segmented, EmptyState, SkeletonRows, InlineError, PageHeader, Fact, InfoButton, ListRow } from '../components/ui/index.js'
 import { fetchCardio, saveCardio, deleteCardio } from '../lib/progressApi.js'
 import { cardioUnits, parseDuration, fmtDuration, fmtDistance, paceSecs } from '../lib/cardio.js'
-import { STROKES, strokeLabel, strokeStats, daysAgo, swimInviteLink, clearSwimInvite } from '../lib/swim.js'
+import { STROKES, strokeLabel, strokeStats, strokeBoard, daysAgo, swimInviteLink, clearSwimInvite } from '../lib/swim.js'
 import {
   photoUrls, fetchMyPhoto, uploadMyPhoto, fetchCoachedTeam, saveTeam, newTeamCode, fetchRoster, fetchSwimmerSwims,
-  respondToSwimmer, fetchMyTeam, teamByCode, leaveTeam, searchTeams, joinTeam,
+  respondToSwimmer, fetchTeamPrs, fetchMyTeam, teamByCode, leaveTeam, searchTeams, joinTeam,
 } from '../lib/swimApi.js'
 import { shareLink } from '../lib/shopLink.js'
 import { fetchMyCoach, saveCoachProfile, fetchIsAdmin } from '../lib/coachApi.js'
@@ -450,7 +450,7 @@ function MyTeamCard({ team, coachUrl, onLeft }) {
   )
 }
 
-function CoachView({ team, roster, urls, onChanged, onOpenSwimmer }) {
+function CoachView({ team, roster, prs, urls, onChanged, onOpenSwimmer }) {
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(team.name)
   const [copied, setCopied] = useState(false)
@@ -545,8 +545,47 @@ function CoachView({ team, roster, urls, onChanged, onOpenSwimmer }) {
           </EmptyState>
         )}
       </section>
+      {swimmers.length > 0 && <Leaderboard prs={prs} roster={roster} urls={urls} onOpenSwimmer={onOpenSwimmer} />}
       {err && <p role="alert" className="text-xs text-danger">{err}</p>}
     </div>
+  )
+}
+
+// Who's fastest per stroke: each swimmer's PR pace, ranked
+function Leaderboard({ prs, roster, urls, onOpenSwimmer }) {
+  const u = useSwimUnits()
+  const [stroke, setStroke] = useState('free')
+  const board = strokeBoard(prs, roster, stroke)
+  return (
+    <section aria-label="Leaderboard">
+      <SectionTitle action={<InfoButton title="Leaderboard">
+        Each swimmer's PR for the stroke: their fastest pace per {u.per} on any swim of at least 25 m. Tap a swimmer to see all their swims.
+      </InfoButton>}>Leaderboard</SectionTitle>
+      <Segmented options={STROKES.map(s => [s.id, s.label])} value={stroke} onChange={setStroke} label="Stroke" kind="choice" scroll />
+      {board.length ? (
+        <ol className="mt-3 bg-surface border border-line rounded-2xl divide-y divide-line">
+          {board.map(p => (
+            <li key={p.user_id}>
+              <button type="button" onClick={() => onOpenSwimmer(p.swimmer)}
+                className="press w-full text-left flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5">
+                <span className={`w-7 text-center text-sm font-bold tabular-nums flex-shrink-0 ${p.place === 1 ? 'text-neon-ink' : 'text-muted'}`}>{p.place}</span>
+                <Photo url={urls[p.swimmer.photo_path]} name={p.swimmer.nickname} size={40} />
+                <span className="grow basis-0 min-w-[6rem]">
+                  <span className="block text-sm font-semibold text-ink [overflow-wrap:anywhere]">@{p.swimmer.nickname ?? 'swimmer'}</span>
+                  <span className="block text-xs text-muted tabular-nums">{fmtDistance(p.distance_m, u)} in {fmtDuration(p.seconds)} · {fmtDate(p.date)}</span>
+                </span>
+                <span className="ml-auto text-right">
+                  <span className={`block text-lg font-bold tabular-nums leading-tight ${p.place === 1 ? 'text-neon-ink' : 'text-ink'}`}>{fmtDuration(p.perM * u.paceM)}</span>
+                  <span className="block text-xs text-muted">/{u.per}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="text-sm text-muted text-center py-5">No {strokeLabel(stroke).toLowerCase()} PRs yet. They show once your swimmers log this stroke.</p>
+      )}
+    </section>
   )
 }
 
@@ -607,12 +646,12 @@ function SwimmerPage({ swimmer, url, onRemoved }) {
 }
 
 function Team({ invite, onInviteDone, onOpenSwimmer, onOpenApplications, reload, data, setCoach }) {
-  const { coached, mine, roster, myPhoto, urls, coach, isAdmin } = data
+  const { coached, mine, roster, prs, myPhoto, urls, coach, isAdmin } = data
   return (
     <div className="space-y-4">
       {invite && !coached && <InviteCard code={invite} onJoined={() => { onInviteDone(); reload() }} onDismiss={onInviteDone} />}
       {coached ? (
-        <CoachView team={coached} roster={roster} urls={urls} onChanged={reload} onOpenSwimmer={onOpenSwimmer} />
+        <CoachView team={coached} roster={roster} prs={prs} urls={urls} onChanged={reload} onOpenSwimmer={onOpenSwimmer} />
       ) : mine ? (
         <MyTeamCard team={mine} coachUrl={urls[mine.coach_photo]} onLeft={reload} />
       ) : (
@@ -648,9 +687,9 @@ export default function Swim({ intent, onIntentDone }) {
       const [coached, mine, myPhoto, coach, isAdmin] = await Promise.all([
         fetchCoachedTeam(), fetchMyTeam(), fetchMyPhoto(), fetchMyCoach().catch(() => null), fetchIsAdmin().catch(() => false),
       ])
-      const roster = coached ? await fetchRoster() : []
+      const [roster, prs] = coached ? await Promise.all([fetchRoster(), fetchTeamPrs().catch(() => [])]) : [[], []]
       const urls = await photoUrls([myPhoto, mine?.coach_photo, ...roster.map(r => r.photo_path)])
-      setTeam({ coached, mine, roster, myPhoto, urls, coach, isAdmin })
+      setTeam({ coached, mine, roster, prs, myPhoto, urls, coach, isAdmin })
       setTeamState('ready')
     } catch {
       setTeamState('error')

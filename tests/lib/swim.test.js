@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { strokeStats, daysAgo, SWIM_INVITE_PATH, STROKES } from '../../src/lib/swim.js'
+import { strokeStats, strokeBoard, daysAgo, SWIM_INVITE_PATH, STROKES } from '../../src/lib/swim.js'
 
 const swim = (id, stroke, date, distance_m, seconds) => ({ id, kind: 'swim', stroke, date, distance_m, seconds })
 
@@ -40,5 +40,27 @@ describe('swim helpers', () => {
     expect('/swim/abc123defg'.match(SWIM_INVITE_PATH)?.[1]).toBe('abc123defg')
     expect(SWIM_INVITE_PATH.test('/swim/')).toBe(false)
     expect(SWIM_INVITE_PATH.test('/swim/../x')).toBe(false)
+  })
+})
+
+describe('strokeBoard', () => {
+  const roster = [
+    { user_id: 'a', nickname: 'ann', status: 'active' },
+    { user_id: 'b', nickname: 'bo', status: 'active' },
+    { user_id: 'c', nickname: 'cy', status: 'pending' },
+  ]
+  const prs = [
+    { user_id: 'a', stroke: 'free', distance_m: 100, seconds: 90, date: '2026-10-20' },
+    { user_id: 'b', stroke: 'free', distance_m: 200, seconds: 160, date: '2026-10-21' },
+    { user_id: 'c', stroke: 'free', distance_m: 100, seconds: 60, date: '2026-10-22' },
+    { user_id: 'a', stroke: 'fly', distance_m: 50, seconds: 40, date: '2026-10-23' },
+  ]
+  it('ranks active swimmers by PR pace for one stroke', () => {
+    const board = strokeBoard(prs, roster, 'free')
+    expect(board.map(p => [p.place, p.swimmer.nickname])).toEqual([[1, 'bo'], [2, 'ann']])
+    expect(board[0].perM).toBe(0.8)
+  })
+  it('is empty for a stroke nobody has swum', () => {
+    expect(strokeBoard(prs, roster, 'back')).toEqual([])
   })
 })

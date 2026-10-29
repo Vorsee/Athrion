@@ -42,6 +42,15 @@ export const saveTeam = async name => one(must(await supabase.rpc('save_swim_tea
 export const newTeamCode = async () => one(must(await supabase.rpc('new_swim_team_code')))
 export const fetchRoster = async () => must(await supabase.rpc('my_swim_roster')) ?? []
 export const fetchSwimmerSwims = async userId => must(await supabase.rpc('swimmer_swims', { p_user: userId })) ?? []
+// Every swimmer's PR per stroke (020). Before 020 runs there is no leaderboard: empty, not an error
+export async function fetchTeamPrs() {
+  const { data, error } = await supabase.rpc('my_team_prs')
+  if (error) {
+    if (error.code === 'PGRST202' || error.code === '42883') return []
+    throw new Error(error.message || 'Something went wrong')
+  }
+  return data ?? []
+}
 export const respondToSwimmer = async (userId, accept) => must(await supabase.rpc('respond_swim_request', { p_user: userId, p_accept: accept }))
 
 // ── Swimmer ──────────────────────────────────────────────────────────────────
