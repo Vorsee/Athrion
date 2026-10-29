@@ -77,3 +77,23 @@ describe('two goals', () => {
     expect(msg.secondaryGoalProgramming).toMatch(/^Also serve Muscle Building/)
   })
 })
+
+import { trainingGoal } from '../../supabase/functions/generate-fitness-plan/plan.ts'
+describe('backup plans follow both goals', () => {
+  const nt = { calorieTarget: 2000, proteinGrams: 160, carbGrams: 200, fatGrams: 60 }
+  it('lose weight + build muscle: a muscle split with a cardio day, named for both', () => {
+    expect(trainingGoal({ primaryGoal: 'lose_weight', secondaryGoals: ['build_muscle'] })).toBe('build_muscle')
+    const plan = makeFallbackPlan({ primaryGoal: 'lose_weight', secondaryGoals: ['build_muscle'], workoutDaysPerWeek: 4, workoutLocation: 'gym' }, nt)
+    expect(plan.summary.planName).toBe('Weight Loss + Muscle Building Foundation Plan')
+    expect(plan.weeklySchedule.filter(d => d.type === 'workout').map(d => d.title)).toContain('Lower Body Volume')
+    expect(plan.weeklySchedule.some(d => d.title === 'Easy Cardio')).toBe(true)
+  })
+  it('build muscle + swimming: the cardio day is a swim', () => {
+    const plan = makeFallbackPlan({ primaryGoal: 'build_muscle', secondaryGoals: ['swimming'], workoutDaysPerWeek: 3, workoutLocation: 'gym' }, nt)
+    expect(plan.weeklySchedule.some(d => d.title === 'Swim')).toBe(true)
+  })
+  it('one goal works as before', () => {
+    expect(trainingGoal({ primaryGoal: 'improve_strength' })).toBe('improve_strength')
+    expect(trainingGoal({ primaryGoal: 'gain_weight' })).toBe('build_muscle')
+  })
+})

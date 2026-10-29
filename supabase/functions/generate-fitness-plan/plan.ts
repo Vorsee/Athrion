@@ -443,9 +443,25 @@ const CARDIO_DAY = {
   recoveryNotes: '20-30 min of easy cardio you could talk through: incline walk, stationary bike or elliptical. Helps recovery and heart health without eating into muscle gains.',
 }
 
+// Which goal's sessions fill the week. With a weight goal and a training goal picked together
+// (lose weight + build muscle), the training goal shapes the sessions; the weight goal already set
+// the calories, and losing weight adds cardio.
+const WEIGHT_GOALS = ['lose_weight', 'gain_weight', 'maintain_weight']
+export function trainingGoal(fp: any): string {
+  const second = (fp.secondaryGoals ?? []).find((g: string) => g !== fp.primaryGoal)
+  let g = WEIGHT_GOALS.includes(fp.primaryGoal) && second && !WEIGHT_GOALS.includes(second) ? second : fp.primaryGoal
+  if (g === 'gain_weight') g = 'build_muscle'
+  return SESSIONS[g] ? g : 'general_fitness'
+}
+
 export function makeFallbackPlan(fp: any, nt: any): any {
-  const goal = SESSIONS[fp.primaryGoal] ? fp.primaryGoal : fp.primaryGoal === 'gain_weight' ? 'build_muscle' : 'general_fitness'
-  const label = GOAL_LABELS[goal]
+  const goal = trainingGoal(fp)
+  const goals = [fp.primaryGoal, ...(fp.secondaryGoals ?? [])].filter((g: string, i: number, a: string[]) => g && a.indexOf(g) === i).slice(0, 2)
+  const label = goals.length > 1 ? goals.map((g: string) => GOAL_LABELS[g] ?? g).join(' + ') : GOAL_LABELS[goal]
+  // The rest-day cardio: a swim when swimming is one of the goals
+  const cardioDay = goals.includes('swimming')
+    ? { ...CARDIO_DAY, title: 'Swim', recoveryNotes: '20-40 min in the pool: 5 min easy, technique drills, then steady laps. Log it on the Swim tab.' }
+    : CARDIO_DAY
   const days = Math.min(Math.max(fp.workoutDaysPerWeek ?? 3, 1), 7)
   const useGym = fp.workoutLocation === 'gym' || fp.workoutLocation === 'any'
   const beginner = fp.experienceLevel === 'beginner'
@@ -488,9 +504,9 @@ export function makeFallbackPlan(fp: any, nt: any): any {
         recoveryNotes: '',
       }
     }
-    if ((goal === 'build_muscle' || goal === 'improve_strength') && !activeRecoveryUsed && days < 6) {
+    if ((goal === 'build_muscle' || goal === 'improve_strength' || goals.includes('swimming') || goals.includes('lose_weight')) && !activeRecoveryUsed && days < 6) {
       activeRecoveryUsed = true
-      return { day, ...CARDIO_DAY, workout: { warmup: [], exercises: [], cooldown: [] } }
+      return { day, ...cardioDay, workout: { warmup: [], exercises: [], cooldown: [] } }
     }
     if (activeRecoveryGoals.includes(goal) && !activeRecoveryUsed && days < 6) {
       activeRecoveryUsed = true
@@ -519,7 +535,7 @@ export function makeFallbackPlan(fp: any, nt: any): any {
 
   return {
     summary: {
-      goal, planName: `${label} Foundation Plan`, durationWeeks: 8,
+      goal: GOAL_LABELS[fp.primaryGoal] ? fp.primaryGoal : goal, planName: `${label} Foundation Plan`, durationWeeks: 8,
       trainingDaysPerWeek: days,
       overview: `A ${days}-day ${label.toLowerCase()} program built around ${[...new Set(schedule.filter(d => d.type === 'workout').map(d => d.title))].join(', ')}.`,
       weeklyStrategy: strategy,
