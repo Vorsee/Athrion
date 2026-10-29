@@ -29,17 +29,15 @@ export default function Landing({ onCreateAccount, onSignIn, onWriteReview }) {
       </header>
 
       <main>
-        {/* Hero: three words */}
-        <section className="max-w-5xl mx-auto px-4 pt-10 pb-20 grid md:grid-cols-[1.1fr_0.9fr] gap-12 items-center">
-          <div>
-            <h1 className="font-bold text-[3.5rem] xs:text-7xl md:text-8xl leading-[0.95] tracking-tight text-left">
-              <span className="block">Train.</span>
-              <span className="block">Eat.</span>
-              <span className="block text-neon-ink">Progress.</span>
-            </h1>
-            <div className="mt-10 max-w-xs mx-auto">
-              <Button full onClick={onCreateAccount}>Create free account</Button>
-            </div>
+        {/* Hero: three words, centered, with one card for each underneath */}
+        <section className="max-w-5xl mx-auto px-4 pt-12 pb-20 text-center">
+          <h1 className="font-bold text-[3.25rem] xs:text-7xl lg:text-8xl leading-[0.95] tracking-tight">
+            <span className="block md:inline">Train. </span>
+            <span className="block md:inline">Eat. </span>
+            <span className="block md:inline text-neon-ink">Progress.</span>
+          </h1>
+          <div className="mt-10 max-w-xs mx-auto">
+            <Button full onClick={onCreateAccount}>Create free account</Button>
           </div>
           <ProductPreview />
         </section>
@@ -134,37 +132,61 @@ function Check({ children }) {
   )
 }
 
-// A drawn example of the Today view, so the hero shows the product without screenshots
+// Drawn examples of the app, one per headline word, so the hero shows the product without screenshots
 function ProductPreview() {
-  const kcal = 1840, goal = 2600
-  const r = 34, c = 2 * Math.PI * r
+  const ring = (pct, size = 76, stroke = 8) => {
+    const r = (size - stroke) / 2, c = 2 * Math.PI * r
+    return (
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="flex-shrink-0">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgb(var(--line))" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgb(var(--neon))" strokeWidth={stroke} strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={c * (1 - pct)} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
+      </svg>
+    )
+  }
+  const card = 'bg-surface border border-line rounded-3xl p-5 text-left'
   return (
-    <div aria-hidden="true" className="relative mx-auto w-full max-w-[320px]">
-      <div className="bg-surface border border-line rounded-[28px] p-4 space-y-3" style={{ boxShadow: 'var(--sheet-shadow)' }}>
-        <div className="bg-raised border border-line rounded-2xl p-4">
-          <div className="text-xs text-neon-ink">Today's training</div>
-          <div className="font-bold text-lg mt-1">Upper body · 45 min</div>
-          {[['Bench press', '4 × 8', '+2.5 kg'], ['Bent-over row', '4 × 10', ''], ['Overhead press', '3 × 8', '']].map(([n, s, pr]) => (
-            <div key={n} className="flex items-center justify-between text-sm py-1.5 border-b border-line last:border-0">
-              <span className="text-ink-2">{n}</span>
-              <span className="flex items-center gap-2">
-                {pr && <span className="text-xs text-neon-ink">{pr}</span>}
-                <span className="text-muted">{s}</span>
-              </span>
-            </div>
-          ))}
-          <div className="mt-3 h-10 rounded-xl bg-neon text-on-neon text-sm font-semibold flex items-center justify-center">Start workout</div>
-        </div>
-        <div className="bg-raised border border-line rounded-2xl p-4 flex items-center gap-4">
-          <svg width="80" height="80" viewBox="0 0 80 80" className="flex-shrink-0">
-            <circle cx="40" cy="40" r={r} fill="none" stroke="rgb(var(--line))" strokeWidth="8" />
-            <circle cx="40" cy="40" r={r} fill="none" stroke="rgb(var(--neon))" strokeWidth="8" strokeLinecap="round"
-              strokeDasharray={c} strokeDashoffset={c * (1 - kcal / goal)} transform="rotate(-90 40 40)" />
-          </svg>
+    <div aria-hidden="true" className="mt-14 grid gap-4 md:grid-cols-3 max-w-sm md:max-w-none mx-auto">
+      <div className={card}>
+        <div className="text-xs font-semibold text-neon-ink">Train</div>
+        <div className="font-bold text-lg mt-1">Upper body · 45 min</div>
+        {[['Bench press', '4 × 8', '+2.5 kg'], ['Bent-over row', '4 × 10', ''], ['Overhead press', '3 × 8', '']].map(([n, s, pr]) => (
+          <div key={n} className="flex items-center justify-between text-sm py-1.5 border-b border-line last:border-0">
+            <span className="text-ink-2">{n}</span>
+            <span className="flex items-center gap-2">
+              {pr && <span className="text-xs text-neon-ink">{pr}</span>}
+              <span className="text-muted">{s}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className={card}>
+        <div className="text-xs font-semibold text-neon-ink">Eat</div>
+        <div className="flex items-center gap-4 mt-2">
+          {ring(1840 / 2600)}
           <div>
-            <div className="font-bold text-2xl leading-none">{goal - kcal}</div>
+            <div className="font-bold text-2xl leading-none">760</div>
             <div className="text-xs text-muted mt-1">kcal left today</div>
           </div>
+        </div>
+        <div className="mt-3 text-sm flex justify-between border-t border-line pt-2"><span className="text-ink-2">Lunch · chicken, rice</span><span className="text-muted">640 kcal</span></div>
+      </div>
+      <div className={card}>
+        <div className="text-xs font-semibold text-neon-ink">Progress</div>
+        <div className="flex items-center gap-4 mt-2">
+          <div className="relative">
+            {ring(0.36)}
+            <span className="absolute inset-0 flex items-center justify-center font-bold text-base">36%</span>
+          </div>
+          <div>
+            <div className="font-bold text-lg leading-tight">Lose 16 lb</div>
+            <div className="text-xs text-muted mt-1">71 days left · on track</div>
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-7 gap-1">
+          {['done', 'missed', 'done', 'today', 'plan', 'rest', 'rest'].map((d, i) => (
+            <span key={i} className={`h-2 rounded-full ${d === 'done' ? 'bg-neon' : d === 'missed' ? 'bg-danger/40' : d === 'today' || d === 'plan' ? 'bg-neon/30' : 'bg-line'}`} />
+          ))}
         </div>
       </div>
     </div>
