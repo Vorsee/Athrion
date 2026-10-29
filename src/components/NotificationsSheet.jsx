@@ -14,6 +14,7 @@ const KIND_ICON = {
   coach: 'mdi:whistle-outline',
   sale: 'mdi:cash',
   coach_application: 'mdi:account-clock-outline',
+  review: 'mdi:star-outline',
   team_created: 'mdi:swim',
   team_request: 'mdi:account-plus-outline',
   team_joined: 'mdi:account-group-outline',

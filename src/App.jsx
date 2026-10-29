@@ -113,10 +113,7 @@ export default function App() {
     const open = params.get('open')
     if (open) return open === 'shop' && params.get('product') ? `shop:${params.get('product')}:${params.get('paid') ? 'paid' : ''}` : open
     const link = parseShopPath(window.location.pathname) || readShopLink()
-    if (link) return shopTarget(link)
-    // "Write a review" on the landing page: the review form opens once signed in
-    try { const after = localStorage.getItem('athrion_open_after'); if (after) { localStorage.removeItem('athrion_open_after'); return after } } catch {}
-    return null
+    return link ? shopTarget(link) : null
   })
   // Tidy the address once read. Not inside the initializer: StrictMode runs that twice in dev,
   // and the second run would find the link already gone.
@@ -323,8 +320,7 @@ export default function App() {
         : shopLink
         ? <ShopPreview link={shopLink} onStart={() => setAuthMode('register')} onSignIn={() => setAuthMode('login')}
             onHome={() => { clearShopLink(); setPendingOpen(null); window.history.replaceState(null, '', '/'); setShopLink(null) }} />
-        : <Landing onCreateAccount={() => setAuthMode('register')} onSignIn={() => setAuthMode('login')}
-            onWriteReview={() => { try { localStorage.setItem('athrion_open_after', 'review') } catch {} ; setAuthMode('login') }} />}
+        : <Landing onCreateAccount={() => setAuthMode('register')} onSignIn={() => setAuthMode('login')} />}
     </Suspense>
   )
 

@@ -1,7 +1,7 @@
 import { supabase } from './supabase.js'
 
 // App reviews (021): public on the landing page, one per person, written in the app.
-const SHOWN = 'user_id, name, rating, body, created_at'
+const SHOWN = 'id, user_id, name, rating, body, created_at'
 
 export async function fetchReviews(limit = 12) {
   // Signed out, RLS (021) only returns shown reviews; this is only called from the landing page
@@ -46,9 +46,16 @@ export async function fetchAllReviews() {
   if (error) throw error
   return data ?? []
 }
-export async function setReviewHidden(userId, hidden) {
-  const { error } = await supabase.from('app_reviews').update({ hidden }).eq('user_id', userId)
+export async function setReviewHidden(id, hidden) {
+  const { error } = await supabase.from('app_reviews').update({ hidden }).eq('id', id)
   if (error) throw error
+}
+
+// From the landing page, no account needed (022): it waits for an admin to approve it
+export async function sendPublicReview({ name, rating, body, website = '' }) {
+  const res = await fetch('/api/review', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, rating, body, website }) })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || "Couldn't send your review. Try again.")
 }
 
 // "Sam Tester" → "Sam T."

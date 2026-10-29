@@ -20,7 +20,7 @@ const PILLARS = [
 const FREE = ['Workout log with PRs', 'Calorie logging and barcode scanner', 'Progress and weight tracking', 'Swim log and teams', 'Train with friends']
 
 // The public page in front of sign-in: what ATHRION is and what it costs
-export default function Landing({ onCreateAccount, onSignIn, onWriteReview }) {
+export default function Landing({ onCreateAccount, onSignIn }) {
   return (
     <div className="min-h-dvh bg-canvas text-ink font-dm pt-safe pb-safe">
       <header className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -72,7 +72,7 @@ export default function Landing({ onCreateAccount, onSignIn, onWriteReview }) {
           </div>
         </section>
 
-        <LandingReviews onWrite={onWriteReview ?? onSignIn} />
+        <LandingReviews />
 
         {/* Pricing */}
         <section className="max-w-5xl mx-auto px-4 pb-16" aria-labelledby="pricing">
