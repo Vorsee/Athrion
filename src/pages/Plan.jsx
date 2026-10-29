@@ -190,7 +190,7 @@ async function logWeight(lb, onProfileChange) {
 }
 
 // The goal fields saved with a goal (021): a fresh start today, and the weight target if any
-function goalFields({ goal, targetLb, pace, plan }, fp, profile) {
+function goalFields({ goal, targetLb, pace, plan, lifts = [] }, fp, profile) {
   const same = fp?.primary_goal === goal && (!targetLb || Number(fp?.target_weight_lb) === targetLb)
   return {
     primaryGoal: goal,
@@ -200,6 +200,7 @@ function goalFields({ goal, targetLb, pace, plan }, fp, profile) {
     goalStartWeightLb: plan ? (same && fp?.goal_start_weight_lb ? Number(fp.goal_start_weight_lb) : profile?.weight_lb) : null,
     goalTargetDate: plan?.targetDate ? localDateKey(plan.targetDate) : null,
     goalWeeklyLb: plan?.weeklyLb ?? null,
+    goalLifts: lifts,
   }
 }
 
@@ -552,7 +553,7 @@ function FreePlan({ onUpgrade, onStartSetup, profile, onProfileChange }) {
     <div className="space-y-4 pt-2">
       {fp ? (
         <>
-          <GoalCard fp={fp} profile={profile} weights={data.weights} progress={progress} onEditGoal={() => setSheet('goal')} onLogWeight={() => setSheet('weight')} />
+          <GoalCard fp={fp} profile={profile} weights={data.weights} progress={progress} history={data.history} onEditGoal={() => setSheet('goal')} onLogWeight={() => setSheet('weight')} />
           <ResultsCard fp={fp} weights={data.weights} progress={progress} history={data.history} />
         </>
       ) : data && onStartSetup && (
@@ -563,7 +564,7 @@ function FreePlan({ onUpgrade, onStartSetup, profile, onProfileChange }) {
         </Card>
       )}
       <LockedPlan onUpgrade={onUpgrade} />
-      {sheet === 'goal' && <GoalSheet fp={fp} profile={profile} onClose={() => setSheet(null)} onSave={saveGoal} saving={saving} error={err} />}
+      {sheet === 'goal' && <GoalSheet fp={fp} profile={profile} history={data?.history} onClose={() => setSheet(null)} onSave={saveGoal} saving={saving} error={err} />}
       {sheet === 'weight' && <WeightSheet onClose={() => setSheet(null)} saving={saving} error={err}
         onSave={async lb => { setSaving(true); setErr(''); try { await logWeight(lb, onProfileChange); setSheet(null); await reload() } catch (e) { setErr(e.message || 'Could not save') } finally { setSaving(false) } }} />}
     </div>
@@ -741,7 +742,7 @@ function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
       </PageHeader>
 
       {/* The goal: ring, dates, where it stands, this week */}
-      {progress && <GoalCard fp={goalData.fp} profile={profile} weights={goalData.weights} progress={progress}
+      {progress && <GoalCard fp={goalData.fp} profile={profile} weights={goalData.weights} progress={progress} history={goalData.history}
         onEditGoal={() => setShowGoal(true)} onLogWeight={() => setShowWeight(true)} />}
 
       <TodayRow dayData={todayData} onGoToWorkout={onGoToWorkout} onStartWorkout={onStartWorkout} />
@@ -761,7 +762,7 @@ function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
       <CoachNotes advice={planData.advice} progression={planData.progression} />
 
       {showGoal && (
-        <GoalSheet fp={goalData?.fp} profile={profile} rebuilds onClose={() => setShowGoal(false)} onSave={spec => handleRegenerate(spec)} />
+        <GoalSheet fp={goalData?.fp} profile={profile} history={goalData?.history} rebuilds onClose={() => setShowGoal(false)} onSave={spec => handleRegenerate(spec)} />
       )}
       {showWeight && <WeightSheet onClose={() => setShowWeight(false)} onSave={saveWeight} saving={weightBusy} error={weightErr} />}
 

@@ -42,6 +42,7 @@ export async function saveFitnessProfile(fp) {
         goal_start_weight_lb:       fp.goalStartWeightLb ?? null,
         goal_start_date:            fp.goalStartDate ?? null,
         goal_target_date:           fp.goalTargetDate ?? null,
+        goal_lifts:                 fp.goalLifts ?? [],
         updated_at:                 new Date().toISOString(),
       },
       { onConflict: 'user_id' }
@@ -117,6 +118,7 @@ export function dbProfileToPayload(row) {
     goalStartWeightLb:         row.goal_start_weight_lb == null ? null : Number(row.goal_start_weight_lb),
     goalStartDate:             row.goal_start_date ?? null,
     goalTargetDate:            row.goal_target_date ?? null,
+    goalLifts:                 row.goal_lifts ?? [],
   }
 }
 

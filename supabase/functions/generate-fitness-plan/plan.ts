@@ -14,7 +14,7 @@ export const GOAL_LABELS: Record<string, string> = {
 export const GOAL_PROGRAMMING: Record<string, string> = {
   lose_weight: 'Fat loss while keeping muscle. Full-body or upper/lower strength work at 10-15 reps with short rest (45-75s), plus 1-2 dedicated conditioning sessions (intervals or circuits). Add daily step/NEAT guidance on rest days.',
   gain_weight: 'Healthy weight gain for someone who finds it hard to put on weight. Full-body or upper/lower strength work 3-4x/week, compound lifts at 6-12 reps, 60-120s rest. Keep cardio light so calories go to growth. Recovery notes should mention eating enough and regular meals.',
-  build_muscle: 'Hypertrophy. Use a body-part split appropriate to the day count (e.g. push/pull/legs or upper/lower). 3-4 sets of 6-12 reps at RPE 7-9, 60-120s rest, 5-7 exercises per session. Hit each muscle group about twice per week. Minimal cardio.',
+  build_muscle: 'Hypertrophy, run as a structured program, not a random list. Split by training days: 2 days = full body A and B; 3 days = upper, legs, full body; 4 days = upper, lower, upper, lower; 5 days = push, pull, legs, upper, lower; 6 days = push, pull, legs twice. Legs are trained at least twice a week (or every session on 2-3 day plans): each lower day has a squat or leg press pattern, a hip hinge (Romanian deadlift, hip thrust), a single-leg move (lunge, split squat, step-up), a hamstring curl and calf raises. Every muscle group gets 10-20 hard sets a week. Each session opens with 1-2 main lifts at 4 sets of 6-10 reps, RPE 7-8, 2-3 min rest, then 3-4 accessories at 3 sets of 10-15, RPE 8-9, 60-90s rest. If keyLifts are given, they are the main lifts and progress every week. Progression: double progression; add reps up to the top of the range, then add the smallest weight step and drop back to the bottom of the range. Cardio: 1-2 easy sessions of 20-30 minutes a week (incline walk, bike or elliptical, conversational pace), as an active recovery day between lifting days or after an upper-body session, never right before legs.',
   improve_strength: 'Maximal strength. Organise sessions around the main lifts (squat, bench press, deadlift, overhead press, or the closest equipment-appropriate variants). Main lift 3-5 sets of 3-6 reps at RPE 7-8 with 2-4 min rest, then 2-3 accessories at 6-10 reps.',
   improve_endurance: 'Cardiovascular and muscular endurance. Mix steady-state zone 2 sessions, interval/tempo sessions, and a high-rep muscular endurance circuit. Durations and reps written as time where it makes sense. Short rests.',
   athletic_performance: 'Athletic power and speed. Each session opens with plyometrics/sprints/agility (low reps, full recovery), then strength work (3-5 reps), then conditioning. Alternate lower- and upper-body emphasis.',
@@ -40,6 +40,9 @@ Rules:
 - Medical notes and limitations come from the person. Pain or injury: avoid loading that area and give pain-free alternatives. Pregnant: moderate intensity, no lying flat on the back after the first trimester, no breath-holding or heavy maxes. Postpartum: start with core and pelvic floor friendly work and build gradually. Heart or blood pressure: moderate intensity, no breath-holding. Diabetes or PCOS: regular strength training and steady activity. In these cases add a warning to check with a doctor first.
 - Limitations may give a diet (vegetarian, vegan, halal) or fasting; keep any food tips consistent with it and put hard sessions outside fasting hours when fasting is mentioned.
 - For rest and active-recovery days use empty warmup, exercises and cooldown arrays and fill recoveryNotes.
+- Legs are muscles too: unless an injury rules it out, every plan with 3 or more training days trains the lower body (quads, hamstrings, glutes, calves) at least as often as the upper body, with at least one full leg day or a squat or lunge and a hip hinge in most sessions. Never write an upper-body-only week.
+- Cardio has a place in every plan except mobility: at least one cardio session a week (a short cardio day such as "Easy Cardio" on a rest day, or 10-20 minutes at the end of a session), written as exercises with a duration in reps, for example "Incline Walk" with reps "20-30 min".
+- Use plain, common exercise names people know and that match a normal gym app library: "Squat", "Bench Press", "Romanian Deadlift", "Lunge", "Leg Press", "Lat Pulldown", "Standing Calf Raise", "Incline Walk", "Stationary Bike". Avoid made-up or brand names.
 - weeklySchedule has exactly 7 entries, Monday through Sunday, in order.`
 
 function str() { return { type: 'string' } }
@@ -142,6 +145,8 @@ export function buildUserMessage(fp: any, nt: any, progress: any): string {
         goalTargetDate: fp.goalTargetDate ?? null,
         goalWeeklyLb: fp.goalWeeklyLb ?? null,
       },
+      // Lift targets set on Plan: best set of 5, now and target, in lb. Build the main lifts around them.
+      keyLifts: (fp.goalLifts ?? []).map((l: any) => ({ name: l.name, bestSetOf5Lb: l.startLb, targetLb: l.targetLb })),
     },
     nutritionTargets: {
       calorieTarget: nt.calorieTarget,
@@ -252,6 +257,20 @@ export const SESSIONS: Record<string, Session[]> = {
       ex('Walking Lunge', 'Walking Lunge', 3, '10 each leg', 75, 'RPE 8', 'Long stride, upright torso', 'Static lunge', 'Add load'),
       ex('Leg Extension', 'Spanish Squat (band)', 3, '12-15', 60, 'RPE 9', 'Squeeze at the top', 'Fewer reps', 'Slow lowering'),
       ex('Seated Calf Raise', 'Calf Raise on a Step', 3, '15', 45, 'RPE 9', 'Pause at the top', 'Flat ground', 'Single leg'),
+    ] },
+    { title: 'Full Body A', exercises: [
+      ex('Squat', 'Bodyweight Squat', 4, '6-10', 150, 'RPE 8', 'Brace, sit between the hips', 'Goblet squat', 'Add load'),
+      ex('Bench Press', 'Push-Up', 3, '6-10', 120, 'RPE 8', 'Shoulder blades back', 'Dumbbell press', 'Add load'),
+      ex('Lat Pulldown', 'Inverted Row', 3, '8-12', 90, 'RPE 8', 'Elbows to ribs', 'Lighter load', 'Pause at bottom'),
+      ex('Romanian Deadlift', 'Single-Leg Romanian Deadlift', 3, '8-12', 90, 'RPE 8', 'Hips back, flat back', 'Shorter range', 'Add load'),
+      ex('Standing Calf Raise', 'Single-Leg Calf Raise', 3, '12-15', 45, 'RPE 9', 'Full stretch at the bottom', 'Both legs', 'Add load'),
+    ] },
+    { title: 'Full Body B', exercises: [
+      ex('Leg Press', 'Lunge', 3, '10-12', 120, 'RPE 8', 'Knees track toes', 'Shorter range', 'Add load'),
+      ex('Overhead Press', 'Pike Push-Up', 3, '6-10', 120, 'RPE 8', 'Ribs down', 'Seated dumbbell press', 'Add load'),
+      ex('Seated Cable Row', 'Backpack Bent-Over Row', 3, '8-12', 90, 'RPE 8', 'Squeeze shoulder blades', 'Lighter load', 'Pause at the top'),
+      ex('Hip Thrust', 'Glute Bridge', 3, '8-12', 90, 'RPE 8', 'Full lockout, chin tucked', 'Two legs', 'Add load'),
+      ex('Lying Leg Curl', 'Leg Curl (Dumbbell)', 3, '10-12', 60, 'RPE 9', 'Control the lowering', 'Lighter load', 'Single leg'),
     ] },
   ],
   improve_strength: [
@@ -407,6 +426,17 @@ const COOLDOWN = [
   { name: "Child's Pose", duration: '1 min', instructions: 'Breathe slowly and relax the back.' },
 ]
 
+// Which sessions a week uses, by training days, so muscle plans always train legs twice or more.
+// Indexes into SESSIONS.build_muscle: 0 push, 1 pull, 2 legs, 3 upper, 4 lower, 5 full A, 6 full B.
+export const MUSCLE_SPLITS: Record<number, number[]> = {
+  1: [5], 2: [5, 6], 3: [3, 2, 5], 4: [3, 2, 3, 4], 5: [0, 1, 2, 3, 4], 6: [0, 1, 2, 0, 1, 4], 7: [0, 1, 2, 0, 1, 4, 5],
+}
+// The easy cardio day muscle and strength plans get between lifting days
+const CARDIO_DAY = {
+  type: 'active_recovery', title: 'Easy Cardio', sessionMode: 'solo', durationMinutes: 30,
+  recoveryNotes: '20-30 min of easy cardio you could talk through: incline walk, stationary bike or elliptical. Helps recovery and heart health without eating into muscle gains.',
+}
+
 export function makeFallbackPlan(fp: any, nt: any): any {
   const goal = SESSIONS[fp.primaryGoal] ? fp.primaryGoal : fp.primaryGoal === 'gain_weight' ? 'build_muscle' : 'general_fitness'
   const label = GOAL_LABELS[goal]
@@ -427,7 +457,8 @@ export function makeFallbackPlan(fp: any, nt: any): any {
   const schedule = DAYS.map(day => {
     const idx = trainingDays.indexOf(day)
     if (idx !== -1) {
-      const session = sessions[idx % sessions.length]
+      const split = goal === 'build_muscle' ? MUSCLE_SPLITS[days] : null
+      const session = split ? sessions[split[idx % split.length]] : sessions[idx % sessions.length]
       const all = session.exercises
         .map(e => ({
           name: useGym ? e.gym : e.home,
@@ -450,6 +481,10 @@ export function makeFallbackPlan(fp: any, nt: any): any {
         workout: { warmup, exercises, cooldown: COOLDOWN },
         recoveryNotes: '',
       }
+    }
+    if ((goal === 'build_muscle' || goal === 'improve_strength') && !activeRecoveryUsed && days < 6) {
+      activeRecoveryUsed = true
+      return { day, ...CARDIO_DAY, workout: { warmup: [], exercises: [], cooldown: [] } }
     }
     if (activeRecoveryGoals.includes(goal) && !activeRecoveryUsed && days < 6) {
       activeRecoveryUsed = true

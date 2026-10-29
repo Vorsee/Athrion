@@ -6,6 +6,7 @@ import LineChart from './LineChart.jsx'
 import WeightTarget, { readWeightTarget } from './WeightTarget.jsx'
 import { GOAL_LABELS, GOAL_ICONS } from '../lib/nutrition.js'
 import { isWeightGoal, goalProgress, directionOf } from '../lib/weightGoal.js'
+import { KEY_LIFTS, MAX_LIFTS, GOAL_REPS, hasLiftGoal, bestSet, suggestTarget, liftProgress } from '../lib/liftGoals.js'
 import { useUnit } from '../lib/units.js'
 import { localDateKey, todayKey } from '../lib/data.js'
 
@@ -55,7 +56,7 @@ export function WeekStrip({ days }) {
  * The goal at the top of Plan: a ring, the dates, where things stand, this week.
  * fp: fitness_profiles row; weights: merged weigh-ins oldest first; progress: planProgress()
  */
-export function GoalCard({ fp, profile, weights, progress, onEditGoal, onLogWeight }) {
+export function GoalCard({ fp, profile, weights, progress, history = [], onEditGoal, onLogWeight }) {
   const { unit, fromLb } = useUnit()
   const goal = fp?.primary_goal
   const weightGoal = isWeightGoal(goal) && fp?.target_weight_lb
@@ -64,18 +65,20 @@ export function GoalCard({ fp, profile, weights, progress, onEditGoal, onLogWeig
     startDate: fp.goal_start_date, targetDate: fp.goal_target_date,
     weights: weights.length ? weights : profile?.weight_lb ? [{ date: todayKey(), weight_lb: profile.weight_lb }] : [],
   }) : null
+  // Building muscle or strength: lift targets, when set, are what the ring measures
+  const lifts = !g && hasLiftGoal(goal) ? liftProgress(fp?.goal_lifts, history, fp?.goal_start_date) : null
   const endKey = weightGoal ? fp.goal_target_date : progress.endDate
   const left = daysUntil(endKey)
-  const pct = g ? g.pct : progress.pct
+  const pct = g ? g.pct : lifts ? lifts.pct : progress.pct
   const dir = directionOf(goal)
   const w = lb => `${fromLb(lb)} ${unit}`
 
   return (
     <Card hero className="space-y-4">
       <div className="flex flex-wrap items-center gap-4">
-        <ProgressRing pct={pct} label={g ? `${Math.round(pct * 100)}% of the way to ${w(g.targetLb)}` : `${progress.done} of ${progress.planned} planned workouts done`}>
+        <ProgressRing pct={pct} label={g ? `${Math.round(pct * 100)}% of the way to ${w(g.targetLb)}` : lifts ? `${Math.round(pct * 100)}% of the way to your lift targets` : `${progress.done} of ${progress.planned} planned workouts done`}>
           <span className="font-bold text-3xl text-ink tabular-nums leading-none">{Math.round(pct * 100)}%</span>
-          <span className="text-xs text-muted mt-1">{g ? 'to goal' : 'workouts'}</span>
+          <span className="text-xs text-muted mt-1">{g || lifts ? 'to goal' : 'workouts'}</span>
         </ProgressRing>
         <div className="grow basis-0 min-w-[9rem] space-y-2">
           <div>
@@ -103,7 +106,26 @@ export function GoalCard({ fp, profile, weights, progress, onEditGoal, onLogWeig
         </div>
       </div>
 
-      {g ? (
+      {lifts ? (
+        <ul className="space-y-3" aria-label="Lift targets">
+          {lifts.lifts.map(l => (
+            <li key={l.name}>
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
+                <span className="font-semibold text-ink">{l.name}</span>
+                <span className="tabular-nums text-ink-2">
+                  <span className="font-bold text-ink">{fromLb(l.currentLb)}</span> of {fromLb(l.targetLb)} {unit} × {GOAL_REPS}
+                </span>
+              </div>
+              <div className="mt-1.5 h-2 rounded-full bg-line overflow-hidden" aria-hidden="true">
+                <div className="h-full rounded-full bg-neon transition-[width] duration-700" style={{ width: `${Math.round(l.pct * 100)}%` }} />
+              </div>
+              <div className="text-xs text-muted mt-1 tabular-nums">
+                {l.pct >= 1 ? 'Target reached' : `${fromLb(Math.max(0, l.targetLb - l.currentLb))} ${unit} to go`} · started at {fromLb(l.startLb)} {unit}
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : g ? (
         <StatTiles items={[
           ['Now', w(g.currentLb)],
           [dir === 'lose' ? 'Lost' : 'Gained', `${g.doneLb < 0 ? '−' : ''}${fromLb(Math.abs(g.doneLb))} ${unit}`],
@@ -129,6 +151,11 @@ export function GoalCard({ fp, profile, weights, progress, onEditGoal, onLogWeig
         <Button variant="secondary" icon="mdi:scale-bathroom" onClick={onLogWeight}>Log weight</Button>
         <Button variant="secondary" icon="mdi:target" onClick={onEditGoal}>{weightGoal || goal ? 'Edit goal' : 'Set a goal'}</Button>
       </div>
+      {!lifts && hasLiftGoal(goal) && (
+        <button onClick={onEditGoal} className="press w-full text-left rounded-xl border border-dashed border-neon-stroke/40 px-3 py-2.5 text-sm text-ink-2">
+          <span className="font-semibold text-neon-ink">Set lift targets</span> to see your strength go up here, like your bench press from 80 to 90 kg.
+        </button>
+      )}
       {g?.lastDate && <p className="text-xs text-muted -mt-2">Last weigh-in {fmtDay(g.lastDate)}. Weigh in once a week, same time of day.</p>}
     </Card>
   )
@@ -196,18 +223,20 @@ export function ResultsCard({ fp, weights, progress, history }) {
 }
 
 // Pick a goal and, for weight goals, the target and pace. onSave({ goal, targetLb, pace, plan })
-export function GoalSheet({ fp, profile, onClose, onSave, saving, error, rebuilds }) {
+export function GoalSheet({ fp, profile, history = [], onClose, onSave, saving, error, rebuilds }) {
   const { fromLb } = useUnit()
+  const [lifts, setLifts] = useState(() => fp?.goal_lifts ?? [])
   const [goal, setGoal] = useState(fp?.primary_goal ?? 'general_fitness')
   const [targetText, setTargetText] = useState(fp?.target_weight_lb ? String(fromLb(Number(fp.target_weight_lb))) : '')
   const [pace, setPace] = useState(fp?.goal_pace ?? 'steady')
   const activityLevel = fp?.activity_level ?? 'moderately_active'
   const wt = isWeightGoal(goal) ? readWeightTarget({ goal, targetText, pace, profile, activityLevel }) : null
-  const ready = !isWeightGoal(goal) || !!wt?.plan
+  const liftsOk = !hasLiftGoal(goal) || lifts.every(l => l.startLb > 0 && l.targetLb > l.startLb)
+  const ready = (!isWeightGoal(goal) || !!wt?.plan) && liftsOk
 
   return (
     <Sheet title="Your goal" onClose={onClose} footer={
-      <Button full onClick={() => onSave({ goal, targetLb: wt?.targetLb ?? null, pace: wt ? pace : null, plan: wt?.plan ?? null })} disabled={!ready || saving}>
+      <Button full onClick={() => onSave({ goal, targetLb: wt?.targetLb ?? null, pace: wt ? pace : null, plan: wt?.plan ?? null, lifts: hasLiftGoal(goal) ? lifts : [] })} disabled={!ready || saving}>
         {saving ? 'Saving…' : rebuilds ? 'Save and rebuild my plan' : 'Save goal'}
       </Button>
     }>
@@ -225,8 +254,64 @@ export function GoalSheet({ fp, profile, onClose, onSave, saving, error, rebuild
       {isWeightGoal(goal) && (
         <WeightTarget goal={goal} targetText={targetText} setTargetText={setTargetText} pace={pace} setPace={setPace} profile={profile} activityLevel={activityLevel} />
       )}
+      {hasLiftGoal(goal) && <LiftTargets lifts={lifts} setLifts={setLifts} history={history} />}
       {error && <InlineError>{error}</InlineError>}
     </Sheet>
+  )
+}
+
+// Up to three lifts, each with today's best set of 5 and a target. Today's best comes from the log
+// when there is one; otherwise it's typed in.
+function LiftTargets({ lifts, setLifts, history }) {
+  const { unit, fromLb, toLb } = useUnit()
+  const picked = new Set(lifts.map(l => l.name))
+  function toggle(name) {
+    if (picked.has(name)) return setLifts(lifts.filter(l => l.name !== name))
+    if (lifts.length >= MAX_LIFTS) return
+    const best = bestSet(history, name)?.lb ?? 0
+    setLifts([...lifts, { name, startLb: best, targetLb: suggestTarget(best, unit) ?? 0 }])
+  }
+  // What's typed stays as typed (so "82." keeps its dot); the stored value is in lb
+  const [texts, setTexts] = useState({})
+  const shown = (l, k) => texts[`${l.name}:${k}`] ?? (l[k] ? String(fromLb(l[k])) : '')
+  function set(name, k, v) {
+    setTexts(t => ({ ...t, [`${name}:${k}`]: v }))
+    const n = parseFloat(v)
+    setLifts(lifts.map(l => (l.name === name ? { ...l, [k]: n > 0 ? toLb(n) : 0 } : l)))
+  }
+  const field = 'w-20 bg-raised border border-line rounded-lg px-2 py-1.5 text-sm font-semibold text-ink tabular-nums focus:outline-none focus:border-neon-stroke/40'
+
+  return (
+    <div className="space-y-3 bg-surface border border-line rounded-2xl p-4">
+      <div>
+        <div className="text-sm font-semibold text-ink">Lift targets</div>
+        <div className="text-xs text-muted">Pick up to {MAX_LIFTS}. Each is your heaviest set of {GOAL_REPS} reps; Plan shows it rise as you log.</div>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {KEY_LIFTS.map(l => (
+          <button key={l.name} type="button" onClick={() => toggle(l.name)} aria-pressed={picked.has(l.name)}
+            disabled={!picked.has(l.name) && lifts.length >= MAX_LIFTS}
+            className={`press text-xs font-semibold rounded-lg border px-2.5 py-1.5 disabled:opacity-40 ${picked.has(l.name) ? 'border-neon-stroke bg-neon/10 text-ink' : 'border-line text-ink-2'}`}>
+            {l.name}
+          </button>
+        ))}
+      </div>
+      {lifts.map(l => (
+        <div key={l.name} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-3">
+          <span className="grow basis-0 min-w-[7rem] text-sm font-semibold text-ink">{l.name}</span>
+          <label className="flex items-center gap-1.5 text-xs text-muted">Now
+            <input type="number" inputMode="decimal" step="0.5" value={shown(l, 'startLb')} placeholder="0" aria-label={`${l.name}, best set of ${GOAL_REPS} now, ${unit}`}
+              onChange={e => set(l.name, 'startLb', e.target.value)} className={field} />
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-muted">Target
+            <input type="number" inputMode="decimal" step="0.5" value={shown(l, 'targetLb')} placeholder="0" aria-label={`${l.name}, target, ${unit}`}
+              onChange={e => set(l.name, 'targetLb', e.target.value)} className={field} />
+            <span>{unit}</span>
+          </label>
+          {l.startLb > 0 && l.targetLb > 0 && l.targetLb <= l.startLb && <p className="w-full text-xs text-danger">Set the target above today's weight</p>}
+        </div>
+      ))}
+    </div>
   )
 }
 
