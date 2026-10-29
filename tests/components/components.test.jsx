@@ -161,15 +161,23 @@ describe('ReminderSettings', () => {
 })
 
 describe('Nav', () => {
-  it('has five tabs, Coaches among them, and switches pages', async () => {
+  it('has five tabs, Swim among them, and switches pages', async () => {
     const setPage = vi.fn()
     render(<Nav page="workout" setPage={setPage} session={{ name: 'Sam', email: 's@x' }} isPro={false} onProfileClick={() => {}} />)
     expect(screen.getByRole('navigation').querySelectorAll('button')).toHaveLength(5)
-    for (const label of ['Plan', 'Food', 'Progress', 'Coaches']) await userEvent.click(screen.getByText(label))
-    expect(setPage.mock.calls.map(c => c[0])).toEqual(['plan', 'calories', 'progress', 'shop'])
+    expect(screen.queryByText('Coaches')).toBeNull()
+    for (const label of ['Plan', 'Food', 'Progress', 'Swim']) await userEvent.click(screen.getByText(label))
+    expect(setPage.mock.calls.map(c => c[0])).toEqual(['plan', 'calories', 'progress', 'swim'])
     // Only Plan is a Pro wall, and free users see that on the tab
     expect(screen.getByText('Plan').closest('button')).toHaveTextContent('Pro')
     expect(screen.getByText('Food').closest('button')).not.toHaveTextContent('Pro')
+  })
+  it('shows the Coaches tab to admins only', async () => {
+    const setPage = vi.fn()
+    render(<Nav page="workout" setPage={setPage} session={{ name: 'Sam', email: 's@x' }} isPro isAdmin onProfileClick={() => {}} />)
+    expect(screen.getByRole('navigation').querySelectorAll('button')).toHaveLength(6)
+    await userEvent.click(screen.getByText('Coaches'))
+    expect(setPage).toHaveBeenCalledWith('shop')
   })
   it('keeps Train highlighted on pages opened from it, with a way back to it', async () => {
     const setPage = vi.fn()
