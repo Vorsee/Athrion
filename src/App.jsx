@@ -48,7 +48,7 @@ const PageLoading = () => <PageSkeleton />
 // athrion.app/workout (and the older /guide): the free 7-day plan linked from Instagram
 const onGuidePath = () => /^\/(workout|guide)\/?$/.test(window.location.pathname)
 // athrion.app/add/<nickname>: a friend invite
-const INVITE_PATH = /^\/add\/@?([A-Za-z0-9_]{3,20})\/?$/
+const INVITE_PATH = /^\/add\/@?([A-Za-z0-9._-]{3,20})\/?$/
 
 const PAGES = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan, progress: Progress, coach: Coach, shop: Coaches }
 

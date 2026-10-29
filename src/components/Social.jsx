@@ -6,7 +6,7 @@ import {
   saveNickname, setOnLeaderboard, searchNicknames, sendFriendRequest, respondFriendRequest, removeFriend,
   fetchFriends, fetchLeaderboard, fetchMyPoints, fetchMyMonths, inviteUrl,
 } from '../lib/socialApi.js'
-import { POINT_RULES, MONTHLY_TARGET, PRIZE_PLACES, levelFor, monthName, daysLeftInMonth, trophiesFrom, NICKNAME_RE, cleanNickname } from '../lib/points.js'
+import { POINT_RULES, MONTHLY_TARGET, PRIZE_PLACES, levelFor, monthName, daysLeftInMonth, trophiesFrom, NICKNAME_RE, NICKNAME_HINT, cleanNickname } from '../lib/points.js'
 
 const inputCls = 'w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl py-3 text-sm outline-none transition-colors'
 
@@ -42,7 +42,7 @@ export function NicknameCard({ current, onSaved, onCancel }) {
           onKeyDown={e => e.key === 'Enter' && save()} />
       </div>
       <p className={`text-xs mt-2 ${error ? 'text-danger' : 'text-muted'}`} role={error ? 'alert' : undefined}>
-        {error || '3–20 letters, numbers or underscores.'}
+        {error || `${NICKNAME_HINT}.`}
       </p>
       <div className="flex gap-2 mt-3">
         {onCancel && <Button variant="secondary" className="flex-1" onClick={onCancel}>Cancel</Button>}

@@ -4,7 +4,7 @@ import { Button, BackLink, Segmented } from '../components/ui/index.js'
 import { saveUserProfile } from '../lib/api.js'
 import { toLb } from '../lib/units.js'
 import { fetchMySocial, saveNickname, nicknameFree, suggestNickname } from '../lib/socialApi.js'
-import { NICKNAME_RE, cleanNickname } from '../lib/points.js'
+import { NICKNAME_RE, NICKNAME_HINT, cleanNickname } from '../lib/points.js'
 import Brand from '../components/Brand.jsx'
 
 const FT_OPTS  = [4, 5, 6, 7]
@@ -107,8 +107,8 @@ function NicknameStep({ name, onDone, n }) {
     }
   }
 
-  const status = !nick ? '3 to 20 letters, numbers or _'
-    : !valid ? 'Use 3 to 20 letters, numbers or _'
+  const status = !nick ? NICKNAME_HINT
+    : !valid ? `Use ${NICKNAME_HINT}`
     : free === false ? 'That nickname is taken'
     : free ? 'Available'
     : 'Checking…'

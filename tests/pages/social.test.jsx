@@ -4,7 +4,7 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { sb } from '../helpers/supabaseMock.js'
-import { levelFor, trophiesFrom, cleanNickname, daysLeftInMonth } from '../../src/lib/points.js'
+import { levelFor, trophiesFrom, cleanNickname, daysLeftInMonth, NICKNAME_RE } from '../../src/lib/points.js'
 
 vi.mock('../../src/lib/supabase.js', () => ({ supabase: sb.supabase }))
 vi.mock('@iconify/react', () => ({ Icon: () => null }))
@@ -52,6 +52,9 @@ describe('levels and trophies', () => {
 
   it('nicknames are trimmed, lowercased and lose a leading @', () => {
     expect(cleanNickname('  @Sam_Lifts ')).toBe('sam_lifts')
+    // ".", "_", "-" and numbers are fine; link-breaking signs, spaces and sign-only names are not
+    for (const ok of ['maya.lopez', 'sam-lifts_99', '2fast', 'j.r']) expect(NICKNAME_RE.test(ok)).toBe(true)
+    for (const no of ['ab', 'a#b', 'sam lifts', 'maya/lopez', '...', '-_-', 'a'.repeat(21)]) expect(NICKNAME_RE.test(no)).toBe(false)
   })
 
   it('counts today in the days left', () => {
