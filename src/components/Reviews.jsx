@@ -19,33 +19,38 @@ export function Stars({ value, size = 18, className = '' }) {
   )
 }
 
-// Landing page: the average, how many, and the latest reviews. Hidden until there is one.
+// Landing page: the average, how many, and the latest reviews; before the first one, an invitation
 export function LandingReviews({ onWrite }) {
-  const [state, setState] = useState(null) // { summary, reviews } | 'none'
+  const [state, setState] = useState({ summary: { average: null, count: 0 }, reviews: [] })
   useEffect(() => {
     Promise.all([fetchReviewSummary(), fetchReviews(6)])
-      .then(([summary, reviews]) => setState(summary.count ? { summary, reviews } : 'none'))
-      .catch(() => setState('none'))
+      .then(([summary, reviews]) => setState({ summary, reviews }))
+      .catch(() => {})
   }, [])
-  if (!state || state === 'none') return null
   const { summary, reviews } = state
 
   return (
     <section className="max-w-5xl mx-auto px-4 pb-14" aria-labelledby="reviews">
       <div className="flex flex-wrap items-end justify-between gap-4 mb-5">
         <div>
-          <h2 id="reviews" className="font-bold text-2xl text-ink">What people say</h2>
+          <h2 id="reviews" className="font-bold text-3xl text-ink">Reviews</h2>
           <div className="flex flex-wrap items-center gap-2 mt-2">
-            <span className="font-bold text-4xl text-ink tabular-nums leading-none">{summary.average.toFixed(1)}</span>
-            <span>
-              <Stars value={summary.average} size={20} />
-              <span className="block text-xs text-muted">{summary.count} {summary.count === 1 ? 'review' : 'reviews'} from people using ATHRION</span>
-            </span>
+            {summary.count > 0 ? (
+              <>
+                <span className="font-bold text-4xl text-ink tabular-nums leading-none">{summary.average.toFixed(1)}</span>
+                <span>
+                  <Stars value={summary.average} size={20} />
+                  <span className="block text-xs text-muted">{summary.count} {summary.count === 1 ? 'review' : 'reviews'}</span>
+                </span>
+              </>
+            ) : (
+              <><Stars value={0} size={20} /><span className="text-sm text-muted">Be the first to review ATHRION.</span></>
+            )}
           </div>
         </div>
         <Button variant="secondary" icon="mdi:pencil-outline" onClick={onWrite}>Write a review</Button>
       </div>
-      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 17rem), 1fr))' }}>
+      {reviews.length > 0 && <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 17rem), 1fr))' }}>
         {reviews.map(r => (
           <figure key={`${r.created_at}-${r.name}`} className="bg-surface border border-line rounded-2xl p-4 flex flex-col gap-2">
             <Stars value={r.rating} size={16} />
@@ -53,8 +58,7 @@ export function LandingReviews({ onWrite }) {
             <figcaption className="text-xs text-muted"><span className="font-semibold text-ink">{r.name}</span> · {fmtDate(r.created_at)}</figcaption>
           </figure>
         ))}
-      </div>
-      <p className="text-xs text-muted mt-3">Reviews are written by signed-in ATHRION users. We don't edit them; we only remove ones that break the terms.</p>
+      </div>}
     </section>
   )
 }
