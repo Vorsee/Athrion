@@ -379,11 +379,11 @@ function Health({ health, onChanged }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Cardio: runs and swims with pace, this week's totals and bests
+// Cardio: runs with pace, this week's totals and bests (swims have their own tab, Swim.jsx)
 // ─────────────────────────────────────────────────────────────────────────────
 function Cardio({ logs, onChanged }) {
   const { unit } = useUnit()
-  const [kind, setKind] = useState('run')
+  const kind = 'run'
   const [form, setForm] = useState({ date: today(), distance: '', time: '', notes: '' })
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
@@ -415,9 +415,6 @@ function Cardio({ logs, onChanged }) {
 
   return (
     <div className="space-y-4">
-      <Segmented options={Object.entries(KINDS).map(([id, k]) => [id, k.label])} value={kind}
-        onChange={k => { setKind(k); setForm(f => ({ ...f, distance: '', time: '', notes: '' })); setErr('') }} label="Cardio type" kind="choice" />
-
       <Card hero>
         <SectionTitle action={<Fact icon="mdi:calendar-week">This week</Fact>}>{KINDS[kind].label}s</SectionTitle>
         <StatTiles items={[
