@@ -14,7 +14,7 @@ function plusMonth(secs) {
   return Math.floor(d.getTime() / 1000)
 }
 
-// Hands out the free month for a top-3 finish (see supabase/010_prize_for_subscribers.sql).
+// Hands out the free month for a top-3 finish (see 010 in supabase/schema.sql).
 // Vercel cron calls this daily; it only acts on prizes not given yet, so a failed run retries.
 // Paying through Stripe: the next charge moves a month later (a free period via trial_end).
 // Anyone else, or a Stripe subscription that isn't active: a free Pro month in comp_pro_until.

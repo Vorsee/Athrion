@@ -1,5 +1,5 @@
 // In-app notifications (the bell) and the open-workout mirror the server uses for
-// "your workout is still open". Rows are written by the database (supabase/011_notifications.sql).
+// "your workout is still open". Rows are written by the database (supabase/schema.sql, 011 and later).
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from './supabase.js'
 

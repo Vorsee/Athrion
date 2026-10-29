@@ -1,5 +1,5 @@
 // Monthly points, levels and trophies. The server counts the points (month_points in
-// supabase/009_social.sql); these rules must match it.
+// supabase/schema.sql, 009); these rules must match it.
 
 export const POINT_RULES = [
   ['mdi:dumbbell', '10', 'per workout day (3+ sets, one a day)'],
@@ -54,7 +54,7 @@ export function trophiesFrom(scores = []) {
 }
 
 // Nicknames: 3-20 lowercase letters, numbers, ".", "_" or "-", with at least one letter or number
-// (the same check as 016_nickname_signs.sql; only signs that are safe in an invite link)
+// (the same check as 016 in supabase/schema.sql; only signs that are safe in an invite link)
 export const NICKNAME_RE = /^(?=.*[a-z0-9])[a-z0-9._-]{3,20}$/
 export const NICKNAME_HINT = '3 to 20 letters, numbers, . _ or -'
 export const cleanNickname = s => (s || '').trim().replace(/^@+/, '').toLowerCase()

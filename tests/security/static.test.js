@@ -4,10 +4,12 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { join } from 'node:path'
+import { sqlSection } from '../helpers/sql.js'
 
 const ROOT = join(__dirname, '../..')
 const read = p => readFileSync(join(ROOT, p), 'utf8')
-const sqlFiles = ['supabase_schema.sql', ...readdirSync(join(ROOT, 'supabase')).filter(f => f.endsWith('.sql')).map(f => `supabase/${f}`)]
+// schema.sql holds every applied migration; any other .sql file there is one not applied yet
+const sqlFiles = readdirSync(join(ROOT, 'supabase')).filter(f => f.endsWith('.sql')).map(f => `supabase/${f}`)
 const tracked = execSync('git ls-files', { cwd: ROOT, encoding: 'utf8' }).split('\n').filter(Boolean)
 
 describe('database policies (SQL migrations)', () => {
@@ -50,7 +52,7 @@ describe('database policies (SQL migrations)', () => {
 })
 
 describe('group room lockdown (006/007)', () => {
-  const m006 = read('supabase/006_security_fixes.sql'), m007 = read('supabase/007_group_lockdown.sql')
+  const m006 = sqlSection('006_security_fixes'), m007 = sqlSection('007_group_lockdown')
   it('join_group_session is SECURITY DEFINER with a fixed search_path, for signed-in users only', () => {
     expect(m006).toMatch(/FUNCTION public\.join_group_session[\s\S]*SECURITY DEFINER SET search_path = public/)
     expect(m006).toMatch(/REVOKE ALL ON FUNCTION public\.join_group_session\(text, text\) FROM public, anon/)

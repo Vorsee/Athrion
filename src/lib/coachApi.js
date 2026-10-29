@@ -1,4 +1,4 @@
-// Coaches and the shop (014_coaches.sql). Listings are public to signed-in people; a product's
+// Coaches and the shop (014 in supabase/schema.sql). Listings are public to signed-in people; a product's
 // content (sets, tips, video paths) is only readable by its coach and people who have it.
 import { supabase } from './supabase.js'
 import { postAsUser } from './stripe.js'

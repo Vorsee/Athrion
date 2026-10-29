@@ -1,6 +1,6 @@
 // Notifications: the bell's list, the open-workout mirror, and the database's badge names.
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { readFileSync } from 'fs'
+import { sqlSection } from '../helpers/sql.js'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { sb } from '../helpers/supabaseMock.js'
@@ -71,7 +71,7 @@ describe('open workout mirror', () => {
 
 describe('database badge names', () => {
   it('011 names every badge the same way the app does', () => {
-    const sql = readFileSync('supabase/011_notifications.sql', 'utf8')
+    const sql = sqlSection('011_notifications')
     for (const b of BADGES) expect(sql).toMatch(new RegExp(`WHEN '${b.id}'\\s+THEN '${b.name}'`))
   })
 })
