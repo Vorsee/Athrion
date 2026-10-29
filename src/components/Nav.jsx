@@ -205,7 +205,7 @@ export default function Nav({ page, setPage, session, isPro, isAdmin = false, on
                     className={`absolute top-0 left-1/2 -translate-x-1/2 w-7 h-[3px] rounded-b-full bg-neon transition-opacity duration-200 ${active ? 'opacity-100' : 'opacity-0'}`} />
                   <Icon icon={t.icon} width={24} aria-hidden="true" />
                   {/* Five labels don't fit a very narrow screen (or big phone text): icons only, names kept for screen readers */}
-                  <span className={`flex items-center gap-0.5 text-xs font-semibold ${tabs.length > 5 ? 'max-[379px]:sr-only' : 'max-[319px]:sr-only'}`}>
+                  <span className={`flex items-center gap-0.5 text-xs font-semibold ${tabs.length > 5 ? 'max-[339px]:sr-only' : 'max-[319px]:sr-only'}`}>
                     <span>{t.label}</span>
                     {locked && <><Icon icon="mdi:lock-outline" width={12} aria-hidden="true" /><span className="sr-only">, Pro</span></>}
                   </span>
