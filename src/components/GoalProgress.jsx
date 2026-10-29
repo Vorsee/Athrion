@@ -6,6 +6,7 @@ import LineChart from './LineChart.jsx'
 import WeightTarget, { readWeightTarget } from './WeightTarget.jsx'
 import { GOAL_LABELS, GOAL_ICONS } from '../lib/nutrition.js'
 import { isWeightGoal, goalProgress, directionOf } from '../lib/weightGoal.js'
+import { toggleGoal, blockedBy, orderGoals, goalsLabel, MAX_GOALS } from '../lib/goalPick.js'
 import { KEY_LIFTS, MAX_LIFTS, GOAL_REPS, hasLiftGoal, bestSet, suggestTarget, liftProgress } from '../lib/liftGoals.js'
 import { useUnit } from '../lib/units.js'
 import { localDateKey, todayKey } from '../lib/data.js'
@@ -65,8 +66,10 @@ export function GoalCard({ fp, profile, weights, progress, history = [], onEditG
     startDate: fp.goal_start_date, targetDate: fp.goal_target_date,
     weights: weights.length ? weights : profile?.weight_lb ? [{ date: todayKey(), weight_lb: profile.weight_lb }] : [],
   }) : null
-  // Building muscle or strength: lift targets, when set, are what the ring measures
-  const lifts = !g && hasLiftGoal(goal) ? liftProgress(fp?.goal_lifts, history, fp?.goal_start_date) : null
+  const allGoals = [goal, ...(fp?.secondary_goals ?? [])].filter(Boolean)
+  const liftGoal = allGoals.some(hasLiftGoal)
+  // Building muscle or strength: lift targets, when set, show under the ring; without a weight goal the ring measures them
+  const lifts = liftGoal ? liftProgress(fp?.goal_lifts, history, fp?.goal_start_date) : null
   const endKey = weightGoal ? fp.goal_target_date : progress.endDate
   const left = daysUntil(endKey)
   const pct = g ? g.pct : lifts ? lifts.pct : progress.pct
@@ -83,7 +86,7 @@ export function GoalCard({ fp, profile, weights, progress, history = [], onEditG
         <div className="grow basis-0 min-w-[9rem] space-y-2">
           <div>
             <div className="text-xs font-semibold text-neon-ink flex items-center gap-1">
-              <Icon icon={GOAL_ICONS[goal] ?? 'mdi:target'} width={14} aria-hidden="true" />{GOAL_LABELS[goal] ?? 'Your goal'}
+              <Icon icon={GOAL_ICONS[goal] ?? 'mdi:target'} width={14} aria-hidden="true" />{allGoals.length ? goalsLabel(allGoals) : 'Your goal'}
             </div>
             <div className="font-bold text-xl text-ink leading-tight">
               {g ? `${dir === 'lose' ? 'Lose' : 'Gain'} ${fromLb(Math.abs(g.targetLb - g.startLb))} ${unit}` : `Week ${Math.min(progress.week, progress.weeks)} of ${progress.weeks}`}
@@ -106,6 +109,13 @@ export function GoalCard({ fp, profile, weights, progress, history = [], onEditG
         </div>
       </div>
 
+      {g && (
+        <StatTiles items={[
+          ['Now', w(g.currentLb)],
+          [dir === 'lose' ? 'Lost' : 'Gained', `${g.doneLb < 0 ? '−' : ''}${fromLb(Math.abs(g.doneLb))} ${unit}`],
+          ['To go', w(g.leftLb)],
+        ]} />
+      )}
       {lifts ? (
         <ul className="space-y-3" aria-label="Lift targets">
           {lifts.lifts.map(l => (
@@ -125,13 +135,7 @@ export function GoalCard({ fp, profile, weights, progress, history = [], onEditG
             </li>
           ))}
         </ul>
-      ) : g ? (
-        <StatTiles items={[
-          ['Now', w(g.currentLb)],
-          [dir === 'lose' ? 'Lost' : 'Gained', `${g.doneLb < 0 ? '−' : ''}${fromLb(Math.abs(g.doneLb))} ${unit}`],
-          ['To go', w(g.leftLb)],
-        ]} />
-      ) : (
+      ) : g ? null : (
         <StatTiles items={[
           ['Done', `${progress.done} of ${progress.planned}`],
           ['This week', `${progress.weekDone} of ${progress.weekPlanned}`],
@@ -151,7 +155,7 @@ export function GoalCard({ fp, profile, weights, progress, history = [], onEditG
         <Button variant="secondary" icon="mdi:scale-bathroom" onClick={onLogWeight}>Log weight</Button>
         <Button variant="secondary" icon="mdi:target" onClick={onEditGoal}>{weightGoal || goal ? 'Edit goal' : 'Set a goal'}</Button>
       </div>
-      {!lifts && hasLiftGoal(goal) && (
+      {!lifts && liftGoal && (
         <button onClick={onEditGoal} className="press w-full text-left rounded-xl border border-dashed border-neon-stroke/40 px-3 py-2.5 text-sm text-ink-2">
           <span className="font-semibold text-neon-ink">Set lift targets</span> to see your strength go up here, like your bench press from 80 to 90 kg.
         </button>
@@ -226,35 +230,40 @@ export function ResultsCard({ fp, weights, progress, history }) {
 export function GoalSheet({ fp, profile, history = [], onClose, onSave, saving, error, rebuilds }) {
   const { fromLb } = useUnit()
   const [lifts, setLifts] = useState(() => fp?.goal_lifts ?? [])
-  const [goal, setGoal] = useState(fp?.primary_goal ?? 'general_fitness')
+  const [goals, setGoals] = useState(() => [fp?.primary_goal ?? 'general_fitness', ...(fp?.secondary_goals ?? [])].slice(0, MAX_GOALS))
+  const [goal, ...secondaryGoals] = orderGoals(goals)
+  const liftGoal = goals.some(hasLiftGoal)
   const [targetText, setTargetText] = useState(fp?.target_weight_lb ? String(fromLb(Number(fp.target_weight_lb))) : '')
   const [pace, setPace] = useState(fp?.goal_pace ?? 'steady')
   const activityLevel = fp?.activity_level ?? 'moderately_active'
   const wt = isWeightGoal(goal) ? readWeightTarget({ goal, targetText, pace, profile, activityLevel }) : null
-  const liftsOk = !hasLiftGoal(goal) || lifts.every(l => l.startLb > 0 && l.targetLb > l.startLb)
-  const ready = (!isWeightGoal(goal) || !!wt?.plan) && liftsOk
+  const liftsOk = !liftGoal || lifts.every(l => l.startLb > 0 && l.targetLb > l.startLb)
+  const ready = !!goal && (!isWeightGoal(goal) || !!wt?.plan) && liftsOk
 
   return (
-    <Sheet title="Your goal" onClose={onClose} footer={
-      <Button full onClick={() => onSave({ goal, targetLb: wt?.targetLb ?? null, pace: wt ? pace : null, plan: wt?.plan ?? null, lifts: hasLiftGoal(goal) ? lifts : [] })} disabled={!ready || saving}>
+    <Sheet title="Your goals" onClose={onClose} footer={
+      <Button full onClick={() => onSave({ goal, secondaryGoals, targetLb: wt?.targetLb ?? null, pace: wt ? pace : null, plan: wt?.plan ?? null, lifts: liftGoal ? lifts : [] })} disabled={!ready || saving}>
         {saving ? 'Saving…' : rebuilds ? 'Save and rebuild my plan' : 'Save goal'}
       </Button>
     }>
-      <p className="text-xs text-muted">{rebuilds ? 'Your daily targets and plan are rebuilt for it. Takes about a minute.' : 'Your daily calorie and protein targets follow it.'}</p>
+      <p className="text-xs text-muted">Pick one, or two that go together. {rebuilds ? 'Your daily targets and plan are rebuilt for them; takes about a minute.' : 'Your daily calorie and protein targets follow them.'}</p>
       <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 9rem), 1fr))' }}>
-        {Object.entries(GOAL_LABELS).map(([id, label]) => (
-          <button key={id} onClick={() => setGoal(id)} aria-pressed={goal === id}
-            className={`press flex items-center gap-2 px-3 py-3 rounded-xl border text-left text-sm transition-colors ${
-              goal === id ? 'border-neon-stroke bg-neon/10 text-ink' : 'border-line bg-surface text-muted hover:border-line-strong'}`}>
-            <Icon icon={GOAL_ICONS[id]} width={20} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
-            <span className="leading-tight">{label}</span>
-          </button>
-        ))}
+        {Object.entries(GOAL_LABELS).map(([id, label]) => {
+          const on = goals.includes(id), why = blockedBy(goals, id)
+          return (
+            <button key={id} onClick={() => setGoals(toggleGoal(goals, id))} aria-pressed={on} disabled={!!why}
+              className={`press flex items-center gap-2 px-3 py-3 rounded-xl border text-left text-sm transition-colors disabled:opacity-40 ${
+                on ? 'border-neon-stroke bg-neon/10 text-ink' : 'border-line bg-surface text-muted hover:border-line-strong'}`}>
+              <Icon icon={GOAL_ICONS[id]} width={20} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
+              <span className="leading-tight min-w-0">{label}{why && <span className="block text-xs">{why}</span>}</span>
+            </button>
+          )
+        })}
       </div>
       {isWeightGoal(goal) && (
         <WeightTarget goal={goal} targetText={targetText} setTargetText={setTargetText} pace={pace} setPace={setPace} profile={profile} activityLevel={activityLevel} />
       )}
-      {hasLiftGoal(goal) && <LiftTargets lifts={lifts} setLifts={setLifts} history={history} />}
+      {liftGoal && <LiftTargets lifts={lifts} setLifts={setLifts} history={history} />}
       {error && <InlineError>{error}</InlineError>}
     </Sheet>
   )

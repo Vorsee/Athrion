@@ -111,13 +111,19 @@ In adaptation.summary explain in 1-2 sentences what changed and why; list each c
 
 export function buildUserMessage(fp: any, nt: any, progress: any): string {
   const goal = fp.primaryGoal ?? 'general_fitness'
+  // A second goal picked alongside (lose weight + build muscle): the plan blends both
+  const second = (fp.secondaryGoals ?? []).filter((g: string) => g !== goal && GOAL_PROGRAMMING[g]).slice(0, 1)
+  const both = second.length ? ` with a secondary goal of ${GOAL_LABELS[second[0]]}` : ''
   return JSON.stringify({
     instruction: progress
-      ? `Write next week's ${GOAL_LABELS[goal] ?? goal} training plan for this person, adapted to their progress.`
-      : `Write a complete ${GOAL_LABELS[goal] ?? goal} training plan for this person. In adaptation, summarise the plan's starting point and leave changes empty.`,
+      ? `Write next week's ${GOAL_LABELS[goal] ?? goal} training plan${both} for this person, adapted to their progress.`
+      : `Write a complete ${GOAL_LABELS[goal] ?? goal} training plan${both} for this person. In adaptation, summarise the plan's starting point and leave changes empty.`,
     adaptInstructions: progress ? ADAPT_INSTRUCTIONS : undefined,
     recentProgress: progress ?? undefined,
     goalProgramming: GOAL_PROGRAMMING[goal] ?? GOAL_PROGRAMMING.general_fitness,
+    secondaryGoalProgramming: second.length
+      ? `Also serve ${GOAL_LABELS[second[0]]}: ${GOAL_PROGRAMMING[second[0]]} Keep the primary goal's calories and overall shape, and build the secondary goal's key elements into the week (for example, lose weight + build muscle = a muscle-building split with a calorie deficit and the cardio sessions; build muscle + swimming = lifting plus dryland work around the pool days).`
+      : undefined,
     profile: {
       primaryGoal: goal,
       secondaryGoals: fp.secondaryGoals ?? [],

@@ -373,7 +373,7 @@ describe('Onboarding', () => {
   })
   it('renders fitness setup', () => {
     render(<P.FitnessOnboarding existingProfile={profile} onComplete={() => {}} />)
-    expect(screen.getByText(/main goal/)).toBeInTheDocument()
+    expect(screen.getByText(/your goals/)).toBeInTheDocument()
   })
   it('lets a free user save their answers and targets, then offers the trial instead of generating', async () => {
     sb.set('fitness_profiles', { data: {}, error: null })
@@ -396,7 +396,7 @@ describe('Onboarding', () => {
   })
   it('starts a new Pro member with saved answers at step 1, answers filled in', async () => {
     render(<P.FitnessOnboarding existingProfile={profile} saved={{ primary_goal: 'lose_fat' }} onComplete={() => {}} />)
-    expect(screen.getByText(/main goal/)).toBeInTheDocument()
+    expect(screen.getByText(/your goals/)).toBeInTheDocument()
     expect(screen.getByText('Continue')).toBeEnabled() // the saved goal is already picked
     for (let i = 0; i < 3; i++) await userEvent.click(await screen.findByText('Continue'))
     await userEvent.click(await screen.findByText('None of these, continue'))

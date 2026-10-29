@@ -9,6 +9,7 @@ import { useBackHandler } from '../lib/shell.js'
 import Brand from '../components/Brand.jsx'
 import WeightTarget, { readWeightTarget } from '../components/WeightTarget.jsx'
 import { isWeightGoal } from '../lib/weightGoal.js'
+import { toggleGoal, blockedBy, orderGoals, goalsLabel, MAX_GOALS } from '../lib/goalPick.js'
 import { fromLb } from '../lib/units.js'
 import { localDateKey } from '../lib/data.js'
 
@@ -61,10 +62,10 @@ function ProgressDots({ step }) {
   )
 }
 
-function RadioCard({ selected, onClick, children }) {
+function RadioCard({ selected, onClick, children, disabled = false, pressed }) {
   return (
-    <button onClick={onClick}
-      className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl border transition-all duration-200 text-left ${
+    <button onClick={onClick} disabled={disabled} aria-pressed={pressed}
+      className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl border transition-all duration-200 text-left disabled:opacity-40 ${
         selected ? 'bg-neon/10 border-neon-stroke/50' : 'bg-raised border-line hover:border-line-strong'
       }`}>
       <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
@@ -91,18 +92,23 @@ function ToggleChip({ active, onClick, children }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 1 — Primary Goal
 // ─────────────────────────────────────────────────────────────────────────────
-function GoalStep({ goal, setGoal, onNext, weight }) {
+function GoalStep({ goals, setGoals, onNext, weight }) {
+  const goal = orderGoals(goals)[0]
   return (
     <div className="space-y-5">
       <div>
-        <div className="font-bold text-3xl text-ink leading-tight">What's your<br/>main goal?</div>
-        <div className="text-sm text-muted mt-1">Step 1 of {TOTAL_STEPS} · This shapes your entire plan</div>
+        <div className="font-bold text-3xl text-ink leading-tight">What are<br/>your goals?</div>
+        <div className="text-sm text-muted mt-1">Step 1 of {TOTAL_STEPS} · Pick one, or two that go together</div>
       </div>
       <div className="space-y-2">
         {GOAL_OPTS.map(o => (
-          <RadioCard key={o.id} selected={goal === o.id} onClick={() => setGoal(o.id)}>
+          <RadioCard key={o.id} selected={goals.includes(o.id)} pressed={goals.includes(o.id)} disabled={!!blockedBy(goals, o.id)}
+            onClick={() => setGoals(toggleGoal(goals, o.id))}>
             <Icon icon={o.icon} width={20} className="text-neon-ink flex-shrink-0" />
-            <div className="font-semibold text-sm text-ink">{o.label}</div>
+            <div className="min-w-0">
+              <div className="font-semibold text-sm text-ink">{o.label}</div>
+              {blockedBy(goals, o.id) && <div className="text-xs text-muted">{blockedBy(goals, o.id)}</div>}
+            </div>
           </RadioCard>
         ))}
       </div>
@@ -288,7 +294,7 @@ function HealthStep({ health, setHealth, diet, setDiet, other, setOther, onNext,
 // Step 5 — Review & Generate
 // ─────────────────────────────────────────────────────────────────────────────
 function ReviewStep({ data, nutritionPreview, onGenerate, generating, error, onBack, isPro, onNotNow }) {
-  const { goal, activityLevel, workoutDays, experienceLevel, location } = data
+  const { goal, secondaryGoals = [], activityLevel, workoutDays, experienceLevel, location } = data
   const actLabel = ACTIVITY_OPTS.find(a => a.id === activityLevel)?.label ?? activityLevel
   const locLabel = LOCATION_OPTS.find(l => l.id === location)?.label ?? location
   const expLabel = EXPERIENCE_OPTS.find(e => e.id === experienceLevel)?.label ?? experienceLevel
@@ -306,7 +312,7 @@ function ReviewStep({ data, nutritionPreview, onGenerate, generating, error, onB
           <Icon icon={GOAL_ICONS[goal]} width={20} className="text-neon-ink" />
           <div>
             <div className="text-sm font-semibold text-ink-2">Goal</div>
-            <div className="text-sm font-semibold text-ink">{GOAL_LABELS[goal]}</div>
+            <div className="text-sm font-semibold text-ink">{goalsLabel([goal, ...secondaryGoals])}</div>
           </div>
         </div>
         <div className="w-full h-px bg-line-strong" />
@@ -398,7 +404,9 @@ export default function FitnessOnboarding({ existingProfile, saved = null, isPro
   const [animKey, setAnimKey] = useState(0)
   const [animDir, setAnimDir] = useState('slide-from-right')
 
-  const [goal, setGoal]                         = useState(sv.primary_goal ?? '')
+  // Up to two goals; a weight goal leads (it sets the calories), the other is secondary
+  const [goals, setGoals]                       = useState(() => [sv.primary_goal, ...(sv.secondary_goals ?? [])].filter(Boolean).slice(0, MAX_GOALS))
+  const [goal = '', ...secondaryGoals]          = orderGoals(goals)
   const [activityLevel, setActivityLevel]       = useState(sv.activity_level ?? 'moderately_active')
   const [experienceLevel, setExperienceLevel]   = useState(sv.experience_level ?? 'beginner')
   const [workoutDays, setWorkoutDays]           = useState(sv.workout_days_per_week ?? 3)
@@ -449,7 +457,7 @@ export default function FitnessOnboarding({ existingProfile, saved = null, isPro
       const sameGoal = sv.primary_goal === goal && (!weightTarget || Number(sv.target_weight_lb) === weightTarget.targetLb)
       const fitnessProfileData = {
         primaryGoal: goal,
-        secondaryGoals: [],
+        secondaryGoals,
         activityLevel,
         experienceLevel,
         workoutDaysPerWeek: workoutDays,
@@ -514,7 +522,7 @@ export default function FitnessOnboarding({ existingProfile, saved = null, isPro
   }
 
   const steps = [
-    <GoalStep goal={goal} setGoal={setGoal} onNext={goNext}
+    <GoalStep goals={goals} setGoals={setGoals} onNext={goNext}
       weight={{ targetText, setTargetText, pace, setPace, profile: ep, activityLevel, ready: !!weightTarget?.plan }} />,
     <ActivityStep
       activityLevel={activityLevel} setActivityLevel={setActivityLevel}
@@ -529,7 +537,7 @@ export default function FitnessOnboarding({ existingProfile, saved = null, isPro
     <HealthStep health={health} setHealth={setHealth} diet={diet} setDiet={setDiet} other={other} setOther={setOther}
       onNext={goNext} onBack={goBack} />,
     <ReviewStep
-      data={{ goal, activityLevel, workoutDays, experienceLevel, location }}
+      data={{ goal, secondaryGoals, activityLevel, workoutDays, experienceLevel, location }}
       nutritionPreview={nutritionPreview}
       onGenerate={() => handleGenerate()} generating={generating} error={genError}
       onBack={goBack} isPro={isPro} onNotNow={() => handleGenerate('close')} />,

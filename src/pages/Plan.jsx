@@ -15,6 +15,7 @@ import { calculateNutritionTargets, GOAL_LABELS, GOAL_ICONS, healthFrom } from '
 import { GoalCard, ResultsCard, GoalSheet, WeightSheet } from '../components/GoalProgress.jsx'
 import { planProgress, journeyStart, mergeWeights, DAYS } from '../lib/planProgress.js'
 import { weightPlan, isWeightGoal } from '../lib/weightGoal.js'
+import { goalsLabel } from '../lib/goalPick.js'
 import { localDateKey, todayKey } from '../lib/data.js'
 import { SAMPLE_PLAN } from '../lib/samplePlan.js'
 import ProLock from '../components/ProLock.jsx'
@@ -190,10 +191,11 @@ async function logWeight(lb, onProfileChange) {
 }
 
 // The goal fields saved with a goal (021): a fresh start today, and the weight target if any
-function goalFields({ goal, targetLb, pace, plan, lifts = [] }, fp, profile) {
+function goalFields({ goal, secondaryGoals = [], targetLb, pace, plan, lifts = [] }, fp, profile) {
   const same = fp?.primary_goal === goal && (!targetLb || Number(fp?.target_weight_lb) === targetLb)
   return {
     primaryGoal: goal,
+    secondaryGoals,
     goalStartDate: same && fp?.goal_start_date ? fp.goal_start_date : todayKey(),
     targetWeightLb: plan ? targetLb : null,
     goalPace: plan ? pace : null,
@@ -735,7 +737,7 @@ function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
         facts={<>
           <Fact icon="mdi:calendar-range">{summary.durationWeeks ?? plan.duration_weeks} weeks</Fact>
           <Fact icon="mdi:calendar-check-outline">{workoutDays(plan.plan_data, plan)} days a week</Fact>
-          <Fact icon="mdi:target">{goalLabel}</Fact>
+          <Fact icon="mdi:target">{goalData?.fp?.secondary_goals?.length ? goalsLabel([plan.primary_goal, ...goalData.fp.secondary_goals]) : goalLabel}</Fact>
         </>}>
         {generating && <p role="status" className="text-sm font-semibold text-neon-ink mt-2">Rebuilding your plan…</p>}
         {genError && <InlineError className="mt-2">{genError}</InlineError>}

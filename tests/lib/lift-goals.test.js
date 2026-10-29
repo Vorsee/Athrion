@@ -53,3 +53,27 @@ describe('library basics', () => {
     expect(getExerciseIcon(EXERCISES.find(e => e.name === 'Elliptical'))).toBe('mdi:run')
   })
 })
+
+import { toggleGoal, blockedBy, orderGoals, goalsLabel } from '../../src/lib/goalPick.js'
+import { buildUserMessage } from '../../supabase/functions/generate-fitness-plan/plan.ts'
+describe('two goals', () => {
+  it('allows two that go together, never lose and gain weight', () => {
+    let g = toggleGoal([], 'build_muscle')
+    g = toggleGoal(g, 'lose_weight')
+    expect(g).toEqual(['build_muscle', 'lose_weight'])
+    expect(blockedBy(g, 'gain_weight')).toMatch(/lose weight/)
+    expect(toggleGoal(g, 'gain_weight')).toEqual(g)
+    expect(toggleGoal(['lose_weight'], 'maintain_weight')).toEqual(['lose_weight'])
+    expect(toggleGoal(g, 'swimming')).toEqual(['build_muscle', 'swimming']) // a third replaces the second
+    expect(toggleGoal(g, 'lose_weight')).toEqual(['build_muscle'])
+  })
+  it('puts a weight goal first, since it sets the calories', () => {
+    expect(orderGoals(['build_muscle', 'lose_weight'])).toEqual(['lose_weight', 'build_muscle'])
+    expect(goalsLabel(['lose_weight', 'build_muscle'])).toBe('Lose weight + build muscle')
+  })
+  it('tells the plan about the second goal', () => {
+    const msg = JSON.parse(buildUserMessage({ primaryGoal: 'lose_weight', secondaryGoals: ['build_muscle'] }, { calorieTarget: 2000 }, null))
+    expect(msg.instruction).toMatch(/secondary goal of Muscle Building/)
+    expect(msg.secondaryGoalProgramming).toMatch(/^Also serve Muscle Building/)
+  })
+})
