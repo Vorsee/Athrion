@@ -99,5 +99,8 @@ describe('openWorkoutMessage and pushAllowed', () => {
     expect(pushAllowed('friend_request', { notify_friends: false })).toBe(false)
     expect(pushAllowed('recap', { notify_recap: false, notify_friends: false })).toBe(false)
     expect(pushAllowed('month_result', { notify_recap: false })).toBe(true)
+    expect(pushAllowed('team_request', { notify_team: false })).toBe(false)
+    expect(pushAllowed('team_accepted', { notify_friends: false })).toBe(true)
+    expect(pushAllowed('coach_application', { notify_team: false })).toBe(true)
   })
 })

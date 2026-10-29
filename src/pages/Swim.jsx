@@ -634,7 +634,7 @@ const TABS = [['me', 'My swims'], ['team', 'Team']]
 // The Swim tab: strokes with PR and last session, logging, and swim teams with a coach
 export default function Swim({ intent, onIntentDone }) {
   const u = useSwimUnits()
-  const [tab, setTab] = useState(intent?.invite ? 'team' : 'me')
+  const [tab, setTab] = useState(intent?.invite || intent?.tab === 'team' ? 'team' : 'me')
   const [swims, setSwims] = useState(null)
   const [team, setTeam] = useState(null) // { coached, mine, roster, myPhoto, urls }
   const [teamState, setTeamState] = useState('loading') // loading | ready | error
@@ -657,8 +657,12 @@ export default function Swim({ intent, onIntentDone }) {
     }
   }
   useEffect(() => { loadSwims(); loadTeam() }, [])
+  // From an invite link, or a notification about the team (reload: there may be a new request)
   useEffect(() => {
-    if (intent?.invite) { setInvite(intent.invite); setTab('team'); onIntentDone?.() }
+    if (!intent) return
+    if (intent.invite) setInvite(intent.invite)
+    if (intent.invite || intent.tab === 'team') { setTab('team'); setSwimmer(null); loadTeam() }
+    onIntentDone?.()
   }, [intent])
 
   useBackHandler(!!swimmer, () => setSwimmer(null), 'Swim', swimmer ? `@${swimmer.nickname ?? 'swimmer'}` : '')

@@ -243,6 +243,7 @@ export default function App() {
     else if (target === 'progress') navigate('progress')
     else if (target === 'notifications') setShowInbox(true)
     else if (target === 'swim') navigate('swim')
+    else if (target === 'team') setSwimIntent({ tab: 'team' })
     else if (!isAdmin && (target === 'coach' || target?.startsWith('shop'))) clearShopLink()
     else if (target === 'coach') navigate('coach')
     else if (target?.startsWith('shop')) {

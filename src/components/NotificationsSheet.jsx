@@ -13,6 +13,14 @@ const KIND_ICON = {
   recap: 'mdi:chart-box-outline',
   coach: 'mdi:whistle-outline',
   sale: 'mdi:cash',
+  coach_application: 'mdi:account-clock-outline',
+  team_created: 'mdi:swim',
+  team_request: 'mdi:account-plus-outline',
+  team_joined: 'mdi:account-group-outline',
+  team_accepted: 'mdi:account-check-outline',
+  team_declined: 'mdi:account-remove-outline',
+  team_removed: 'mdi:account-remove-outline',
+  team_left: 'mdi:account-arrow-right-outline',
 }
 
 export function timeAgo(iso, now = Date.now()) {
