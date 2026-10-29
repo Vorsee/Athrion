@@ -67,11 +67,16 @@ export async function fetchCardio(limit = 200) {
   return data
 }
 
-export async function saveCardio({ date, kind, distance_m, seconds, notes = '' }) {
+export async function saveCardio({ date, kind, distance_m, seconds, notes = '', stroke = null }) {
   const uid = await userId()
-  const { data, error } = await supabase.from('cardio_logs')
-    .insert({ user_id: uid, date, kind, distance_m, seconds, notes })
+  const row = { user_id: uid, date, kind, distance_m, seconds, notes }
+  let { data, error } = await supabase.from('cardio_logs')
+    .insert(stroke ? { ...row, stroke } : row)
     .select().single()
+  // Before 017 there is no stroke column: keep the swim, without its stroke
+  if (error && stroke && (error.code === 'PGRST204' || error.code === '42703')) {
+    ({ data, error } = await supabase.from('cardio_logs').insert(row).select().single())
+  }
   if (error) throw error
   return data
 }

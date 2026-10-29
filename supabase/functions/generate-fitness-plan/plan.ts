@@ -6,7 +6,7 @@ export const GOAL_LABELS: Record<string, string> = {
   lose_weight: 'Weight Loss', gain_weight: 'Weight Gain', build_muscle: 'Muscle Building',
   improve_strength: 'Strength', improve_endurance: 'Endurance',
   athletic_performance: 'Athletic Performance', maintain_weight: 'Maintenance',
-  general_fitness: 'General Fitness', mobility_flexibility: 'Mobility',
+  general_fitness: 'General Fitness', mobility_flexibility: 'Mobility', swimming: 'Swimming',
 }
 
 // How each goal should change the programming. Sent to Claude so plans for
@@ -21,6 +21,7 @@ export const GOAL_PROGRAMMING: Record<string, string> = {
   maintain_weight: 'Balanced maintenance. Full-body strength 2-3x/week at 8-12 reps, plus moderate cardio. Sustainable volume.',
   general_fitness: 'Well-rounded fitness. Alternate full-body strength (8-12 reps), cardio/conditioning, and a core + mobility component. Varied, approachable sessions.',
   mobility_flexibility: 'Mobility and flexibility. Sessions are mobility flows, dynamic and loaded stretching, yoga-style holds, and light stability/strength work. Reps are mostly holds (e.g. 30-60s) or controlled reps. Low intensity.',
+  swimming: 'Dryland training for swimmers, around their pool sessions. Pulling strength (pull-ups, rows, lat pulldowns), shoulder health (external rotation, face pulls, scapular work), core and anti-rotation work, hip and leg power for starts and turns (squats, jumps), and thoracic and shoulder mobility. 2-4 sets of 6-12 reps, 60-90s rest, moderate loads so the legs and shoulders are fresh for the water. Avoid heavy overhead pressing volume. Mention in the notes which swim days the session fits around.',
 }
 
 // ── Prompt ────────────────────────────────────────────────────────────────────

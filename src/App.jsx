@@ -13,6 +13,8 @@ import { PageSkeleton } from './components/ui/States.jsx'
 import { readGuidePick, clearGuidePick } from './lib/guidePlans.js'
 import { rememberInvite, readInvite } from './lib/socialApi.js'
 import { parseShopPath, readShopLink, clearShopLink, shopTarget } from './lib/shopLink.js'
+import { SWIM_INVITE_PATH, rememberSwimInvite, readSwimInvite } from './lib/swim.js'
+import { fetchIsAdmin } from './lib/coachApi.js'
 import { useUnreadCount } from './lib/notifications.js'
 import { hasConsented } from './lib/legal.js'
 import Brand from './components/Brand.jsx'
@@ -33,6 +35,7 @@ const Plan              = lazy(() => import('./pages/Plan.jsx'))
 const Progress          = lazy(() => import('./pages/Progress.jsx'))
 const Coach             = lazy(() => import('./pages/Coach.jsx'))
 const Coaches           = lazy(() => import('./pages/Coaches.jsx'))
+const Swim              = lazy(() => import('./pages/Swim.jsx'))
 const ProfileModal      = lazy(() => import('./components/ProfileModal.jsx'))
 const UpgradeSheet      = lazy(() => import('./components/UpgradeSheet.jsx'))
 const NotificationsSheet = lazy(() => import('./components/NotificationsSheet.jsx'))
@@ -50,7 +53,9 @@ const onGuidePath = () => /^\/(workout|guide)\/?$/.test(window.location.pathname
 // athrion.app/add/<nickname>: a friend invite
 const INVITE_PATH = /^\/add\/@?([A-Za-z0-9._-]{3,20})\/?$/
 
-const PAGES = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan, progress: Progress, coach: Coach, shop: Coaches }
+const PAGES = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan, progress: Progress, coach: Coach, shop: Coaches, swim: Swim }
+// The coach shop is hidden from everyone but admins while it's being built
+const ADMIN_PAGES = ['shop', 'coach']
 
 export default function App() {
   // undefined = auth not yet resolved; null = logged out; object = logged in
@@ -59,7 +64,7 @@ export default function App() {
   const [authMode, setAuthMode] = useState(() => {
     if (new URLSearchParams(window.location.search).has('signup')) return 'register'
     if (onGuidePath() || parseShopPath(window.location.pathname)) return null
-    if (INVITE_PATH.test(window.location.pathname)) {
+    if (INVITE_PATH.test(window.location.pathname) || SWIM_INVITE_PATH.test(window.location.pathname)) {
       try { return localStorage.getItem('athrion_signed_in_before') ? 'login' : 'register' } catch { return 'register' }
     }
     try { return localStorage.getItem('athrion_signed_in_before') ? 'login' : null } catch { return null }
@@ -76,6 +81,14 @@ export default function App() {
     const invite = readInvite()
     return invite ? { tab: 'friends', invite } : null
   })
+  // athrion.app/swim/<code>: a swim team invite; opens the Swim tab's Team once signed in, through sign-up too
+  const [swimIntent, setSwimIntent] = useState(() => {
+    const m = window.location.pathname.match(SWIM_INVITE_PATH)
+    if (m) { rememberSwimInvite(m[1].toLowerCase()); window.history.replaceState(null, '', '/') }
+    const invite = readSwimInvite()
+    return invite ? { invite } : null
+  })
+  const [isAdmin, setIsAdmin] = useState(undefined) // undefined until checked
   const [profile, setProfile]   = useState(undefined) // undefined=loading, null=incomplete, obj=complete
   const [fitnessProfile, setFitnessProfile] = useState(undefined) // undefined=loading, null=not set, obj=loaded
   const [isPro, setIsPro]       = useState(false)
@@ -203,6 +216,7 @@ export default function App() {
     fetchSubscriptionStatus()
       .then(setIsPro)
       .catch(() => setIsPro(false))
+    fetchIsAdmin().then(setIsAdmin).catch(() => setIsAdmin(false))
   }, [session])
 
   // Each intent opens Train together once (not again when the profile reloads)
@@ -214,12 +228,22 @@ export default function App() {
     }
   }, [groupIntent, session, profile, guide])
 
+  const handledSwim = useRef(null)
+  useEffect(() => {
+    if (swimIntent && swimIntent !== handledSwim.current && session && profile && !guide) {
+      handledSwim.current = swimIntent
+      navigate('swim')
+    }
+  }, [swimIntent, session, profile, guide])
+
   function openTarget(target) {
     setShowInbox(false)
     if (target === 'friends' || target === 'ranks') setGroupIntent({ tab: target })
     else if (target === 'workout') resumeWorkout()
     else if (target === 'progress') navigate('progress')
     else if (target === 'notifications') setShowInbox(true)
+    else if (target === 'swim') navigate('swim')
+    else if (!isAdmin && (target === 'coach' || target?.startsWith('shop'))) clearShopLink()
     else if (target === 'coach') navigate('coach')
     else if (target?.startsWith('shop')) {
       const [kind, id, paid] = target.split(':')
@@ -231,11 +255,11 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (pendingOpen && session && profile && !guide) {
+    if (pendingOpen && session && profile && !guide && isAdmin !== undefined) {
       openTarget(pendingOpen)
       setPendingOpen(null)
     }
-  }, [pendingOpen, session, profile, guide])
+  }, [pendingOpen, session, profile, guide, isAdmin])
 
   function refreshProfile() {
     fetchUserProfile()
@@ -353,18 +377,19 @@ export default function App() {
     coach: { onOpenShop: () => navigate('shop') },
     calories: { profile, isPro, onUpgrade: goUpgrade, onGoToPlan: () => navigate('plan'), intent: foodIntent, onIntentHandled: () => setFoodIntent(null) },
     group: { session, intent: groupIntent, onIntentDone: () => setGroupIntent(null) },
+    swim: { intent: swimIntent, onIntentDone: () => setSwimIntent(null) },
     progress: { profile, onProfileChange: refreshProfile },
     plan: { isPro, onUpgrade: goUpgrade, onStartSetup: () => setPlanSetup(true), onGoToWorkout: () => navigate('workout'), onStartWorkout: handleStartPlanDay, profile, onProfileChange: () => { refreshProfile(); refreshFitnessProfile() } },
   }
 
-  const PageComponent = PAGES[page] ?? Workout
+  const PageComponent = (!isAdmin && ADMIN_PAGES.includes(page) ? null : PAGES[page]) ?? Workout
 
   const isLight = theme === 'light'
 
   return (
     <UnitProvider value={profile?.weight_unit === 'kg' ? 'kg' : 'lb'}>
     <div className={`min-h-dvh bg-canvas text-ink font-dm${isLight ? ' light' : ''}`}>
-      <Nav page={page} setPage={navigate} session={session} isPro={isPro} onProfileClick={() => setShowProfile(true)}
+      <Nav page={page} setPage={navigate} session={session} isPro={isPro} isAdmin={!!isAdmin} onProfileClick={() => setShowProfile(true)}
         unread={unread} onBellClick={() => setShowInbox(true)}
         minimised={minimised} onResume={resumeWorkout} />
       <main className="relative z-10 max-w-lg mx-auto px-4"
@@ -412,7 +437,7 @@ export default function App() {
             onClose={() => setShowProfile(false)}
             onEdit={() => { setShowProfile(false); setEditingProfile(true) }}
             onUpgrade={goUpgrade}
-            onOpenCoach={() => { setShowProfile(false); navigate('coach') }}
+            onOpenCoach={isAdmin ? () => { setShowProfile(false); navigate('coach') } : undefined}
             onEditTargets={() => { setShowProfile(false); setFoodIntent('goals'); navigate('calories') }}
           />
         </Suspense>

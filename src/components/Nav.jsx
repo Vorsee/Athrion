@@ -10,7 +10,9 @@ const TABS = [
   { id: 'plan',     label: 'Plan',     icon: 'mdi:calendar-check-outline', pro: true },
   { id: 'calories', label: 'Food',     icon: 'mdi:food-apple-outline' },
   { id: 'progress', label: 'Progress', icon: 'mdi:chart-line' },
-  { id: 'shop',     label: 'Coaches',  icon: 'mdi:whistle-outline' },
+  { id: 'swim',     label: 'Swim',     icon: 'mdi:swim' },
+  // Admins only while the coach shop is being built
+  { id: 'shop',     label: 'Coaches',  icon: 'mdi:whistle-outline', admin: true },
 ]
 
 // Pages opened from inside a tab, rather than from the bottom bar
@@ -27,6 +29,7 @@ const PAGE_META = {
   group:    { title: 'Train together', large: true },
   coach:    { title: 'Coach', large: true },
   shop:     { title: 'Coaches', large: true },
+  swim:     { title: 'Swim', large: true },
 }
 
 export const pageTitle = id => PAGE_META[id]?.title ?? ''
@@ -174,8 +177,9 @@ export function SessionBar({ session, onResume }) {
   )
 }
 
-export default function Nav({ page, setPage, session, isPro, onProfileClick, unread, onBellClick, minimised, onResume }) {
+export default function Nav({ page, setPage, session, isPro, isAdmin = false, onProfileClick, unread, onBellClick, minimised, onResume }) {
   const shell = useShell()
+  const tabs = TABS.filter(t => !t.admin || isAdmin)
   const activeTab = PARENT_TAB[page] ?? page
 
   if (shell.focus) return null
@@ -190,8 +194,8 @@ export default function Nav({ page, setPage, session, isPro, onProfileClick, unr
         )}
         <nav aria-label="Main" className="bg-canvas/95 backdrop-blur border-t border-line"
           style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-          <div className="grid grid-cols-5 max-w-lg mx-auto h-14">
-            {TABS.map(t => {
+          <div className={`grid ${tabs.length > 5 ? 'grid-cols-6' : 'grid-cols-5'} max-w-lg mx-auto h-14`}>
+            {tabs.map(t => {
               const active = activeTab === t.id
               const locked = t.pro && !isPro
               return (
@@ -201,7 +205,7 @@ export default function Nav({ page, setPage, session, isPro, onProfileClick, unr
                     className={`absolute top-0 left-1/2 -translate-x-1/2 w-7 h-[3px] rounded-b-full bg-neon transition-opacity duration-200 ${active ? 'opacity-100' : 'opacity-0'}`} />
                   <Icon icon={t.icon} width={24} aria-hidden="true" />
                   {/* Five labels don't fit a very narrow screen (or big phone text): icons only, names kept for screen readers */}
-                  <span className="flex items-center gap-0.5 text-xs font-semibold max-[319px]:sr-only">
+                  <span className={`flex items-center gap-0.5 text-xs font-semibold ${tabs.length > 5 ? 'max-[379px]:sr-only' : 'max-[319px]:sr-only'}`}>
                     <span>{t.label}</span>
                     {locked && <><Icon icon="mdi:lock-outline" width={12} aria-hidden="true" /><span className="sr-only">, Pro</span></>}
                   </span>

@@ -29,6 +29,7 @@ const GOAL_ADJUSTMENTS = {
   maintain_weight:         0,
   general_fitness:         0,
   mobility_flexibility:    0,
+  swimming:                0,
 }
 
 // Safety floor: minimum calories the system will ever recommend, by sex. Typed-in targets
@@ -53,6 +54,7 @@ const PROTEIN_PER_LB = {
   maintain_weight:      0.80,
   general_fitness:      0.80,
   mobility_flexibility: 0.70,
+  swimming:             0.80,
 }
 
 // Fat as a fraction of total calories, by goal.
@@ -66,6 +68,7 @@ const FAT_FRACTION = {
   maintain_weight:      0.30,
   general_fitness:      0.28,
   mobility_flexibility: 0.30,
+  swimming:             0.27,
 }
 
 // ── Core formulas ─────────────────────────────────────────────────────────────
@@ -170,6 +173,7 @@ export const GOAL_LABELS = {
   maintain_weight:      'Maintain weight',
   general_fitness:      'General fitness',
   mobility_flexibility: 'Mobility and flexibility',
+  swimming:             'Swimming',
 }
 
 export const GOAL_ICONS = {
@@ -182,6 +186,7 @@ export const GOAL_ICONS = {
   maintain_weight:      'mdi:scale-balance',
   general_fitness:      'mdi:heart-pulse',
   mobility_flexibility: 'mdi:yoga',
+  swimming:             'mdi:swim',
 }
 
 // ── Plan questions: health and diet ─────────────────────────────────────────
