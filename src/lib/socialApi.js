@@ -29,6 +29,20 @@ export async function saveNickname(nickname) {
   return data
 }
 
+// true when no one has this nickname yet (it may still be taken by the time it's saved)
+export async function nicknameFree(nickname) {
+  const { data, error } = await supabase.from('social_profiles').select('user_id').eq('nickname', cleanNickname(nickname)).maybeSingle()
+  if (error) throw error
+  return !data
+}
+
+// A starting suggestion from someone's name: "Sam Tester" → "sam_tester"
+export function suggestNickname(name) {
+  const s = (name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 20)
+  return s.length >= 3 ? s : ''
+}
+
 export async function setOnLeaderboard(on) {
   const { data: { user } } = await supabase.auth.getUser()
   const { error } = await supabase.from('social_profiles').update({ on_leaderboard: on }).eq('user_id', user.id)

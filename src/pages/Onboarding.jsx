@@ -1,8 +1,10 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, cloneElement } from 'react'
 import { Icon } from '@iconify/react'
 import { Button, BackLink, Segmented } from '../components/ui/index.js'
 import { saveUserProfile } from '../lib/api.js'
 import { toLb } from '../lib/units.js'
+import { fetchMySocial, saveNickname, nicknameFree, suggestNickname } from '../lib/socialApi.js'
+import { NICKNAME_RE, cleanNickname } from '../lib/points.js'
 import Brand from '../components/Brand.jsx'
 
 const FT_OPTS  = [4, 5, 6, 7]
@@ -75,9 +77,79 @@ function ScrollPicker({ items, value, onChange, fmt = v => String(v) }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// First step for a new account — Nickname, so they're on the leaderboard from day one
+// ─────────────────────────────────────────────────────────────────────────────
+function NicknameStep({ name, onDone, n }) {
+  const [value, setValue] = useState(() => suggestNickname(name))
+  const [free, setFree]   = useState(null) // null = not checked yet
+  const [busy, setBusy]   = useState(false)
+  const [error, setError] = useState('')
+  const nick = cleanNickname(value)
+  const valid = NICKNAME_RE.test(nick)
+
+  useEffect(() => {
+    setFree(null)
+    if (!valid) return
+    let alive = true
+    const t = setTimeout(() => nicknameFree(nick).then(f => alive && setFree(f)).catch(() => {}), 300)
+    return () => { alive = false; clearTimeout(t) }
+  }, [nick, valid])
+
+  async function save(e) {
+    e.preventDefault()
+    setBusy(true); setError('')
+    try {
+      await saveNickname(nick)
+      onDone()
+    } catch (err) {
+      setError(err.message || 'Could not save the nickname')
+      setBusy(false)
+    }
+  }
+
+  const status = !nick ? '3 to 20 letters, numbers or _'
+    : !valid ? 'Use 3 to 20 letters, numbers or _'
+    : free === false ? 'That nickname is taken'
+    : free ? 'Available'
+    : 'Checking…'
+  const bad = (nick && !valid) || free === false
+
+  return (
+    <form className="space-y-5" onSubmit={save}>
+      <div>
+        <div className="font-bold text-3xl text-ink leading-tight">Pick a nickname</div>
+        <div className="text-sm text-muted mt-1">{n} · How friends find you</div>
+      </div>
+
+      <div>
+        <div className="relative">
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-bold text-muted" aria-hidden="true">@</span>
+          <input aria-label="Nickname" placeholder="nickname" value={value} autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={21}
+            onChange={e => { setValue(e.target.value); setError('') }}
+            className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl pl-10 pr-4 py-3 text-xl font-bold outline-none transition-colors" />
+        </div>
+        <div role="status" className={`flex items-center gap-1.5 text-xs mt-2 ${error || bad ? 'text-danger' : free ? 'text-neon-ink' : 'text-muted'}`}>
+          {free && valid && !error && <Icon icon="mdi:check-circle-outline" width={16} aria-hidden="true" />}
+          {error || status}
+        </div>
+      </div>
+
+      <div className="flex gap-3 bg-raised border border-line rounded-2xl p-4">
+        <Icon icon="mdi:trophy-outline" width={22} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
+        <p className="text-sm text-ink-2">You'll be on this month's leaderboard right away. Every workout earns points, and the top 3 win a free month of Pro. Only your nickname and points are shown.</p>
+      </div>
+
+      <Button full type="submit" disabled={!valid || free === false || busy} iconRight={busy ? undefined : 'mdi:arrow-right'}>
+        {busy ? 'Saving…' : 'Continue'}
+      </Button>
+    </form>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Step 1 — Sex
 // ─────────────────────────────────────────────────────────────────────────────
-function SexStep({ sex, setSex, onNext, isEditing }) {
+function SexStep({ sex, setSex, onNext, onBack, isEditing, n }) {
   const opts = [
     { id: 'male',   label: 'Male',              sub: 'Biological male'         },
     { id: 'female', label: 'Female',            sub: 'Biological female'       },
@@ -86,10 +158,11 @@ function SexStep({ sex, setSex, onNext, isEditing }) {
   return (
     <div className="space-y-5">
       <div>
+        {onBack && <BackLink onClick={onBack} className="mb-3" />}
         <div className="font-bold text-3xl text-ink leading-tight">
           {isEditing ? 'Update your\nprofile' : 'Tell us about\nyourself'}
         </div>
-        <div className="text-sm text-muted mt-1">Step 1 of 4 · Biological sex</div>
+        <div className="text-sm text-muted mt-1">{n} · Biological sex</div>
       </div>
 
       <div className="space-y-2.5">
@@ -122,13 +195,13 @@ function SexStep({ sex, setSex, onNext, isEditing }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 2 — Age
 // ─────────────────────────────────────────────────────────────────────────────
-function AgeStep({ age, setAge, onNext, onBack }) {
+function AgeStep({ age, setAge, onNext, onBack, n }) {
   return (
     <div className="space-y-5">
       <div>
         <BackLink onClick={onBack} className="mb-3" />
         <div className="font-bold text-3xl text-ink">Your age</div>
-        <div className="text-sm text-muted mt-1">Step 2 of 4 · Needed for calorie calculation</div>
+        <div className="text-sm text-muted mt-1">{n} · Needed for calorie calculation</div>
       </div>
 
       <div className="bg-raised border border-line rounded-2xl overflow-hidden">
@@ -147,7 +220,7 @@ function AgeStep({ age, setAge, onNext, onBack }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 3 — Height
 // ─────────────────────────────────────────────────────────────────────────────
-function HeightStep({ unit, setUnit, ft, setFt, inches, setInches, cm, setCm, onNext, onBack }) {
+function HeightStep({ unit, setUnit, ft, setFt, inches, setInches, cm, setCm, onNext, onBack, n }) {
   const display = unit === 'ft' ? `${ft}' ${inches}"` : `${cm} cm`
 
   return (
@@ -155,7 +228,7 @@ function HeightStep({ unit, setUnit, ft, setFt, inches, setInches, cm, setCm, on
       <div>
         <BackLink onClick={onBack} className="mb-3" />
         <div className="font-bold text-3xl text-ink">Your height</div>
-        <div className="text-sm text-muted mt-1">Step 3 of 4</div>
+        <div className="text-sm text-muted mt-1">{n}</div>
       </div>
 
       <Segmented options={[['ft', 'ft / in'], ['cm', 'cm']]} value={unit} onChange={setUnit} label="Height unit" kind="choice" />
@@ -184,7 +257,7 @@ function HeightStep({ unit, setUnit, ft, setFt, inches, setInches, cm, setCm, on
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 4 — Weight
 // ─────────────────────────────────────────────────────────────────────────────
-function WeightStep({ unit, setUnit, lb, setLb, kg, setKg, onComplete, saving, onBack }) {
+function WeightStep({ unit, setUnit, lb, setLb, kg, setKg, onComplete, saving, onBack, n }) {
   const display = unit === 'lb' ? `${lb} lb` : `${kg} kg`
 
   return (
@@ -192,7 +265,7 @@ function WeightStep({ unit, setUnit, lb, setLb, kg, setKg, onComplete, saving, o
       <div>
         <BackLink onClick={onBack} className="mb-3" />
         <div className="font-bold text-3xl text-ink">Your weight</div>
-        <div className="text-sm text-muted mt-1">Step 4 of 4 · Almost done</div>
+        <div className="text-sm text-muted mt-1">{n} · Almost done</div>
       </div>
 
       <Segmented options={[['lb', 'lb'], ['kg', 'kg']]} value={unit} onChange={setUnit} label="Weight unit" kind="choice" />
@@ -225,7 +298,8 @@ function initHeight(iv) {
   return { ft: Math.floor(totalIn / 12), inches: totalIn % 12, cm: iv.height_cm }
 }
 
-export default function Onboarding({ onComplete, initialValues = null }) {
+// name: the account's name, for a nickname suggestion. A new account picks a nickname first.
+export default function Onboarding({ onComplete, initialValues = null, name = '' }) {
   const iv = initialValues
   const ih = initHeight(iv)
 
@@ -243,6 +317,11 @@ export default function Onboarding({ onComplete, initialValues = null }) {
   const [lb, setLb]               = useState(iv?.weight_lb ?? 170)
   const [kg, setKg]               = useState(iv?.weight_lb ? Math.round(iv.weight_lb / 2.20462) : 77)
   const [saving, setSaving]       = useState(false)
+  // New accounts start with a nickname, unless they already have one (set up before, then left)
+  const [askNick, setAskNick]     = useState(!iv)
+  useEffect(() => {
+    if (!iv) fetchMySocial().then(me => { if (me?.nickname) setAskNick(false) }).catch(() => {})
+  }, [])
 
   function goNext() {
     setAnimClass('slide-from-right')
@@ -268,8 +347,9 @@ export default function Onboarding({ onComplete, initialValues = null }) {
     }
   }
 
-  const steps = [
-    <SexStep sex={sex} setSex={setSex} onNext={goNext} isEditing={!!initialValues} />,
+  const back = askNick ? goBack : undefined
+  const stats = [
+    <SexStep sex={sex} setSex={setSex} onNext={goNext} onBack={back} isEditing={!!initialValues} />,
     <AgeStep age={age} setAge={setAge} onNext={goNext} onBack={goBack} />,
     <HeightStep unit={heightUnit} setUnit={setHeightUnit}
       ft={ft} setFt={setFt} inches={inches} setInches={setInches}
@@ -278,6 +358,8 @@ export default function Onboarding({ onComplete, initialValues = null }) {
       lb={lb} setLb={setLb} kg={kg} setKg={setKg}
       onComplete={handleComplete} saving={saving} onBack={goBack} />,
   ]
+  const all = askNick ? [<NicknameStep name={name} onDone={goNext} />, ...stats] : stats
+  const steps = all.map((el, i) => cloneElement(el, { n: `Step ${i + 1} of ${all.length}` }))
 
   return (
     <div className="min-h-screen bg-canvas flex flex-col items-center justify-center px-4 pt-safe pb-safe relative overflow-hidden">
@@ -293,7 +375,7 @@ export default function Onboarding({ onComplete, initialValues = null }) {
 
         {/* Progress bar */}
         <div className="flex gap-2 justify-center mb-8">
-          {[0, 1, 2, 3].map(i => (
+          {steps.map((_, i) => (
             <div key={i} className={`h-1 rounded-full transition-all duration-500 ${
               i === step ? 'w-8 bg-neon' : i < step ? 'w-4 bg-neon/40' : 'w-4 bg-line-strong'
             }`} />

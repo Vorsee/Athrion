@@ -309,6 +309,7 @@ export default function App() {
     <Suspense fallback={<Loading />}>
       <Onboarding
         initialValues={profile}
+        name={session.name}
         onComplete={() => { setEditingProfile(false); refreshProfile() }}
       />
     </Suspense>

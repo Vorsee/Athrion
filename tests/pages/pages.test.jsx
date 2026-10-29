@@ -342,6 +342,34 @@ describe('Onboarding', () => {
     render(<P.Onboarding initialValues={null} onComplete={() => {}} />)
     expect(screen.getAllByText('ATHRION').length).toBeGreaterThan(0)
   })
+  it('starts a new account with a nickname, suggested from their name, so they are on the leaderboard', async () => {
+    sb.set('social_profiles', q => {
+      const write = sb.op(q, 'upsert')
+      if (write) return { data: { nickname: write[0].nickname, on_leaderboard: true }, error: null }
+      const eq = q.ops.find(o => o[0] === 'eq')
+      return { data: eq?.[2] === 'taken_name' ? { user_id: 'x' } : null, error: null } // fetchMySocial: none yet
+    })
+    render(<P.Onboarding initialValues={null} name="Sam Tester" onComplete={() => {}} />)
+    const input = screen.getByLabelText('Nickname')
+    expect(input).toHaveValue('sam_tester')
+    expect(screen.getByText('Step 1 of 5 · How friends find you')).toBeInTheDocument()
+    expect(await screen.findByText('Available')).toBeInTheDocument()
+    await userEvent.clear(input)
+    await userEvent.type(input, 'taken_name')
+    expect(await screen.findByText('That nickname is taken')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+    await userEvent.clear(input)
+    await userEvent.type(input, '@New_Lifter')
+    await screen.findByText('Available')
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(sb.queriesFor('social_profiles').map(q => sb.op(q, 'upsert')?.[0]).filter(Boolean)).toEqual([{ user_id: USER.id, nickname: 'new_lifter' }])
+    expect(await screen.findByText('Step 2 of 5 · Biological sex')).toBeInTheDocument()
+  })
+  it('skips the nickname when editing stats', () => {
+    render(<P.Onboarding initialValues={profile} onComplete={() => {}} />)
+    expect(screen.queryByLabelText('Nickname')).toBeNull()
+    expect(screen.getByText('Step 1 of 4 · Biological sex')).toBeInTheDocument()
+  })
   it('renders fitness setup', () => {
     render(<P.FitnessOnboarding existingProfile={profile} onComplete={() => {}} />)
     expect(screen.getByText(/main goal/)).toBeInTheDocument()
