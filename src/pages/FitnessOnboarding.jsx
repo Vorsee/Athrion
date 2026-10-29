@@ -7,6 +7,10 @@ import { saveGoals } from '../lib/api.js'
 import { TRIAL_DAYS } from '../lib/pricing.js'
 import { useBackHandler } from '../lib/shell.js'
 import Brand from '../components/Brand.jsx'
+import WeightTarget, { readWeightTarget } from '../components/WeightTarget.jsx'
+import { isWeightGoal } from '../lib/weightGoal.js'
+import { fromLb } from '../lib/units.js'
+import { localDateKey } from '../lib/data.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -87,7 +91,7 @@ function ToggleChip({ active, onClick, children }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 1 — Primary Goal
 // ─────────────────────────────────────────────────────────────────────────────
-function GoalStep({ goal, setGoal, onNext }) {
+function GoalStep({ goal, setGoal, onNext, weight }) {
   return (
     <div className="space-y-5">
       <div>
@@ -102,7 +106,8 @@ function GoalStep({ goal, setGoal, onNext }) {
           </RadioCard>
         ))}
       </div>
-      <Button full onClick={onNext} disabled={!goal} iconRight="mdi:arrow-right">Continue</Button>
+      {isWeightGoal(goal) && <WeightTarget goal={goal} {...weight} />}
+      <Button full onClick={onNext} disabled={!goal || (isWeightGoal(goal) && !weight.ready)} iconRight="mdi:arrow-right">Continue</Button>
     </div>
   )
 }
@@ -403,6 +408,8 @@ export default function FitnessOnboarding({ existingProfile, saved = null, isPro
   const [health, setHealth]                     = useState(() => chipsFrom(`${sv.injuries ?? ''} ${sv.medical_notes ?? ''}`, HEALTH_OPTS))
   const [diet, setDiet]                         = useState(() => chipsFrom(sv.limitations, DIET_OPTS))
   const [other, setOther]                       = useState(() => (sv.injuries ?? '').split(OTHER_PREFIX)[1] ?? '')
+  const [targetText, setTargetText]             = useState(() => sv.target_weight_lb ? String(fromLb(sv.target_weight_lb, ep.weight_unit === 'kg' ? 'kg' : 'lb')) : '')
+  const [pace, setPace]                         = useState(sv.goal_pace ?? 'steady')
   const [generating, setGenerating]             = useState(false)
   const [genError, setGenError]                 = useState('')
 
@@ -413,10 +420,12 @@ export default function FitnessOnboarding({ existingProfile, saved = null, isPro
   useBackHandler(!!onCancel && step === 0, () => onCancel?.(), undefined, undefined, true)
   useBackHandler(step > 0 && step, goBack, undefined, undefined, true) // re-registers per step
 
+  // Lose / gain weight: the target and pace set the calories (weightGoal.js), not the goal's default
+  const weightTarget = isWeightGoal(goal) ? readWeightTarget({ goal, targetText, pace, profile: ep, activityLevel }) : null
   const nutritionPreview = goal && ep.sex && ep.weight_lb && ep.height_cm && ep.age
     ? calculateNutritionTargets({
         sex: ep.sex, weightLb: ep.weight_lb, heightCm: ep.height_cm, age: ep.age,
-        activityLevel, primaryGoal: goal, health,
+        activityLevel, primaryGoal: goal, health, goalAdjustment: weightTarget?.plan?.dailyAdjustment ?? null,
       })
     : null
 
@@ -437,6 +446,7 @@ export default function FitnessOnboarding({ existingProfile, saved = null, isPro
     setGenError('')
     setGenerating(true)
     try {
+      const sameGoal = sv.primary_goal === goal && (!weightTarget || Number(sv.target_weight_lb) === weightTarget.targetLb)
       const fitnessProfileData = {
         primaryGoal: goal,
         secondaryGoals: [],
@@ -454,6 +464,15 @@ export default function FitnessOnboarding({ existingProfile, saved = null, isPro
         likedExercises: '',
         dislikedExercises: '',
         onboardingCompleted: then === 'plan', // a free user's answers wait for the plan
+        // The journey starts today, unless this is the same goal answered again
+        goalStartDate: sameGoal && sv.goal_start_date ? sv.goal_start_date : localDateKey(new Date()),
+        ...(weightTarget?.plan ? {
+          targetWeightLb: weightTarget.targetLb,
+          goalPace: pace,
+          goalStartWeightLb: sameGoal && sv.goal_start_weight_lb ? Number(sv.goal_start_weight_lb) : ep.weight_lb,
+          goalTargetDate: weightTarget.plan.targetDate ? localDateKey(weightTarget.plan.targetDate) : null,
+          goalWeeklyLb: weightTarget.plan.weeklyLb,
+        } : {}),
         sex: ep.sex,
         weightLb: ep.weight_lb,
         heightCm: ep.height_cm,
@@ -495,7 +514,8 @@ export default function FitnessOnboarding({ existingProfile, saved = null, isPro
   }
 
   const steps = [
-    <GoalStep goal={goal} setGoal={setGoal} onNext={goNext} />,
+    <GoalStep goal={goal} setGoal={setGoal} onNext={goNext}
+      weight={{ targetText, setTargetText, pace, setPace, profile: ep, activityLevel, ready: !!weightTarget?.plan }} />,
     <ActivityStep
       activityLevel={activityLevel} setActivityLevel={setActivityLevel}
       experienceLevel={experienceLevel} setExperienceLevel={setExperienceLevel}

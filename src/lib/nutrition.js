@@ -128,13 +128,15 @@ export { GOAL_ADJUSTMENTS }
  */
 // health: conditions from the plan questions (HEALTH_OPTS ids). Pregnancy gets no deficit;
 // postpartum and diabetes get a gentler one, and both are flagged so the app can say why.
-export function calculateNutritionTargets({ sex, weightLb, heightCm, age, activityLevel, primaryGoal, health = [] }) {
+// goalAdjustment: a daily kcal change worked out elsewhere (a weight target, weightGoal.js) in
+// place of the goal's default; the health limits below still apply to it.
+export function calculateNutritionTargets({ sex, weightLb, heightCm, age, activityLevel, primaryGoal, health = [], goalAdjustment = null }) {
   const safetyFlags = []
 
   const bmr = calcBMR({ sex, weightLb, heightCm, age })
   const activityMultiplier = ACTIVITY_MULTIPLIERS[activityLevel] ?? ACTIVITY_MULTIPLIERS.moderately_active
   const tdee = Math.round(bmr * activityMultiplier)
-  let goalAdj = GOAL_ADJUSTMENTS[primaryGoal] ?? 0
+  let goalAdj = goalAdjustment ?? GOAL_ADJUSTMENTS[primaryGoal] ?? 0
   if (goalAdj < 0 && health.includes('pregnant')) { goalAdj = 0; safetyFlags.push('no_deficit_pregnancy') }
   else if (goalAdj < -250 && (health.includes('postpartum') || health.includes('diabetes'))) { goalAdj = -250; safetyFlags.push('gentle_deficit') }
 

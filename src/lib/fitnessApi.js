@@ -36,6 +36,12 @@ export async function saveFitnessProfile(fp) {
         limitations:                fp.limitations ?? '',
         medical_notes:              fp.medicalNotes ?? '',
         onboarding_completed:       fp.onboardingCompleted ?? false,
+        // Weight goal (021); null for goals that aren't about weight
+        target_weight_lb:           fp.targetWeightLb ?? null,
+        goal_pace:                  fp.goalPace ?? null,
+        goal_start_weight_lb:       fp.goalStartWeightLb ?? null,
+        goal_start_date:            fp.goalStartDate ?? null,
+        goal_target_date:           fp.goalTargetDate ?? null,
         updated_at:                 new Date().toISOString(),
       },
       { onConflict: 'user_id' }
@@ -106,6 +112,11 @@ export function dbProfileToPayload(row) {
     limitations:               row.limitations ?? '',
     medicalNotes:              row.medical_notes ?? '',
     onboardingCompleted:       row.onboarding_completed,
+    targetWeightLb:            row.target_weight_lb == null ? null : Number(row.target_weight_lb),
+    goalPace:                  row.goal_pace ?? null,
+    goalStartWeightLb:         row.goal_start_weight_lb == null ? null : Number(row.goal_start_weight_lb),
+    goalStartDate:             row.goal_start_date ?? null,
+    goalTargetDate:            row.goal_target_date ?? null,
   }
 }
 

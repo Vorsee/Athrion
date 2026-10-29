@@ -138,6 +138,9 @@ export function buildUserMessage(fp: any, nt: any, progress: any): string {
         age: fp.age ?? null,
         sex: fp.sex ?? null,
         targetWeightLb: fp.targetWeightLb ?? null,
+        // Set with a weight goal: the date it should land and the weekly rate the calories give
+        goalTargetDate: fp.goalTargetDate ?? null,
+        goalWeeklyLb: fp.goalWeeklyLb ?? null,
       },
     },
     nutritionTargets: {

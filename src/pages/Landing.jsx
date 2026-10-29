@@ -1,4 +1,5 @@
 import { Icon } from '@iconify/react'
+import { LandingReviews } from '../components/Reviews.jsx'
 import { Button } from '../components/ui/index.js'
 import { PLANS, PRO_FEATURES, TRIAL_DAYS, annualSavingPct, money, priceLine } from '../lib/pricing.js'
 import Brand from '../components/Brand.jsx'
@@ -23,7 +24,7 @@ const STEPS = [
 const FREE = ['Workout log with PRs and last-session numbers', 'Calorie and macro logging, barcode scanner', 'Progress: weight, measurements, photos', 'Train with friends, live standings', '3 saved workouts']
 
 // The public page in front of sign-in: what ATHRION is, for whom, and what it costs
-export default function Landing({ onCreateAccount, onSignIn }) {
+export default function Landing({ onCreateAccount, onSignIn, onWriteReview }) {
   return (
     <div className="min-h-dvh bg-canvas text-ink font-dm pt-safe pb-safe">
       <header className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -100,6 +101,9 @@ export default function Landing({ onCreateAccount, onSignIn }) {
             <Button variant="secondary" onClick={onCreateAccount}>Create a free account</Button>
           </div>
         </section>
+
+        {/* Reviews: shown once there is one */}
+        <LandingReviews onWrite={onWriteReview ?? onSignIn} />
 
         {/* Pricing */}
         <section className="max-w-5xl mx-auto px-4 pb-16" aria-labelledby="pricing">

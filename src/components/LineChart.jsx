@@ -22,8 +22,9 @@ const fmtDate = d => asDate(d).toLocaleDateString(undefined, { month: 'short', d
  * Single-series line chart. Hover or drag shows a crosshair and tooltip.
  * @param data  [{ date, value }] in any order
  * @param unit  appended to values, e.g. "lb"
+ * @param target optional goal value, drawn as a dashed line
  */
-export default function LineChart({ data, unit = '', height = 170, label = 'Value' }) {
+export default function LineChart({ data, unit = '', height = 170, label = 'Value', target = null }) {
   const wrapRef = useRef(null)
   const [width, setWidth] = useState(320)
   const [hover, setHover] = useState(null)
@@ -47,7 +48,8 @@ export default function LineChart({ data, unit = '', height = 170, label = 'Valu
   }
 
   const fmt = v => `${Math.round(v * 10) / 10}${unit ? ` ${unit}` : ''}`
-  const ticks = niceTicks(Math.min(...points.map(p => p.value)), Math.max(...points.map(p => p.value)))
+  const values = [...points.map(p => p.value), ...(target != null ? [Number(target)] : [])]
+  const ticks = niceTicks(Math.min(...values), Math.max(...values))
   const yMin = ticks[0], yMax = ticks[ticks.length - 1]
   const tMin = points[0].t, tMax = points[points.length - 1].t
   const iw = width - PAD.left - PAD.right
@@ -79,6 +81,13 @@ export default function LineChart({ data, unit = '', height = 170, label = 'Valu
         ))}
         <text x={PAD.left} y={height - 6} className="fill-muted" fontSize="11">{fmtDate(points[0].date)}</text>
         <text x={width - PAD.right} y={height - 6} textAnchor="end" className="fill-muted" fontSize="11">{fmtDate(last.date)}</text>
+
+        {target != null && (
+          <g className="text-muted">
+            <line x1={PAD.left} x2={width - PAD.right} y1={y(target)} y2={y(target)} stroke="currentColor" strokeWidth="1.5" strokeDasharray="5 4" />
+            <text x={width - PAD.right + 4} y={y(target) + 3} fontSize="11" className="fill-muted">Goal</text>
+          </g>
+        )}
 
         <path d={path} fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" className="text-neon-ink" />
 

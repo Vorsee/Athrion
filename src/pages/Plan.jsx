@@ -9,8 +9,13 @@ import {
   fetchFitnessProfile, saveFitnessProfile, saveNutritionTarget, generatePlan,
   dbProfileToPayload, dbNutritionToPayload, updatePlanData,
 } from '../lib/fitnessApi.js'
-import { saveGoals, saveProfileWeight } from '../lib/api.js'
+import { saveGoals, saveProfileWeight, fetchWorkoutHistory } from '../lib/api.js'
+import { fetchMeasurements, fetchCheckinWeights, saveMeasurement } from '../lib/progressApi.js'
 import { calculateNutritionTargets, GOAL_LABELS, GOAL_ICONS, healthFrom } from '../lib/nutrition.js'
+import { GoalCard, ResultsCard, GoalSheet, WeightSheet } from '../components/GoalProgress.jsx'
+import { planProgress, journeyStart, mergeWeights, DAYS } from '../lib/planProgress.js'
+import { weightPlan, isWeightGoal } from '../lib/weightGoal.js'
+import { localDateKey, todayKey } from '../lib/data.js'
 import { SAMPLE_PLAN } from '../lib/samplePlan.js'
 import ProLock from '../components/ProLock.jsx'
 import { useUnit } from '../lib/units.js'
@@ -138,6 +143,64 @@ function TodayWorkout({ dayData, onGoToWorkout, onStartWorkout, onSwap }) {
         )}
     </Card>
   )
+}
+
+// Today in one row: what the plan has on, and a way to start it. The exercises live on Train
+// and in the weekly schedule below, not repeated here.
+function TodayRow({ dayData, onGoToWorkout, onStartWorkout }) {
+  if (!dayData) return null
+  const isRest = dayData.type !== 'workout'
+  const n = dayData.workout?.exercises?.length ?? 0
+  return (
+    <Card className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <Icon icon={isRest ? 'mdi:sleep' : 'mdi:dumbbell'} width={26} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
+      <div className="grow basis-0 min-w-[8rem]">
+        <div className="text-xs font-semibold text-neon-ink">Today</div>
+        <div className="font-bold text-lg text-ink leading-tight break-words">{dayData.title}</div>
+        <div className="text-xs text-muted">{isRest ? dayData.type.replace('_', ' ') : `${n} exercises · ${dayData.durationMinutes} min`}</div>
+      </div>
+      {isRest
+        ? onGoToWorkout && <Button size="sm" variant="secondary" onClick={onGoToWorkout} className="ml-auto">Train anyway</Button>
+        : n > 0 && <Button size="sm" icon="mdi:play" onClick={() => (onStartWorkout ? onStartWorkout(dayData) : onGoToWorkout())} className="ml-auto">Start</Button>}
+    </Card>
+  )
+}
+
+// Everything the goal card and results need: the goal, weigh-ins and logged workouts
+function useGoalData() {
+  const [data, setData] = useState(null)
+  async function load() {
+    const [fp, measurements, checkins, history] = await Promise.all([
+      fetchFitnessProfile().catch(() => null),
+      fetchMeasurements().catch(() => []),
+      fetchCheckinWeights().catch(() => []),
+      fetchWorkoutHistory().catch(() => []),
+    ])
+    setData({ fp, weights: mergeWeights(measurements, checkins), history })
+  }
+  useEffect(() => { load() }, [])
+  return [data, load]
+}
+
+// Save today's weight: Progress, the profile, and so the goal ring
+async function logWeight(lb, onProfileChange) {
+  await saveMeasurement({ date: todayKey(), weight_lb: lb })
+  await saveProfileWeight(lb).catch(() => {})
+  onProfileChange?.()
+}
+
+// The goal fields saved with a goal (021): a fresh start today, and the weight target if any
+function goalFields({ goal, targetLb, pace, plan }, fp, profile) {
+  const same = fp?.primary_goal === goal && (!targetLb || Number(fp?.target_weight_lb) === targetLb)
+  return {
+    primaryGoal: goal,
+    goalStartDate: same && fp?.goal_start_date ? fp.goal_start_date : todayKey(),
+    targetWeightLb: plan ? targetLb : null,
+    goalPace: plan ? pace : null,
+    goalStartWeightLb: plan ? (same && fp?.goal_start_weight_lb ? Number(fp.goal_start_weight_lb) : profile?.weight_lb) : null,
+    goalTargetDate: plan?.targetDate ? localDateKey(plan.targetDate) : null,
+    goalWeeklyLb: plan?.weeklyLb ?? null,
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -419,39 +482,6 @@ function CheckinModal({ planId, onClose, onSaved, onProfileChange }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Change Goal Modal
-// ─────────────────────────────────────────────────────────────────────────────
-function GoalModal({ currentGoal, onClose, onConfirm }) {
-  const [goal, setGoal] = useState(currentGoal)
-  const changed = goal !== currentGoal
-
-  return (
-    <Sheet title="Change goal" onClose={onClose} footer={
-      <Button full onClick={() => onConfirm(goal)}>
-        {changed ? `Rebuild for ${GOAL_LABELS[goal].toLowerCase()}` : 'Regenerate plan'}
-      </Button>
-    }>
-      <p className="text-xs text-muted">
-        Rebuilds your plan and daily targets. Takes about a minute.
-      </p>
-      <div className="grid grid-cols-2 gap-2 pb-2">
-        {Object.entries(GOAL_LABELS).map(([id, label]) => (
-          <button key={id} onClick={() => setGoal(id)}
-            className={`flex items-center gap-2 px-3 py-3 rounded-xl border text-left text-sm transition-all ${
-              goal === id
-                ? 'border-neon-stroke bg-neon/10 text-ink'
-                : 'border-line bg-surface text-muted hover:border-line-strong'
-            }`}>
-            <Icon icon={GOAL_ICONS[id]} width={20} className="text-neon-ink" />
-            <span className="leading-tight">{label}</span>
-          </button>
-        ))}
-      </div>
-    </Sheet>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Pro lock: the real page with a sample plan, dimmed behind an upgrade card.
 // Labelled as a sample, and without its calories, which would contradict the person's own on Food.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -485,8 +515,59 @@ function LockedPlan({ onUpgrade, onStartSetup }) {
 // Plan Page
 // ─────────────────────────────────────────────────────────────────────────────
 export default function Plan({ isPro, onUpgrade, ...props }) {
-  if (!isPro) return <LockedPlan onUpgrade={onUpgrade} onStartSetup={props.onStartSetup} />
+  if (!isPro) return <FreePlan onUpgrade={onUpgrade} {...props} />
   return <PlanPage {...props} />
+}
+
+// Free: the person's own goal and results on top, the sample plan behind the lock below
+function FreePlan({ onUpgrade, onStartSetup, profile, onProfileChange }) {
+  const [data, reload] = useGoalData()
+  const [sheet, setSheet] = useState(null) // 'goal' | 'weight'
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+  const fp = data?.fp
+
+  // No plan yet: the days they said they'd train stand in for its schedule
+  const days = fp?.preferred_training_days?.length ? fp.preferred_training_days : DAYS.slice(0, fp?.workout_days_per_week ?? 3)
+  const progress = data && planProgress({ schedule: days.map(day => ({ day, type: 'workout' })), history: data.history, start: fp?.goal_start_date ?? (fp?.created_at && localDateKey(fp.created_at)), weeks: 8 })
+
+  async function saveGoal(spec) {
+    setSaving(true); setErr('')
+    try {
+      const payload = { ...dbProfileToPayload(fp), ...goalFields(spec, fp, profile) }
+      const nt = calculateNutritionTargets({
+        sex: profile?.sex ?? 'other', weightLb: profile?.weight_lb ?? 154, heightCm: profile?.height_cm ?? 170, age: profile?.age ?? 30,
+        activityLevel: payload.activityLevel ?? 'moderately_active', primaryGoal: spec.goal, health: healthFrom(payload),
+        goalAdjustment: spec.plan?.dailyAdjustment ?? null,
+      })
+      await Promise.all([
+        saveFitnessProfile(payload), saveNutritionTarget(nt),
+        saveGoals({ calorie_goal: nt.calorieTarget, protein_goal: nt.proteinGrams, carb_goal: nt.carbGrams }),
+      ])
+      setSheet(null); await reload(); onProfileChange?.()
+    } catch (e) { setErr(e.message || 'Could not save') } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="space-y-4 pt-2">
+      {fp ? (
+        <>
+          <GoalCard fp={fp} profile={profile} weights={data.weights} progress={progress} onEditGoal={() => setSheet('goal')} onLogWeight={() => setSheet('weight')} />
+          <ResultsCard fp={fp} weights={data.weights} progress={progress} history={data.history} />
+        </>
+      ) : data && onStartSetup && (
+        <Card hero className="space-y-3">
+          <div className="font-bold text-xl text-ink">Set your goal</div>
+          <p className="text-sm text-ink-2">Tell us what you're working toward and by when. Your progress shows here every time you open Plan.</p>
+          <Button full icon="mdi:target" onClick={onStartSetup}>Set my goal, free</Button>
+        </Card>
+      )}
+      <LockedPlan onUpgrade={onUpgrade} />
+      {sheet === 'goal' && <GoalSheet fp={fp} profile={profile} onClose={() => setSheet(null)} onSave={saveGoal} saving={saving} error={err} />}
+      {sheet === 'weight' && <WeightSheet onClose={() => setSheet(null)} saving={saving} error={err}
+        onSave={async lb => { setSaving(true); setErr(''); try { await logWeight(lb, onProfileChange); setSheet(null); await reload() } catch (e) { setErr(e.message || 'Could not save') } finally { setSaving(false) } }} />}
+    </div>
+  )
 }
 
 function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
@@ -498,6 +579,10 @@ function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
   const [showGoal, setShowGoal]     = useState(false)
   const [generating, setGenerating] = useState(false)
   const [genError, setGenError]     = useState('')
+  const [goalData, reloadGoal]      = useGoalData()
+  const [showWeight, setShowWeight] = useState(false)
+  const [weightBusy, setWeightBusy] = useState(false)
+  const [weightErr, setWeightErr]   = useState('')
 
   useEffect(() => { load() }, [])
 
@@ -541,8 +626,8 @@ function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
     }
   }
 
-  // Rebuild the plan, optionally switching to a new primary goal first
-  async function handleRegenerate(newGoal, mode = 'new') {
+  // Rebuild the plan; with a goal spec ({ goal, targetLb, pace, plan } from GoalSheet) set that goal first
+  async function handleRegenerate(spec, mode = 'new') {
     setShowGoal(false)
     setGenerating(true)
     setGenError('')
@@ -557,14 +642,21 @@ function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
       // Convert DB snake_case rows to camelCase for the Edge Function, plus body stats
       const profilePayload = {
         ...dbProfileToPayload(dbProfile),
+        ...(spec ? goalFields(spec, dbProfile, profile) : {}),
         sex:      profile?.sex,
         weightLb: profile?.weight_lb,
         heightCm: profile?.height_cm,
         age:      profile?.age,
       }
-      const goal = newGoal ?? profilePayload.primaryGoal ?? 'general_fitness'
-      const goalChanged = goal !== profilePayload.primaryGoal
-      profilePayload.primaryGoal = goal
+      const goal = profilePayload.primaryGoal ?? 'general_fitness'
+      // A new goal or weight target changes the calories, so they're recalculated
+      const goalChanged = !!spec
+      // The weekly rate for the plan's notes, from today's numbers
+      const wp = isWeightGoal(goal) && profilePayload.targetWeightLb ? weightPlan({
+        goal, pace: profilePayload.goalPace ?? 'steady', weightLb: profile?.weight_lb, targetLb: profilePayload.targetWeightLb,
+        sex: profile?.sex, heightCm: profile?.height_cm, age: profile?.age, activityLevel: profilePayload.activityLevel,
+      }) : null
+      if (wp) profilePayload.goalWeeklyLb = wp.weeklyLb
 
       // Calories and macros depend on the goal, so recalculate when it changes
       let nutritionPayload
@@ -579,6 +671,7 @@ function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
           activityLevel: profilePayload.activityLevel ?? 'moderately_active',
           primaryGoal: goal,
           health: healthFrom(profilePayload),
+          goalAdjustment: spec?.plan?.dailyAdjustment ?? null,
         })
         await Promise.all([
           saveNutritionTarget(nutritionPayload),
@@ -593,7 +686,7 @@ function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
       if (goalChanged) await saveFitnessProfile(profilePayload)
 
       await generatePlan(profilePayload, nutritionPayload, mode)
-      await load()
+      await Promise.all([load(), reloadGoal()])
       // Calorie goals and the fitness profile live in App state too
       onProfileChange?.()
     } catch (e) {
@@ -616,6 +709,18 @@ function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
   const goalLabel = GOAL_LABELS[plan.primary_goal] ?? plan.primary_goal
   const goalIcon = GOAL_ICONS[plan.primary_goal] ?? 'mdi:target'
 
+  const progress = goalData && planProgress({
+    schedule, history: goalData.history,
+    start: journeyStart({ goalStartDate: goalData.fp?.goal_start_date, plan }),
+    weeks: summary.durationWeeks ?? plan.duration_weeks ?? 8,
+  })
+
+  async function saveWeight(lb) {
+    setWeightBusy(true); setWeightErr('')
+    try { await logWeight(lb, onProfileChange); setShowWeight(false); await reloadGoal() }
+    catch (e) { setWeightErr(e.message || 'Could not save') } finally { setWeightBusy(false) }
+  }
+
   // Check-in — was one saved in the last 7 days?
   const checkinFresh = checkin
     ? (Date.now() - new Date(checkin.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000
@@ -635,11 +740,16 @@ function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
         {genError && <InlineError className="mt-2">{genError}</InlineError>}
       </PageHeader>
 
-      {/* Today */}
-      {todayData && <TodayWorkout dayData={todayData} onGoToWorkout={onGoToWorkout} onStartWorkout={onStartWorkout} onSwap={handleSwap} />}
+      {/* The goal: ring, dates, where it stands, this week */}
+      {progress && <GoalCard fp={goalData.fp} profile={profile} weights={goalData.weights} progress={progress}
+        onEditGoal={() => setShowGoal(true)} onLogWeight={() => setShowWeight(true)} />}
+
+      <TodayRow dayData={todayData} onGoToWorkout={onGoToWorkout} onStartWorkout={onStartWorkout} />
 
       <AdaptCard plan={plan} checkin={checkin} checkinFresh={checkinFresh} generating={generating}
         onAdapt={() => handleRegenerate(undefined, 'adapt')} onCheckin={() => setShowCheckin(true)} />
+
+      {progress && <ResultsCard fp={goalData.fp} weights={goalData.weights} progress={progress} history={goalData.history} />}
 
       {/* Nutrition */}
       <NutritionCard planNutrition={planData.nutrition} dbNutrition={nutrition} />
@@ -651,12 +761,9 @@ function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
       <CoachNotes advice={planData.advice} progression={planData.progression} />
 
       {showGoal && (
-        <GoalModal
-          currentGoal={plan.primary_goal}
-          onClose={() => setShowGoal(false)}
-          onConfirm={handleRegenerate}
-        />
+        <GoalSheet fp={goalData?.fp} profile={profile} rebuilds onClose={() => setShowGoal(false)} onSave={spec => handleRegenerate(spec)} />
       )}
+      {showWeight && <WeightSheet onClose={() => setShowWeight(false)} onSave={saveWeight} saving={weightBusy} error={weightErr} />}
 
       {showCheckin && (
         <CheckinModal
@@ -665,6 +772,7 @@ function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
           onClose={() => setShowCheckin(false)}
           onSaved={() => {
             fetchLatestCheckin().then(setCheckin).catch(() => {})
+            reloadGoal()
           }}
         />
       )}

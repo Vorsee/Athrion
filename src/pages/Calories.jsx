@@ -4,8 +4,9 @@ import { todayKey } from '../lib/data.js'
 import { supabase } from '../lib/supabase.js'
 import { fetchTodayCalorieLog, saveTodayCalorieLog, fetchCalorieLogs, saveGoals } from '../lib/api.js'
 import { resolveGoals } from '../lib/goals.js'
-import { MIN_CALORIES } from '../lib/nutrition.js'
-import { fetchLatestNutritionTarget } from '../lib/fitnessApi.js'
+import { MIN_CALORIES, DIET_OPTS, chipsFrom } from '../lib/nutrition.js'
+import { fetchLatestNutritionTarget, fetchFitnessProfile } from '../lib/fitnessApi.js'
+import MealPlan from '../components/MealPlan.jsx'
 import AdaptiveNutritionCard from '../components/AdaptiveNutritionCard.jsx'
 import BarcodeScanner from '../components/BarcodeScanner.jsx'
 import { tok } from '../lib/tokens.js'
@@ -53,6 +54,7 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
   const [localGoals, setLocalGoals]   = useState(null)
   const [planNutrition, setPlanNutrition] = useState(null)
   const [scanning, setScanning]       = useState(false)
+  const [diet, setDiet]               = useState([]) // from the plan questions, for the meal plan
   const fileRef = useRef()
   const [logFood, setLogFood]         = useState(false)
   useHeaderAction('mdi:plus', 'Log food', () => setLogFood(true))
@@ -102,6 +104,9 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
       .catch(() => {})
     fetchLatestNutritionTarget()
       .then(t => { if (t) setPlanNutrition(t) })
+      .catch(() => {})
+    fetchFitnessProfile()
+      .then(fp => setDiet(chipsFrom(fp?.limitations, DIET_OPTS)))
       .catch(() => {})
   }, [])
 
@@ -222,9 +227,12 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
       )}
 
       {/* Tab switcher */}
-      <Segmented options={[['today', 'Today'], ['log', 'Log']]} value={tab} onChange={setTab} label="Food view" />
+      <Segmented options={[['today', 'Today'], ['plan', 'Meal plan'], ['log', 'Log']]} value={tab} onChange={setTab} label="Food view" />
 
-      {tab === 'today' ? (
+      {tab === 'plan' ? (
+        <MealPlan calories={goals.calories} protein={goals.protein} diet={diet}
+          onLog={(meal, items) => saveFoods([...foods, ...items])} />
+      ) : tab === 'today' ? (
         <>
           {/* Quick add: photo and barcode */}
           <div>

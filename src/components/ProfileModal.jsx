@@ -12,6 +12,7 @@ import { Button, Segmented, ListRow, Card, Tag, Skeleton, InlineError } from './
 import ReminderSettings from './ReminderSettings.jsx'
 import { fmtWeight } from '../lib/units.js'
 import { PRO_FEATURES, PLANS, money } from '../lib/pricing.js'
+import { ReviewScreen } from './Reviews.jsx'
 
 
 // Metric people (weight in kg) see centimetres; everyone else feet and inches
@@ -307,9 +308,9 @@ function ImportScreen({ defaultUnit, onBack }) {
 
 // ── Main modal ────────────────────────────────────────────────────────────────
 
-export default function ProfileModal({ session, profile, isPro, theme, onToggleTheme, onClose, onEdit, onUpgrade, onEditTargets, onOpenCoach }) {
+export default function ProfileModal({ session, profile, isPro, theme, onToggleTheme, onClose, onEdit, onUpgrade, onEditTargets, onOpenCoach, initialScreen = 'profile' }) {
   const [pwState, setPwState] = useState('idle')   // idle | loading | sent | error
-  const [screen, setScreen]   = useState('profile') // profile | subscription | import | delete
+  const [screen, setScreen]   = useState(initialScreen) // profile | subscription | import | delete | review
   const [exportState, setExportState] = useState('idle') // idle | loading | error
 
   const bmi     = profile ? calcBMI(profile.height_cm, profile.weight_lb) : null
@@ -333,13 +334,15 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
   }
 
   return (
-    <Sheet ariaLabel={screen === 'subscription' ? 'Subscription' : screen === 'import' ? 'Import workouts' : screen === 'delete' ? 'Delete account' : 'You'} onClose={onClose} bodyClassName="-mx-1">
+    <Sheet ariaLabel={screen === 'subscription' ? 'Subscription' : screen === 'import' ? 'Import workouts' : screen === 'delete' ? 'Delete account' : screen === 'review' ? 'Rate ATHRION' : 'You'} onClose={onClose} bodyClassName="-mx-1">
         {screen === 'subscription' ? (
           <SubscriptionScreen onBack={() => setScreen('profile')} />
         ) : screen === 'import' ? (
           <ImportScreen defaultUnit={profile?.weight_unit === 'kg' ? 'kg' : 'lb'} onBack={() => setScreen('profile')} />
         ) : screen === 'delete' ? (
           <DeleteAccountScreen isPro={isPro} onBack={() => setScreen('profile')} />
+        ) : screen === 'review' ? (
+          <ReviewScreen session={session} onBack={() => setScreen('profile')} />
         ) : (
           <div>
             {/* ── User header ── */}
@@ -479,6 +482,7 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
               <div className="bg-surface border border-line rounded-2xl p-1">
                 <ListRow icon="mdi:download-outline" tile="info" title={exportState === 'loading' ? 'Preparing your file…' : 'Download my data'}
                   meta="Everything you've logged, as a file" onClick={exportState === 'loading' ? undefined : handleExport} />
+                <ListRow icon="mdi:star-outline" tile="neon-ink" title="Rate ATHRION" meta="Write a review for the website" chevron onClick={() => setScreen('review')} />
                 <ListRow icon="mdi:import" tile="neon-ink" title="Import from Strong or Hevy" meta="Bring your workout history" chevron onClick={() => setScreen('import')} />
                 <ListRow icon="mdi:delete-outline" tile="danger" title="Delete account" meta="Erase your account and all its data" chevron onClick={() => setScreen('delete')} />
               </div>

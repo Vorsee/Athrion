@@ -20,7 +20,11 @@ describe('database policies (SQL migrations)', () => {
   })
 
   // Nicknames are public to signed-in users on purpose (friend search); nothing else may be
-  const PUBLIC_READS = [/^CREATE POLICY "signed-in users read nicknames" ON public\.social_profiles\s+FOR SELECT TO authenticated USING \(true\);$/]
+  const PUBLIC_READS = [
+    /^CREATE POLICY "signed-in users read nicknames" ON public\.social_profiles\s+FOR SELECT TO authenticated USING \(true\);$/,
+    // Reviews are posted to be public on the landing page (021); anon can't read ids or hidden ones
+    /^CREATE POLICY "anyone reads shown reviews" ON public\.app_reviews FOR SELECT TO anon USING \(NOT hidden\);$/,
+  ]
 
   it('every policy on user data is scoped to auth.uid() or a membership check', () => {
     for (const f of sqlFiles) {

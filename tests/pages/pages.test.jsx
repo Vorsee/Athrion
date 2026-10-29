@@ -73,7 +73,8 @@ describe('Plan', () => {
     sb.set('nutrition_targets', { data: null, error: null })
     const start = vi.fn()
     render(<P.Plan isPro profile={profile} onGoToWorkout={() => {}} onStartWorkout={start} onProfileChange={() => {}} />)
-    await userEvent.click(await screen.findByText('Start this workout'))
+    // Plan names today's session; the exercises themselves are on Train
+    await userEvent.click(await screen.findByRole('button', { name: 'Start' }))
     expect(start).toHaveBeenCalledWith(expect.objectContaining({ day: 'Friday', type: 'workout' }))
   })
 })
@@ -405,7 +406,8 @@ describe('Onboarding', () => {
     sb.set('fitness_profiles', { data: {}, error: null })
     sb.set('nutrition_targets', { data: {}, error: null })
     sb.set('user_profiles', { data: {}, error: null })
-    const saved = { primary_goal: 'lose_weight', activity_level: 'moderately_active', experience_level: 'beginner', workout_days_per_week: 3 }
+    // Losing weight asks for the target first (170 lb, from 180)
+    const saved = { primary_goal: 'lose_weight', activity_level: 'moderately_active', experience_level: 'beginner', workout_days_per_week: 3, target_weight_lb: 170 }
     render(<P.FitnessOnboarding existingProfile={profile} saved={saved} isPro={false} onUpgrade={() => {}} onCancel={() => {}} />)
     for (let i = 0; i < 3; i++) await userEvent.click(await screen.findByText('Continue'))
     await userEvent.click(await screen.findByText('Pregnant'))
@@ -417,7 +419,7 @@ describe('Onboarding', () => {
     await userEvent.click(await screen.findByText('Not now, just save my targets'))
     await waitFor(() => expect(sb.queriesFor('fitness_profiles').some(q => sb.op(q, 'upsert'))).toBe(true))
     const upsert = sb.op(sb.queriesFor('fitness_profiles').find(q => sb.op(q, 'upsert')), 'upsert')[0]
-    expect(upsert).toMatchObject({ injuries: 'Knee pain; Other: Bad left wrist', medical_notes: 'Pregnant', limitations: 'Diet: Vegan' })
+    expect(upsert).toMatchObject({ injuries: 'Knee pain; Other: Bad left wrist', medical_notes: 'Pregnant', limitations: 'Diet: Vegan', target_weight_lb: 170, goal_pace: 'steady', goal_start_weight_lb: 180 })
     const q = sb.queriesFor('nutrition_targets').find(q => sb.op(q, 'insert') || sb.op(q, 'upsert'))
     const target = (sb.op(q, 'insert') ?? sb.op(q, 'upsert'))[0]
     expect(target.goal_adjustment).toBe(0) // lose weight, but pregnant: no deficit
