@@ -466,10 +466,16 @@ function TeamPractice({ teamId, compact = false, onOpen, onLogged }) {
   const [state, setState] = useState('idle') // idle | saving | done
   const [err, setErr] = useState('')
   useEffect(() => { fetchPractices(teamId, todayKey()).then(r => setList(r.practices)).catch(() => setList([])) }, [teamId])
-  const p = list?.[0]
+  // Only today's practice: once the day ends it's gone, and coming days show on their day
+  const p = list?.find(x => x.date === todayKey())
   if (!p) return null
   const t = practiceTotals(p.items)
-  const isToday = p.date === todayKey()
+  // Logged: just a line saying so, the sets are done with
+  if (state === 'done') return (
+    <Card pad="sm">
+      <p role="status" className="text-sm font-semibold text-neon-ink flex items-center gap-2 px-1 py-1"><Icon icon="mdi:check-circle-outline" width={20} />Today's practice is logged. Your coach sees it.</p>
+    </Card>
+  )
 
   if (compact) return (
     <Card pad="sm">
@@ -493,13 +499,11 @@ function TeamPractice({ teamId, compact = false, onOpen, onLogged }) {
   return (
     <Card hero className="space-y-3">
       <div>
-        <div className="text-xs font-semibold text-neon-ink">{dayName(p.date)} · from your coach</div>
+        <div className="text-xs font-semibold text-neon-ink">Today's practice · from your coach</div>
         <div className="text-xl font-bold text-ink break-words leading-tight">{p.title}</div>
       </div>
       <PracticeSets practice={p} />
-      {isToday && (state === 'done' ? (
-        <p role="status" className="text-sm font-semibold text-neon-ink flex items-center gap-1.5"><Icon icon="mdi:check" width={18} />Logged. Your coach sees it.</p>
-      ) : (
+      {(
         <div className="space-y-2">
           {!t.seconds && (
             <label className="block">
@@ -510,7 +514,7 @@ function TeamPractice({ teamId, compact = false, onOpen, onLogged }) {
           <Button full icon="mdi:check" onClick={log} disabled={state === 'saving'}>{state === 'saving' ? 'Saving…' : 'I swam it, log it'}</Button>
           {err && <p role="alert" className="text-xs text-danger">{err}</p>}
         </div>
-      ))}
+      )}
     </Card>
   )
 }
@@ -1076,7 +1080,8 @@ function Team({ invite, onInviteDone, onOpenSwimmer, onOpenApplications, reload,
       )}
       {(coached || !mine) && <PhotoCard path={myPhoto} url={urls[myPhoto]} onChanged={reload} coach={!!coached} />}
       {!coached && !mine && <StartTeam coach={coach} onCoachChange={setCoach} onStarted={reload} />}
-      {isAdmin && (
+      {/* Admins review coach applications here only while they don't coach a team themselves (the Coaches tab has it too) */}
+      {isAdmin && !coached && (
         <Card pad="sm">
           <ListRow icon="mdi:account-check-outline" tile="info" title="Coach applications" meta="Approve or turn down new coaches" chevron onClick={onOpenApplications} />
         </Card>
