@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Icon } from '@iconify/react'
-import { Button, Card, SectionTitle, Fact, StatTiles, InfoButton, InlineError } from './ui/index.js'
+import { Button, Card, SectionTitle, StatTiles, InfoButton, InlineError } from './ui/index.js'
 import Sheet from './Sheet.jsx'
 import LineChart from './LineChart.jsx'
 import WeightTarget, { readWeightTarget } from './WeightTarget.jsx'
@@ -14,19 +14,44 @@ import { localDateKey, todayKey } from '../lib/data.js'
 const fmtDay = key => (key ? new Date(`${key}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '–')
 const daysUntil = key => (key ? Math.ceil((new Date(`${key}T12:00:00`) - new Date(`${todayKey()}T12:00:00`)) / 86400000) : null)
 
-// A ring that fills with pct (0-1); whatever's inside sits in the middle
-export function ProgressRing({ pct, size = 120, stroke = 10, label, children }) {
+// A ring that fills with pct (0-1); whatever's inside sits in the middle. expected (0-1, optional)
+// marks where the person should be by today, so ahead or behind shows on the ring itself.
+export function ProgressRing({ pct, expected = null, size = 136, stroke = 12, label, children }) {
   const r = (size - stroke) / 2
   const c = 2 * Math.PI * r
+  const clamp = v => Math.max(0, Math.min(1, v))
+  // The marker sits on the track, clockwise from the top like the fill
+  const at = expected == null ? null : clamp(expected) * 2 * Math.PI
   return (
     <div className="relative flex-shrink-0" style={{ width: size, height: size }} role="img" aria-label={label}>
-      <svg width={size} height={size} className="-rotate-90" aria-hidden="true">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeWidth={stroke} className="text-line" />
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round"
-          strokeDasharray={c} strokeDashoffset={c * (1 - Math.max(0, Math.min(1, pct)))} className="text-neon-ink transition-[stroke-dashoffset] duration-700" />
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+        <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeWidth={stroke} className="text-raised" />
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round"
+            strokeDasharray={c} strokeDashoffset={c * (1 - clamp(pct))}
+            className="text-neon-stroke transition-[stroke-dashoffset] duration-700 motion-reduce:transition-none" />
+        </g>
+        {at != null && (
+          <circle cx={size / 2 + r * Math.sin(at)} cy={size / 2 - r * Math.cos(at)} r={stroke / 2 - 1.5}
+            fill="currentColor" stroke="rgb(var(--surface))" strokeWidth={3} className="text-ink" />
+        )}
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center">{children}</div>
     </div>
+  )
+}
+
+// Label and figure rows beside the ring
+function Figures({ rows }) {
+  return (
+    <dl className="grow basis-0 min-w-[8.5rem] divide-y divide-line">
+      {rows.map(([label, value, tone]) => (
+        <div key={label} className="flex items-baseline justify-between gap-3 py-2 first:pt-0 last:pb-0">
+          <dt className="text-sm text-muted">{label}</dt>
+          <dd className={`font-bold text-lg tabular-nums leading-tight text-right ${tone ?? 'text-ink'}`}>{value}</dd>
+        </div>
+      ))}
+    </dl>
   )
 }
 
@@ -76,46 +101,58 @@ export function GoalCard({ fp, profile, weights, progress, history = [], onEditG
   const dir = directionOf(goal)
   const w = lb => `${fromLb(lb)} ${unit}`
 
+  // On a dated weight goal, where the straight line from start to target puts them today
+  const expected = g?.expectedLb != null ? (g.expectedLb - g.startLb) / (g.targetLb - g.startLb) : null
+  const status = g?.onTrack != null && g.leftLb > 0 ? (g.onTrack ? 'on' : 'behind') : null
+  const when = left == null ? null : left > 0 ? `${left} days left` : g && g.leftLb > 0 ? 'Target date passed' : 'Done'
+
   return (
-    <Card hero className="space-y-4">
-      <div className="flex flex-wrap items-center gap-4">
-        <ProgressRing pct={pct} label={g ? `${Math.round(pct * 100)}% of the way to ${w(g.targetLb)}` : lifts ? `${Math.round(pct * 100)}% of the way to your lift targets` : `${progress.done} of ${progress.planned} planned workouts done`}>
-          <span className="font-bold text-3xl text-ink tabular-nums leading-none">{Math.round(pct * 100)}%</span>
-          <span className="text-xs text-muted mt-1">{g || lifts ? 'to goal' : 'workouts'}</span>
-        </ProgressRing>
-        <div className="grow basis-0 min-w-[9rem] space-y-2">
-          <div>
-            <div className="text-xs font-semibold text-neon-ink flex items-center gap-1">
-              <Icon icon={GOAL_ICONS[goal] ?? 'mdi:target'} width={14} aria-hidden="true" />{allGoals.length ? goalsLabel(allGoals) : 'Your goal'}
-            </div>
-            <div className="font-bold text-xl text-ink leading-tight">
-              {g ? `${dir === 'lose' ? 'Lose' : 'Gain'} ${fromLb(Math.abs(g.targetLb - g.startLb))} ${unit}` : `Week ${Math.min(progress.week, progress.weeks)} of ${progress.weeks}`}
-            </div>
+    <Card hero className="space-y-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-xs font-semibold text-neon-ink flex items-center gap-1">
+            <Icon icon={GOAL_ICONS[goal] ?? 'mdi:target'} width={14} aria-hidden="true" />{allGoals.length ? goalsLabel(allGoals) : 'Your goal'}
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            <Fact icon="mdi:flag-outline">Started {fmtDay(fp?.goal_start_date ?? progress.startDate)}</Fact>
-            {endKey && <Fact icon="mdi:flag-checkered">{weightGoal ? 'Target' : 'Ends'} {fmtDay(endKey)}</Fact>}
-          </div>
-          {left != null && (
-            <div className="text-sm text-ink-2">
-              {left > 0 ? <><span className="font-bold text-ink tabular-nums">{left}</span> days left</> : g && g.leftLb > 0 ? 'Target date passed' : 'Done'}
-              {g?.onTrack != null && g.leftLb > 0 && (
-                <span className={`ml-2 inline-flex text-xs font-semibold px-1.5 py-0.5 rounded-md ${g.onTrack ? 'bg-neon/15 text-neon-ink' : 'bg-warn/15 text-warn'}`}>
-                  {g.onTrack ? 'On track' : 'Behind'}
-                </span>
-              )}
-            </div>
-          )}
+          <h2 className="font-bold text-[1.75rem] text-ink leading-[1.1] tracking-tight mt-1 break-words">
+            {g ? `${dir === 'lose' ? 'Lose' : 'Gain'} ${fromLb(Math.abs(g.targetLb - g.startLb))} ${unit}` : `Week ${Math.min(progress.week, progress.weeks)} of ${progress.weeks}`}
+          </h2>
+          <p className="text-sm text-ink-2 mt-1">
+            {endKey && <>{weightGoal ? 'By' : 'Ends'} {fmtDay(endKey)}</>}{endKey && when && ' · '}{when && <span className="tabular-nums">{when}</span>}
+          </p>
         </div>
+        {status && (
+          <span className={`flex-shrink-0 inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full ${status === 'on' ? 'bg-neon-tint text-neon-ink border border-neon-stroke/25' : 'bg-warn/15 text-warn'}`}>
+            <Icon icon={status === 'on' ? 'mdi:check' : 'mdi:clock-alert-outline'} width={14} aria-hidden="true" />{status === 'on' ? 'On track' : 'Behind'}
+          </span>
+        )}
       </div>
 
-      {g && (
-        <StatTiles items={[
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-4">
+        <div className="flex flex-col items-center gap-2">
+          <ProgressRing pct={pct} expected={expected}
+            label={g ? `${Math.round(pct * 100)}% of the way to ${w(g.targetLb)}${expected != null ? `; the pace you set puts you at ${Math.round(expected * 100)}% today` : ''}` : lifts ? `${Math.round(pct * 100)}% of the way to your lift targets` : `${progress.done} of ${progress.planned} planned workouts done`}>
+            <span className="font-bold text-[2.25rem] text-ink tabular-nums leading-none tracking-tight">{Math.round(pct * 100)}<span className="text-xl">%</span></span>
+            <span className="text-xs text-muted mt-1">{g || lifts ? 'to goal' : 'workouts done'}</span>
+          </ProgressRing>
+          {expected != null && (
+            <span className="text-xs text-muted flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-ink" aria-hidden="true" />Where your pace puts you
+            </span>
+          )}
+        </div>
+        <Figures rows={g ? [
           ['Now', w(g.currentLb)],
-          [dir === 'lose' ? 'Lost' : 'Gained', `${g.doneLb < 0 ? '−' : ''}${fromLb(Math.abs(g.doneLb))} ${unit}`],
+          [dir === 'lose' ? 'Lost' : 'Gained', `${g.doneLb < 0 ? '−' : ''}${fromLb(Math.abs(g.doneLb))} ${unit}`, g.doneLb > 0 ? 'text-neon-ink' : undefined],
           ['To go', w(g.leftLb)],
+          ['Started', `${fmtDay(fp?.goal_start_date ?? progress.startDate)}`],
+        ] : [
+          ['Done', `${progress.done} of ${progress.planned}`],
+          ['This week', `${progress.weekDone} of ${progress.weekPlanned}`],
+          ['Per week', progress.perWeek || '–'],
+          ['Started', `${fmtDay(fp?.goal_start_date ?? progress.startDate)}`],
         ]} />
-      )}
+      </div>
+
       {lifts ? (
         <ul className="space-y-3" aria-label="Lift targets">
           {lifts.lifts.map(l => (
@@ -126,7 +163,7 @@ export function GoalCard({ fp, profile, weights, progress, history = [], onEditG
                   <span className="font-bold text-ink">{fromLb(l.currentLb)}</span> of {fromLb(l.targetLb)} {unit} × {GOAL_REPS}
                 </span>
               </div>
-              <div className="mt-1.5 h-2 rounded-full bg-line overflow-hidden" aria-hidden="true">
+              <div className="mt-1.5 h-2 rounded-full bg-raised overflow-hidden" aria-hidden="true">
                 <div className="h-full rounded-full bg-neon transition-[width] duration-700" style={{ width: `${Math.round(l.pct * 100)}%` }} />
               </div>
               <div className="text-xs text-muted mt-1 tabular-nums">
@@ -135,13 +172,7 @@ export function GoalCard({ fp, profile, weights, progress, history = [], onEditG
             </li>
           ))}
         </ul>
-      ) : g ? null : (
-        <StatTiles items={[
-          ['Done', `${progress.done} of ${progress.planned}`],
-          ['This week', `${progress.weekDone} of ${progress.weekPlanned}`],
-          ['Per week', progress.perWeek || '–'],
-        ]} />
-      )}
+      ) : null}
 
       <div>
         <div className="flex items-center justify-between gap-2 mb-2">

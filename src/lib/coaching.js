@@ -185,7 +185,7 @@ export function weeklyReview({ progress, history = [], goal = null, liftPct = nu
   const status = goal?.onTrack == null && liftPct == null && plannedSoFar === 0 ? 'early' : behind ? 'behind' : 'on_track'
   const headline = status === 'early' ? 'Your week is just starting'
     : status === 'behind' ? 'A little behind. Here is how to catch up'
-    : liftPct != null ? `On track: ${Math.round(liftPct * 100)}% of the way to your lift targets`
-    : 'On track'
+    : liftPct != null ? `${Math.round(liftPct * 100)}% of the way to your lift targets`
+    : 'Keep this rhythm going'
   return { wentWell, change, status, headline }
 }

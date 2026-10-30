@@ -564,7 +564,12 @@ function LockedPlan({ fp, onUpgrade, onStartSetup }) {
   return (
     <ProLock onUpgrade={onUpgrade} title="Get a plan built for your goal"
       secondary={onStartSetup && { label: 'Answer the questions first, free', onClick: onStartSetup }}
-      description="Behind this is an example. Yours is built from a few questions about your goal, schedule and equipment, and adapts every week from your check-ins.">
+      description="Behind this is an example. Yours is built for your goal, days and equipment, and coaches you every week."
+      perks={[
+        'Your target on every exercise: the weight and reps to beat',
+        'A weekly review: what went well, what to change',
+        'Missed days moved for you, and a lighter week every 5th',
+      ]}>
       <div className="space-y-4 pt-2">
         <PageHeader icon={GOAL_ICONS[plan.primary_goal] ?? 'mdi:target'} title={`Sample: ${planData.summary.planName}`}
           facts={<>

@@ -31,7 +31,7 @@ beforeEach(() => {
 })
 
 describe('Plan — Pro lock', () => {
-  it('shows free users the real page with a sample plan behind a dark overlay and an upgrade button', async () => {
+  it('shows free users the real page with a sample plan, faded behind an upgrade card with the price and what Pro adds', async () => {
     const onUpgrade = vi.fn()
     render(<P.Plan isPro={false} onUpgrade={onUpgrade} profile={profile} onGoToWorkout={() => {}} onProfileChange={() => {}} />)
     expect(screen.getByText('Get a plan built for your goal')).toBeInTheDocument()
@@ -39,7 +39,10 @@ describe('Plan — Pro lock', () => {
     expect(screen.getByText('Example plan')).toBeInTheDocument()
     expect(screen.getByText('Weekly schedule')).toBeInTheDocument()
     expect(screen.queryByText(/2750/)).toBeNull() // its calories would contradict the person's own targets
-    expect(screen.getByText(/\$4\.99 a month or \$49\.99 a year/)).toBeInTheDocument()
+    expect(screen.getByText('$4.99')).toBeInTheDocument()
+    expect(screen.getByText('a month, or $49.99 a year')).toBeInTheDocument()
+    expect(screen.getByText(/charged on day 8/)).toBeInTheDocument()
+    expect(screen.getByText(/weekly review/)).toBeInTheDocument() // what Pro adds, not only a lock
     expect(screen.getByText('Sample: Muscle Builder').closest('[inert]')).toHaveAttribute('aria-hidden', 'true')
     expect(sb.queriesFor('fitness_plans')).toHaveLength(0) // no data loaded for free users
     await userEvent.click(screen.getByText('Get Pro'))
