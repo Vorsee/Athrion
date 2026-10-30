@@ -168,9 +168,8 @@ describe('Nav', () => {
     expect(screen.queryByText('Coaches')).toBeNull()
     for (const label of ['Plan', 'Food', 'Progress', 'Swim']) await userEvent.click(screen.getByText(label))
     expect(setPage.mock.calls.map(c => c[0])).toEqual(['plan', 'calories', 'progress', 'swim'])
-    // Only Plan is a Pro wall, and free users see that on the tab
-    expect(screen.getByText('Plan').closest('button')).toHaveTextContent('Pro')
-    expect(screen.getByText('Food').closest('button')).not.toHaveTextContent('Pro')
+    // Plan has a free goal card and results, so no tab carries a lock (it read as paid-only)
+    expect(screen.getByText('Plan').closest('button')).toHaveTextContent(/^Plan$/)
   })
   it('shows the Coaches tab to admins only', async () => {
     const setPage = vi.fn()

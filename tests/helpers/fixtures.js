@@ -29,5 +29,14 @@ export const withWorkoutOn = (day) => {
   return p
 }
 
+// planRow with workouts only after today, so today is a rest day whatever the date: an earlier,
+// unlogged workout would move onto today (reshuffleWeek)
+export const restTodayPlan = () => {
+  const p = structuredClone(planRow)
+  const todayIdx = (new Date().getDay() + 6) % 7
+  p.plan_data.weeklySchedule = p.plan_data.weeklySchedule.map((d, i) => (i > todayIdx ? d : rest(d.day)))
+  return p
+}
+
 export const profile = { user_id: 'user-1', sex: 'male', height_cm: 180, weight_lb: 180, age: 30 }
 export const fitnessProfile = { user_id: 'user-1', primary_goal: 'build_muscle', activity_level: 'moderately_active', experience_level: 'intermediate', workout_days_per_week: 2, workout_location: 'gym', onboarding_completed: true }

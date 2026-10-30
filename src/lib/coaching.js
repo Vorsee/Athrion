@@ -4,7 +4,7 @@
 import { buildExerciseHistory, suggestNext, parseRepRange } from './progress.js'
 import { fromLb, toLb } from './units.js'
 import { localDateKey } from './data.js'
-import { DAYS } from './planProgress.js'
+import { DAYS, planProgress, journeyStart } from './planProgress.js'
 import { KEY_LIFTS } from './liftGoals.js'
 
 // Every 5th week of a goal is lighter (inside the usual 4-6 week window): one set less per
@@ -17,6 +17,14 @@ export const isDeloadWeek = week => week > 0 && week % DELOAD_EVERY === 0
 const liftOf = name => KEY_LIFTS.find(l => l.match.test(name.trim()))?.name
 const sameName = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase() || (!!liftOf(a) && liftOf(a) === liftOf(b))
 const timedReps = reps => /\d\s*(s|secs?|seconds?|mins?|minutes?)\b/i.test(String(reps ?? ''))
+
+// An exercise's past sessions (buildExerciseHistory), under its own name or another name for the same lift
+export function historyFor(byEx, name) {
+  if (!name) return []
+  const names = Object.keys(byEx ?? {})
+  const key = names.find(n => n.trim().toLowerCase() === name.trim().toLowerCase()) ?? names.find(n => sameName(n, name))
+  return key ? byEx[key] : []
+}
 
 // A lighter weight on a plate step: 5 lb, or 2.5 kg
 export function lighter(lb, unit = 'lb') {
@@ -31,9 +39,8 @@ export function lighter(lb, unit = 'lb') {
  */
 export function nextTarget(ex, byEx, { unit = 'lb', deload = false } = {}) {
   if (!ex?.name || timedReps(ex.reps)) return null
-  const names = Object.keys(byEx)
-  const key = names.find(n => n.trim().toLowerCase() === ex.name.trim().toLowerCase()) ?? names.find(n => sameName(n, ex.name))
-  const s = key && suggestNext(byEx[key], { ...parseRepRange(ex.reps), unit })
+  const past = historyFor(byEx, ex.name)
+  const s = past.length && suggestNext(past, { ...parseRepRange(ex.reps), unit })
   if (!s || s.secs) return null
   const weight = deload ? lighter(s.weight, unit) : s.weight
   const w = weight > 0 ? `${fromLb(weight, unit)} ${unit}` : 'Bodyweight'
@@ -57,6 +64,26 @@ export function startableDay(day, deload) {
   return { ...day, workout: { ...day.workout, exercises } }
 }
 
+// Short on time: the day cut to fit 30 or 20 minutes, about 2.5 minutes a set with rest. The
+// exercises keep their order (the big lifts come first), with at most 3 sets each (2 for 20 minutes).
+export const SHORT_MINUTES = [30, 20]
+export const MIN_PER_SET = 2.5
+export const daySets = day => (day?.workout?.exercises ?? []).reduce((a, e) => a + (Number(e.sets) || 3), 0)
+export function shortVersion(day, minutes) {
+  let budget = Math.floor(minutes / MIN_PER_SET)
+  const exercises = []
+  for (const e of day?.workout?.exercises ?? []) {
+    if (budget < 2) break
+    const sets = Math.min(Number(e.sets) || 3, minutes <= 20 ? 2 : 3, budget)
+    exercises.push({ ...e, sets })
+    budget -= sets
+  }
+  return { ...day, durationMinutes: minutes, short: minutes, workout: { ...day.workout, exercises } }
+}
+// The shorter lengths worth offering for a day: only when it's a gym day longer than them
+export const shortOptions = day => (day?.sport === 'swim' || (day?.workout?.exercises ?? []).some(e => timedReps(e.reps)) ? []
+  : SHORT_MINUTES.filter(m => m < (day?.durationMinutes || daySets(day) * MIN_PER_SET)))
+
 /**
  * Missed workouts this week move to the next free days from today on, in order, so the
  * week still gets its sessions. thisWeek: planProgress().thisWeek. Nothing moves onto a day
@@ -78,6 +105,26 @@ export function reshuffleWeek(schedule, thisWeek, today = new Date()) {
     moves.push({ title: m.title, from: m.day, to: to ?? null })
   })
   return { schedule: DAYS.map(d => out[d]).filter(Boolean), moves }
+}
+
+// Swims (cardio_logs) as training days, so a plan's pool sessions count as done
+export const swimsAsHistory = (cardio, label = () => 'Swim') => (cardio ?? []).filter(l => l.kind === 'swim')
+  .map(l => ({ date: l.date, created_at: l.created_at, name: label(l), sets: [], volume: 0 }))
+
+/**
+ * The week as the coach runs it, the same on Plan and Train: progress so far, whether it's a
+ * lighter week, and the schedule with missed workouts moved. history: workout_logs plus swims.
+ */
+export function coachedWeek({ plan, history = [], goalStartDate = null, today = new Date() }) {
+  const planSchedule = plan?.plan_data?.weeklySchedule ?? []
+  const progress = planProgress({
+    schedule: planSchedule, history, today,
+    start: journeyStart({ goalStartDate, plan }),
+    weeks: plan?.plan_data?.summary?.durationWeeks ?? plan?.duration_weeks ?? 8,
+  })
+  const deload = isDeloadWeek(progress.week)
+  const { schedule, moves } = reshuffleWeek(planSchedule, progress.thisWeek, today)
+  return { progress, deload, schedule, moves }
 }
 
 // Best set (heaviest weight, then reps) per exercise in a set of logs

@@ -7,7 +7,7 @@ export const LANDING = 'workout'
 
 const TABS = [
   { id: 'workout',  label: 'Train',    icon: 'mdi:dumbbell' },
-  { id: 'plan',     label: 'Plan',     icon: 'mdi:calendar-check-outline', pro: true },
+  { id: 'plan',     label: 'Plan',     icon: 'mdi:calendar-check-outline' },
   { id: 'calories', label: 'Food',     icon: 'mdi:food-apple-outline' },
   { id: 'progress', label: 'Progress', icon: 'mdi:chart-line' },
   { id: 'swim',     label: 'Swim',     icon: 'mdi:swim' },
@@ -197,17 +197,16 @@ export default function Nav({ page, setPage, session, isPro, isAdmin = false, on
           <div className={`grid ${tabs.length > 5 ? 'grid-cols-6' : 'grid-cols-5'} max-w-lg mx-auto h-14`}>
             {tabs.map(t => {
               const active = activeTab === t.id
-              const locked = t.pro && !isPro
               return (
                 <button key={t.id} onClick={() => setPage(t.id)} aria-current={active ? 'page' : undefined}
                   className={`press relative flex flex-col items-center justify-center gap-0.5 transition-colors ${active ? 'text-ink' : 'text-muted hover:text-ink-2'}`}>
                   <span aria-hidden="true"
                     className={`absolute top-0 left-1/2 -translate-x-1/2 w-7 h-[3px] rounded-b-full bg-neon transition-opacity duration-200 ${active ? 'opacity-100' : 'opacity-0'}`} />
                   <Icon icon={t.icon} width={24} aria-hidden="true" />
-                  {/* Five labels don't fit a very narrow screen (or big phone text): icons only, names kept for screen readers */}
-                  <span className={`flex items-center gap-0.5 text-xs font-semibold ${tabs.length > 5 ? 'max-[339px]:sr-only' : 'max-[319px]:sr-only'}`}>
-                    <span>{t.label}</span>
-                    {locked && <><Icon icon="mdi:lock-outline" width={12} aria-hidden="true" /><span className="sr-only">, Pro</span></>}
+                  {/* Every label shows down to 280px (240px at big phone text keeps only the open tab's),
+                      and six tabs keep only the open one's below 340px; the names stay for screen readers */}
+                  <span className={`text-xs font-semibold leading-tight tracking-tight ${active ? '' : tabs.length > 5 ? 'max-[339px]:sr-only' : 'max-[279px]:sr-only'}`}>
+                    {t.label}
                   </span>
                 </button>
               )

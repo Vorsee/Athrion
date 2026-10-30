@@ -88,7 +88,7 @@ function PublicReviewForm({ onClose }) {
   )
 }
 
-// Landing page: the average, how many, and the latest reviews; before the first one, an invitation
+// Landing page: the average, how many, and the latest reviews; before the first one, an invitation to write one
 export function LandingReviews() {
   const [writing, setWriting] = useState(false)
   const [state, setState] = useState({ summary: { average: null, count: 0 }, reviews: [] })
@@ -103,7 +103,8 @@ export function LandingReviews() {
     <section className="max-w-5xl mx-auto px-4 pb-14" aria-labelledby="reviews">
       <div className="flex flex-wrap items-end justify-between gap-4 mb-5">
         <div>
-          <h2 id="reviews" className="font-bold text-3xl text-ink">Reviews</h2>
+          {/* Before the first review, an invitation rather than "Reviews" with no stars, which reads as no users */}
+          <h2 id="reviews" className="font-bold text-3xl text-ink">{summary.count > 0 ? 'Reviews' : 'Tried ATHRION?'}</h2>
           <div className="flex flex-wrap items-center gap-2 mt-2">
             {summary.count > 0 ? (
               <>
@@ -114,7 +115,7 @@ export function LandingReviews() {
                 </span>
               </>
             ) : (
-              <><Stars value={0} size={20} /><span className="text-sm text-muted">Be the first to review ATHRION.</span></>
+              <p className="text-sm text-ink-2 max-w-md">Tell people what it did for your training. Reviews show here after a quick check.</p>
             )}
           </div>
         </div>

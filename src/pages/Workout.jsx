@@ -3,10 +3,11 @@ import { Icon } from '@iconify/react'
 import { Button, Card, SectionTitle, SectionLink, Skeleton, Chip, Sheet, Segmented, InlineError, InfoButton, Fact, PageHeader, IconButton, ExerciseRow, ActionRow, StatTiles } from '../components/ui/index.js'
 import { EXERCISES, getTodaysExercises, todayKey, fmtTime, getExerciseIcon } from '../lib/data.js'
 import { fetchWorkoutHistory, saveWorkoutEntry, fetchCustomWorkouts, saveCustomWorkout, deleteCustomWorkout } from '../lib/api.js'
-import { fetchActivePlan } from '../lib/fitnessApi.js'
+import { fetchActivePlan, fetchFitnessProfile } from '../lib/fitnessApi.js'
+import { fetchCardio } from '../lib/progressApi.js'
 import { DemoButton, ExerciseDemoSheet } from '../components/ExerciseDemo.jsx'
 import { buildExerciseHistory, getRecords, suggestNext, parseRepRange, findNewPRs } from '../lib/progress.js'
-import { lighter } from '../lib/coaching.js'
+import { lighter, historyFor, coachedWeek, swimsAsHistory, startableDay, shortVersion, shortOptions } from '../lib/coaching.js'
 import { BADGES, computeEarnedBadges } from '../lib/badges.js'
 import { fetchBadges, awardBadges } from '../lib/progressApi.js'
 import { tok } from '../lib/tokens.js'
@@ -112,13 +113,20 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
 
   // The plan is Pro: a lapsed member's old plan would contradict the locked Plan tab.
   // isPro arrives after mount, so this follows it rather than reading it once.
+  // The week runs as on Plan (lib/coaching.js): missed workouts moved to free days, and on a
+  // lighter week one set less with lighter weights
   const [fetchedPlan, setFetchedPlan] = useState(null)
+  const [coachInfo, setCoachInfo] = useState({ goalStartDate: null, swims: [] })
   useEffect(() => {
-    const schedule = isPro ? fetchedPlan?.plan_data?.weeklySchedule : null
+    let schedule = isPro ? fetchedPlan?.plan_data?.weeklySchedule : null
+    if (schedule) {
+      const { schedule: moved, deload } = coachedWeek({ plan: fetchedPlan, history: [...history, ...coachInfo.swims], goalStartDate: coachInfo.goalStartDate })
+      schedule = moved.map(d => (d.type === 'workout' ? startableDay(d, deload) : d))
+    }
     setPlanSchedule(schedule ?? null)
     const todayDay = schedule?.find(d => d.day === TODAY_FULL)
     setPlanWorkout(todayDay?.type === 'workout' && todayDay.workout?.exercises?.length ? todayDay : null) // full dayData, same shape Plan.jsx uses
-  }, [isPro, fetchedPlan])
+  }, [isPro, fetchedPlan, history, coachInfo])
 
   useEffect(() => {
     fetchBadges().then(b => setEarnedBadgeIds(new Set(b.map(x => x.badge_id)))).catch(() => {})
@@ -128,6 +136,8 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       fetchWorkoutHistory().then(h => setHistory([...loadPending().map(asPending), ...h])),
       fetchCustomWorkouts().then(w => setCustomWorkouts(w)),
       fetchActivePlan().then(plan => setFetchedPlan(plan ?? null)),
+      Promise.all([fetchFitnessProfile().catch(() => null), fetchCardio(500).catch(() => [])])
+        .then(([fp, cardio]) => setCoachInfo({ goalStartDate: fp?.goal_start_date ?? null, swims: swimsAsHistory(cardio) })),
     ]).then(() => { setHomeReady(true); retryPending() })
 
     // Restore in-progress workout
@@ -603,7 +613,11 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
   const otherDays = isRestDay ? upcomingWorkoutDays(planSchedule) : []
   const [pickedDay, setPickedDay] = useState(null)
   const starter = !planWorkout && !planSchedule && !todayCustom ? starterSession(history.length) : null
-  const shownWorkout = isRestDay ? (pickedDay ?? otherDays[0] ?? null) : planWorkout ?? starter
+  const fullWorkout = isRestDay ? (pickedDay ?? otherDays[0] ?? null) : planWorkout ?? starter
+  // Short on time: a 30 or 20 minute version of the same workout
+  const [short, setShort] = useState(null)
+  const lengths = shortOptions(fullWorkout)
+  const shownWorkout = short && lengths.includes(short) ? shortVersion(fullWorkout, short) : fullWorkout
 
   const planExercises = shownWorkout?.workout?.exercises ?? []
   const planName = shownWorkout?.title ?? fallbackName
@@ -613,7 +627,7 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
   function handlePlanStart() {
     const mapped = matchPlanExercises(planExercises)
     const perExRest = planExercises.map(e => e.restSeconds ?? 60)
-    onPlanStart(mapped, planName, planSets, perExRest)
+    onPlanStart(mapped, planName, planSets, perExRest, planExercises.map(e => e.sets))
   }
 
   return (
@@ -674,8 +688,8 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
                 <>
                   <div className="flex flex-wrap gap-1.5">
                     {otherDays.map(d => (
-                      <button key={d.day} onClick={() => setPickedDay(d)} aria-pressed={shownWorkout === d}
-                        className={`press min-h-[36px] text-xs px-3 rounded-full border transition-colors text-left ${shownWorkout === d ? 'bg-neon text-on-neon border-neon font-semibold' : 'bg-raised text-ink-2 border-line hover:border-neon-stroke/30'}`}>
+                      <button key={d.day} onClick={() => setPickedDay(d)} aria-pressed={fullWorkout === d}
+                        className={`press min-h-[36px] text-xs px-3 rounded-full border transition-colors text-left ${fullWorkout === d ? 'bg-neon text-on-neon border-neon font-semibold' : 'bg-raised text-ink-2 border-line hover:border-neon-stroke/30'}`}>
                         <span className="font-semibold">{d.day.slice(0, 3)}</span> · {d.title}
                       </button>
                     ))}
@@ -691,6 +705,18 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
             const minutes = (shownWorkout ?? planWorkout)?.durationMinutes ?? Math.round(sets * 2.5 / 5) * 5
             return <StatTiles className="mb-4" items={[['Exercises', list.length], ['Sets', sets], ['Minutes', `~${minutes}`]]} />
           })()}
+
+          {lengths.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 mb-4" role="group" aria-label="Session length">
+              <span className="text-xs text-muted mr-1">Short on time?</span>
+              {[null, ...lengths].map(m => (
+                <button key={m ?? 'full'} onClick={() => setShort(m)} aria-pressed={short === m}
+                  className={`press min-h-[36px] text-xs px-3 rounded-full border transition-colors ${short === m ? 'bg-neon text-on-neon border-neon font-semibold' : 'bg-raised text-ink-2 border-line hover:border-neon-stroke/30'}`}>
+                  {m ? `${m} min` : 'Full'}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Exercise list */}
           {shownWorkout ? (
@@ -977,7 +1003,7 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
   const thisExSets = loggedSets.map((s, i) => ({ ...s, i })).filter(s => s.ex === ex.name)
   const progress = freeWorkout ? null : (setsDone / setsTotal) * 100
   const prev = loggedSets.filter(s => s.ex === ex.name).slice(-1)[0]
-  const pastSessions = exerciseHistory?.[ex.name] ?? []
+  const pastSessions = historyFor(exerciseHistory, ex.name) // also under another name for the same lift
   const lastSession = pastSessions[pastSessions.length - 1]
   const records = pastSessions.length ? getRecords(pastSessions) : null
   const mode = exerciseMode(ex)

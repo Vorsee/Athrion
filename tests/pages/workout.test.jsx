@@ -20,11 +20,17 @@ beforeEach(() => {
   sb.set('custom_workouts', { data: [], error: null })
   sb.set('user_badges', { data: [], error: null })
 })
+// Monday's and Wednesday's plan workouts were done, so nothing moves onto today (reshuffleWeek)
+const doneMonWed = () => sb.set('workout_logs', { data: [
+  { id: 'w1', date: '2026-10-19', created_at: '2026-10-19T18:00:00Z', name: 'Upper Body', sets: [], volume: 0 },
+  { id: 'w2', date: '2026-10-21', created_at: '2026-10-21T18:00:00Z', name: 'Lower Body', sets: [], volume: 0 },
+], error: null })
 const show = (props = {}) => render(<Workout isPro onUpgrade={() => {}} onClearPending={() => {}} {...props} />)
 
 describe('Workout tab — rest days match the plan', () => {
   it('shows the plan rest day instead of a generic workout', async () => {
     sb.set('fitness_plans', { data: planRow, error: null })
+    doneMonWed()
     show()
     expect(await screen.findByText('Rest & Recovery')).toBeInTheDocument()
     await userEvent.click(screen.getByLabelText('Recovery')) // recovery notes open from ⓘ
@@ -38,6 +44,7 @@ describe('Workout tab — rest days match the plan', () => {
     // App learns Pro status after Workout mounts; the plan must still show once it does
     it('shows the plan when Pro status arrives after the tab loaded', async () => {
       sb.set('fitness_plans', { data: planRow, error: null })
+      doneMonWed()
       const { rerender } = render(<Workout isPro={false} onUpgrade={() => {}} onClearPending={() => {}} />)
       await waitFor(() => expect(sb.queriesFor('fitness_plans').length).toBeGreaterThan(0))
       expect(screen.queryByText('Rest & Recovery')).toBeNull()
@@ -48,6 +55,7 @@ describe('Workout tab — rest days match the plan', () => {
 
   it('offers the plan workouts, next one first, and starts the picked one', async () => {
     sb.set('fitness_plans', { data: planRow, error: null })
+    doneMonWed()
     show()
     await screen.findByText('Rest & Recovery')
     const chips = screen.getAllByRole('button').filter(b => /^(Mon|Wed) · /.test(b.textContent))
@@ -58,6 +66,14 @@ describe('Workout tab — rest days match the plan', () => {
     await userEvent.click(screen.getByText('Train anyway'))
     expect(await screen.findByText(/^Log set \d/)).toBeInTheDocument()
     expect(screen.getAllByText('Squat').length).toBeGreaterThan(0)
+  })
+
+  it('moves missed workouts onto today, as Plan does', async () => {
+    sb.set('fitness_plans', { data: planRow, error: null })
+    show()
+    expect(await screen.findByText('Upper Body')).toBeInTheDocument() // Monday's, missed
+    expect(screen.getByText('Barbell Bench Press')).toBeInTheDocument()
+    expect(screen.getByText('Start workout')).toBeInTheDocument()
   })
 
   it('shows today\'s plan workout on a training day', async () => {

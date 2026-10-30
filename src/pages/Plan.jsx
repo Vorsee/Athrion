@@ -14,14 +14,14 @@ import { fetchMeasurements, fetchCheckinWeights, saveMeasurement, fetchCardio } 
 import { strokeLabel } from '../lib/swim.js'
 import { calculateNutritionTargets, GOAL_LABELS, GOAL_ICONS, healthFrom } from '../lib/nutrition.js'
 import { GoalCard, ResultsCard, GoalSheet, WeightSheet } from '../components/GoalProgress.jsx'
-import { planProgress, journeyStart, mergeWeights, DAYS } from '../lib/planProgress.js'
+import { planProgress, mergeWeights, DAYS } from '../lib/planProgress.js'
 import { weightPlan, isWeightGoal, goalProgress } from '../lib/weightGoal.js'
 import { goalsLabel } from '../lib/goalPick.js'
 import { localDateKey, todayKey } from '../lib/data.js'
 import { sampleFor } from '../lib/sampleFor.js'
 import ProLock from '../components/ProLock.jsx'
 import { useUnit } from '../lib/units.js'
-import { isDeloadWeek, dayTargets, startableDay, reshuffleWeek, weeklyReview } from '../lib/coaching.js'
+import { coachedWeek, swimsAsHistory, dayTargets, startableDay, weeklyReview } from '../lib/coaching.js'
 import { liftProgress } from '../lib/liftGoals.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -188,7 +188,7 @@ function useGoalData() {
       fetchCardio(500).catch(() => []),
     ])
     // Swims count as training days too, so the plan's pool sessions show as done
-    const swims = (cardio ?? []).filter(l => l.kind === 'swim').map(l => ({ date: l.date, created_at: l.created_at, name: l.stroke ? `${strokeLabel(l.stroke)} swim` : 'Swim', sets: [], volume: 0 }))
+    const swims = swimsAsHistory(cardio, l => (l.stroke ? `${strokeLabel(l.stroke)} swim` : 'Swim'))
     setData({ fp, weights: mergeWeights(measurements, checkins), history: [...workouts, ...swims] })
   }
   useEffect(() => { load() }, [])
@@ -779,15 +779,11 @@ function PlanPage({ onGoToWorkout, onStartWorkout, onOpenSwim, profile, onProfil
   const goalLabel = GOAL_LABELS[plan.primary_goal] ?? plan.primary_goal
   const goalIcon = GOAL_ICONS[plan.primary_goal] ?? 'mdi:target'
 
-  const progress = goalData && planProgress({
-    schedule: planSchedule, history: goalData.history,
-    start: journeyStart({ goalStartDate: goalData.fp?.goal_start_date, plan }),
-    weeks: summary.durationWeeks ?? plan.duration_weeks ?? 8,
-  })
-
   // The coaching: missed workouts moved to free days, a lighter week every 5th, targets per exercise
-  const deload = !!progress && isDeloadWeek(progress.week)
-  const { schedule, moves } = progress ? reshuffleWeek(planSchedule, progress.thisWeek) : { schedule: planSchedule, moves: [] }
+  const coached = goalData && coachedWeek({ plan, history: goalData.history, goalStartDate: goalData.fp?.goal_start_date })
+  const progress = coached?.progress
+  const deload = !!coached?.deload
+  const { schedule, moves } = coached ?? { schedule: planSchedule, moves: [] }
   const todayData = schedule.find(d => d.day === TODAY_NAME) ?? null
   const targetsFor = d => (goalData ? dayTargets(d, goalData.history, { unit, deload }) : {})
   const fp = goalData?.fp
