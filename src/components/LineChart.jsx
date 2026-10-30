@@ -23,8 +23,9 @@ const fmtDate = d => asDate(d).toLocaleDateString(undefined, { month: 'short', d
  * @param data  [{ date, value }] in any order
  * @param unit  appended to values, e.g. "lb"
  * @param target optional goal value, drawn as a dashed line
+ * @param format optional value → text (a swim pace in seconds as 1:52); replaces the rounding and unit
  */
-export default function LineChart({ data, unit = '', height = 170, label = 'Value', target = null }) {
+export default function LineChart({ data, unit = '', height = 170, label = 'Value', target = null, format = null }) {
   const wrapRef = useRef(null)
   const [width, setWidth] = useState(320)
   const [hover, setHover] = useState(null)
@@ -47,7 +48,7 @@ export default function LineChart({ data, unit = '', height = 170, label = 'Valu
     return <div className="text-xs text-muted py-6 text-center">Add at least two entries to see a trend.</div>
   }
 
-  const fmt = v => `${Math.round(v * 10) / 10}${unit ? ` ${unit}` : ''}`
+  const fmt = v => (format ? format(v) : `${Math.round(v * 10) / 10}${unit ? ` ${unit}` : ''}`)
   const values = [...points.map(p => p.value), ...(target != null ? [Number(target)] : [])]
   const ticks = niceTicks(Math.min(...values), Math.max(...values))
   const yMin = ticks[0], yMax = ticks[ticks.length - 1]
@@ -76,7 +77,7 @@ export default function LineChart({ data, unit = '', height = 170, label = 'Valu
         {ticks.map(t => (
           <g key={t} className="text-line">
             <line x1={PAD.left} x2={width - PAD.right} y1={y(t)} y2={y(t)} stroke="currentColor" strokeWidth="1" />
-            <text x={PAD.left - 6} y={y(t) + 3} textAnchor="end" className="fill-muted" fontSize="11">{t}</text>
+            <text x={PAD.left - 6} y={y(t) + 3} textAnchor="end" className="fill-muted" fontSize="11">{format ? format(t) : t}</text>
           </g>
         ))}
         <text x={PAD.left} y={height - 6} className="fill-muted" fontSize="11">{fmtDate(points[0].date)}</text>
@@ -93,7 +94,7 @@ export default function LineChart({ data, unit = '', height = 170, label = 'Valu
 
         {/* Direct label on the latest point */}
         <circle cx={x(last.t)} cy={y(last.value)} r="4" className="text-neon-ink stroke-surface" fill="currentColor" strokeWidth="2" />
-        <text x={x(last.t) + 8} y={y(last.value) + 3} fontSize="11" className="fill-ink-2">{Math.round(last.value * 10) / 10}</text>
+        <text x={x(last.t) + 8} y={y(last.value) + 3} fontSize="11" className="fill-ink-2">{format ? format(last.value) : Math.round(last.value * 10) / 10}</text>
 
         {hover && (
           <g>

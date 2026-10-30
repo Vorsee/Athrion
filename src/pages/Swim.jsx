@@ -1,26 +1,36 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useSyncExternalStore } from 'react'
 import { Icon } from '@iconify/react'
 import { useBackHandler } from '../lib/shell.js'
 import { Button, Card, SectionTitle, Segmented, EmptyState, SkeletonRows, InlineError, PageHeader, Fact, InfoButton, ListRow } from '../components/ui/index.js'
 import { fetchCardio, saveCardio, deleteCardio } from '../lib/progressApi.js'
 import { cardioUnits, parseDuration, fmtDuration, fmtDistance, paceSecs } from '../lib/cardio.js'
-import { STROKES, strokeLabel, strokeStats, strokeBoard, daysAgo, swimInviteLink, clearSwimInvite } from '../lib/swim.js'
+import {
+  STROKES, DISTANCE_BANDS, strokeLabel, strokeStats, strokeBoard, daysAgo, swimInviteLink, clearSwimInvite,
+  readPoolUnit, setPoolUnit, subscribePoolUnit, intervalSet,
+  PRACTICE_PARTS, PRACTICE_TEMPLATES, blankItem, practiceTotals, practiceLine, mainStroke,
+} from '../lib/swim.js'
 import {
   photoUrls, fetchMyPhoto, uploadMyPhoto, fetchCoachedTeam, saveTeam, newTeamCode, fetchRoster, fetchSwimmerSwims,
   respondToSwimmer, fetchTeamPrs, fetchMyTeam, teamByCode, leaveTeam, searchTeams, joinTeam,
+  fetchPractices, savePractice, deletePractice,
 } from '../lib/swimApi.js'
+import Sheet from '../components/Sheet.jsx'
+import { localDateKey } from '../lib/data.js'
 import { shareLink } from '../lib/shopLink.js'
 import { fetchMyCoach, saveCoachProfile, fetchIsAdmin } from '../lib/coachApi.js'
 import { Applications } from './Coach.jsx'
 import { useUnit } from '../lib/units.js'
+import LineChart from '../components/LineChart.jsx'
 import { todayKey } from '../lib/data.js'
 
 const fmtDate = d => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 const inputCls = 'w-full bg-raised border border-line rounded-xl px-3 py-2 text-sm text-ink placeholder:text-placeholder focus:outline-none focus:border-neon-stroke/40'
 
+// Metres or yards: the pool unit picked on Log a swim, else the weight unit's system
 function useSwimUnits() {
   const { unit } = useUnit()
-  return cardioUnits('swim', unit)
+  const pool = useSyncExternalStore(subscribePoolUnit, readPoolUnit) ?? (unit === 'kg' ? 'm' : 'yd')
+  return cardioUnits('swim', pool === 'm' ? 'kg' : 'lb')
 }
 
 // ── Shared pieces ────────────────────────────────────────────────────────────
@@ -109,20 +119,32 @@ function SwimList({ swims, onDelete }) {
 
 function LogSwim({ stroke, setStroke, onSaved }) {
   const u = useSwimUnits()
-  const [form, setForm] = useState({ date: todayKey(), distance: '', time: '', notes: '' })
+  const blank = { date: todayKey(), distance: '', time: '', notes: '', reps: '', each: '', sendOff: '' }
+  const [form, setForm] = useState(blank)
+  const [mode, setMode] = useState('swim') // swim | set
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
-  const distance = parseFloat(form.distance)
-  const seconds = parseDuration(form.time)
+  const set = mode === 'set' ? intervalSet({ reps: parseInt(form.reps, 10), each: parseFloat(form.each), sendOff: parseDuration(form.sendOff.includes(':') ? form.sendOff : `0:${form.sendOff}`), dist: u.dist }) : null
+  const distance = mode === 'set' ? set?.distance : parseFloat(form.distance)
+  const seconds = mode === 'set' ? set?.seconds : parseDuration(form.time)
   const pace = distance > 0 && seconds ? fmtDuration(paceSecs({ seconds, distance_m: u.toM(distance) }, u)) : null
+  const field = (key, label, props) => (
+    <label className="block">
+      <span className="text-xs text-muted">{label}</span>
+      <input value={form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} className={`mt-1 ${inputCls}`} {...props} />
+    </label>
+  )
+  const timeOnly = v => v.replace(/[^\d:]/g, '').slice(0, 8)
 
   async function save() {
     setSaving(true); setErr('')
     try {
+      if (mode === 'set' && !set) throw new Error('Enter the reps, the distance of each and the send-off, like 10 × 100 on 1:45')
       if (!(distance > 0)) throw new Error(`Enter the distance in ${u.dist}`)
       if (!seconds) throw new Error('Enter the time, like 32:00 or 1:05:00')
-      await saveCardio({ date: form.date, kind: 'swim', stroke, distance_m: Math.round(u.toM(distance) * 10) / 10, seconds, notes: form.notes.trim().slice(0, 300) })
-      setForm({ date: todayKey(), distance: '', time: '', notes: '' })
+      const notes = [set?.note, form.notes.trim()].filter(Boolean).join('. ').slice(0, 300)
+      await saveCardio({ date: form.date, kind: 'swim', stroke, distance_m: Math.round(u.toM(distance) * 10) / 10, seconds, notes })
+      setForm(blank)
       onSaved()
     } catch (e) {
       setErr(e.message || 'Could not save')
@@ -133,19 +155,35 @@ function LogSwim({ stroke, setStroke, onSaved }) {
 
   return (
     <Card>
-      <SectionTitle>Log a swim</SectionTitle>
+      <SectionTitle action={
+        <div role="group" aria-label="Pool unit" className="flex rounded-lg border border-line overflow-hidden text-xs font-semibold">
+          {['m', 'yd'].map(v => (
+            <button key={v} type="button" onClick={() => setPoolUnit(v)} aria-pressed={u.dist === v}
+              className={`press min-h-[32px] min-w-[40px] px-2 ${u.dist === v ? 'bg-neon text-on-neon' : 'text-ink-2'}`}>{v === 'm' ? 'Metres' : 'Yards'}</button>
+          ))}
+        </div>
+      }>Log a swim</SectionTitle>
       <Segmented options={STROKES.map(s => [s.id, s.label])} value={stroke} onChange={setStroke} label="Stroke" kind="choice" scroll />
+      <div className="mt-3">
+        <Segmented options={[['swim', 'One swim'], ['set', 'Interval set']]} value={mode} onChange={setMode} label="What you swam" kind="choice" />
+      </div>
       <div className="grid gap-3 mt-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 8rem), 1fr))' }}>
-        <label className="block">
-          <span className="text-xs text-muted">Distance ({u.dist})</span>
-          <input type="number" inputMode="decimal" step="25" value={form.distance} placeholder={u.dist === 'm' ? '1500' : '1650'}
-            onChange={e => setForm(f => ({ ...f, distance: e.target.value }))} className={`mt-1 ${inputCls}`} />
-        </label>
-        <label className="block">
-          <span className="text-xs text-muted">Time</span>
-          <input inputMode="numeric" value={form.time} placeholder="32:00"
-            onChange={e => setForm(f => ({ ...f, time: e.target.value.replace(/[^\d:]/g, '').slice(0, 8) }))} className={`mt-1 ${inputCls}`} />
-        </label>
+        {mode === 'swim' ? <>
+          {field('distance', `Distance (${u.dist})`, { type: 'number', inputMode: 'decimal', step: 25, placeholder: u.dist === 'm' ? '1500' : '1650' })}
+          <label className="block">
+            <span className="text-xs text-muted">Time</span>
+            <input inputMode="numeric" value={form.time} placeholder="32:00"
+              onChange={e => setForm(f => ({ ...f, time: timeOnly(e.target.value) }))} className={`mt-1 ${inputCls}`} />
+          </label>
+        </> : <>
+          {field('reps', 'Reps', { type: 'number', inputMode: 'numeric', min: 1, placeholder: '10' })}
+          {field('each', `Each (${u.dist})`, { type: 'number', inputMode: 'numeric', step: 25, placeholder: '100' })}
+          <label className="block">
+            <span className="text-xs text-muted">Send-off</span>
+            <input inputMode="numeric" value={form.sendOff} placeholder="1:45"
+              onChange={e => setForm(f => ({ ...f, sendOff: timeOnly(e.target.value) }))} className={`mt-1 ${inputCls}`} />
+          </label>
+        </>}
         <label className="block">
           <span className="text-xs text-muted">Date</span>
           <input type="date" value={form.date} max={todayKey()} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} className={`mt-1 ${inputCls}`} />
@@ -157,13 +195,52 @@ function LogSwim({ stroke, setStroke, onSaved }) {
       </div>
       <input value={form.notes} maxLength={300} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
         placeholder="Notes: drills, kick sets, open water" aria-label="Notes" className={`mt-3 ${inputCls}`} />
-      <Button full onClick={save} disabled={saving} className="mt-3">{saving ? 'Saving...' : `Save ${strokeLabel(stroke).toLowerCase()} swim`}</Button>
+      {set && <p className="text-xs text-muted mt-2 tabular-nums">{set.note}: {set.distance} {u.dist} in {fmtDuration(set.seconds)}, rest included.</p>}
+      <Button full onClick={save} disabled={saving} className="mt-3">{saving ? 'Saving...' : `Save ${strokeLabel(stroke).toLowerCase()} ${mode === 'set' ? 'set' : 'swim'}`}</Button>
       {err && <p role="alert" className="text-xs text-danger mt-2">{err}</p>}
     </Card>
   )
 }
 
-function MySwims({ swims, onChanged }) {
+// Pro: pace over time for one stroke. Lower is faster. Swims of at least one pool length.
+function StrokeProgress({ swims, isPro, onUpgrade }) {
+  const u = useSwimUnits()
+  const [stroke, setStroke] = useState('free')
+  if (!isPro) return (
+    <Card className="flex flex-wrap items-center gap-3">
+      <Icon icon="mdi:chart-line" width={26} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
+      <div className="grow basis-0 min-w-[10rem]">
+        <div className="text-sm font-bold text-ink">Stroke progress <span className="ml-1 text-xs font-semibold text-on-neon bg-neon rounded-md px-1.5 py-0.5">Pro</span></div>
+        <p className="text-xs text-muted">Your pace for each stroke over time, and pool workouts written for you in your plan.</p>
+      </div>
+      {onUpgrade && <Button size="sm" onClick={onUpgrade}>Get Pro</Button>}
+    </Card>
+  )
+  const points = swims.filter(l => l.stroke === stroke && Number(l.distance_m) >= 25 && l.seconds > 0)
+    .map(l => ({ date: l.date, value: paceSecs(l, u) }))
+  const first = points.length ? [...points].sort((a, b) => a.date.localeCompare(b.date))[0] : null
+  const best = points.length ? Math.min(...points.map(p => p.value)) : null
+  return (
+    <Card>
+      <SectionTitle action={<InfoButton title="Stroke progress">
+        Your pace per {u.per} on every swim of this stroke. Lower is faster. Interval sets count with their rest, so they sit a little higher.
+      </InfoButton>}>Stroke progress</SectionTitle>
+      <Segmented options={STROKES.map(s => [s.id, s.label])} value={stroke} onChange={setStroke} label="Stroke" kind="choice" scroll />
+      {points.length >= 2 ? (
+        <div className="mt-3">
+          <LineChart data={points} label={`${strokeLabel(stroke)} pace`} format={v => `${fmtDuration(v)}`} />
+          <p className="text-xs text-muted mt-2 tabular-nums">
+            Best {fmtDuration(best)} /{u.per}{first && best < first.value ? `, ${fmtDuration(first.value - best)} faster than your first` : ''}.
+          </p>
+        </div>
+      ) : (
+        <p className="text-sm text-muted text-center py-5">Log two {strokeLabel(stroke).toLowerCase()} swims to see your pace over time.</p>
+      )}
+    </Card>
+  )
+}
+
+function MySwims({ swims, onChanged, isPro, onUpgrade }) {
   const u = useSwimUnits()
   const [stroke, setStroke] = useState('free')
   const [filter, setFilter] = useState(null)
@@ -185,6 +262,8 @@ function MySwims({ swims, onChanged }) {
 
       <LogSwim stroke={stroke} setStroke={setStroke} onSaved={onChanged} />
 
+      <StrokeProgress swims={swims} isPro={isPro} onUpgrade={onUpgrade} />
+
       {shown.length > 0 ? (
         <Card>
           <SectionTitle action={filter && <button onClick={() => setFilter(null)} className="press text-xs font-semibold text-neon-ink min-h-[32px]">Show all</button>}>
@@ -198,6 +277,238 @@ function MySwims({ swims, onChanged }) {
         </EmptyState>
       )}
     </div>
+  )
+}
+
+// ── Practices ────────────────────────────────────────────────────────────────
+
+const plusDays = n => localDateKey(new Date(Date.now() + n * 86400000))
+const dayName = d => d === todayKey() ? 'Today' : d === plusDays(1) ? 'Tomorrow' : new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })
+
+// The sets, grouped by part, with the total
+function PracticeSets({ practice }) {
+  const t = practiceTotals(practice.items)
+  return (
+    <div className="space-y-3">
+      {PRACTICE_PARTS.map(([part, label]) => {
+        const items = practice.items.filter(i => i.part === part)
+        return items.length > 0 && (
+          <div key={part}>
+            <div className="text-xs font-semibold text-muted mb-1">{label}</div>
+            <ul className="space-y-1">
+              {items.map((i, n) => (
+                <li key={n} className="flex flex-wrap justify-between gap-x-3 text-sm">
+                  <span className="font-semibold text-ink tabular-nums">{practiceLine(i)}</span>
+                  {i.note && <span className="text-ink-2">{i.note}</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )
+      })}
+      {practice.notes && <p className="text-sm text-ink-2 border-l-2 border-neon-stroke/40 pl-3">{practice.notes}</p>}
+      <div className="flex flex-wrap gap-1.5">
+        <Fact icon="mdi:map-marker-distance">{t.distance.toLocaleString()} {t.unit} total</Fact>
+        {t.seconds && <Fact icon="mdi:clock-outline">About {Math.round(t.seconds / 60)} min</Fact>}
+      </div>
+    </div>
+  )
+}
+
+// The coach writes a day's practice: start from a template, edit each set, post it
+function PracticeEditor({ teamId, date: firstDate, existing, onClose, onSaved }) {
+  const u = useSwimUnits()
+  const [date, setDate] = useState(firstDate)
+  const [title, setTitle] = useState(existing?.title ?? '')
+  const [items, setItems] = useState(existing?.items ?? [])
+  const [notes, setNotes] = useState(existing?.notes ?? '')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const t = practiceTotals(items)
+  const set = (n, k, v) => setItems(list => list.map((i, x) => (x === n ? { ...i, [k]: v } : i)))
+
+  async function save() {
+    setErr('')
+    if (!title.trim()) return setErr('Give the practice a name, like Aerobic base')
+    const clean = items.filter(i => Number(i.reps) > 0 && Number(i.distance) > 0)
+      .map(i => ({ ...i, reps: Math.min(99, Math.round(Number(i.reps))), distance: Math.min(5000, Math.round(Number(i.distance))), send_off: /^\d{1,2}:\d{2}$/.test(i.send_off) ? i.send_off : '', note: (i.note ?? '').slice(0, 60) }))
+    if (!clean.length) return setErr('Add at least one set')
+    setBusy(true)
+    try { await savePractice({ teamId, date, title, items: clean, notes }); onSaved() } catch (x) { setErr(x.message); setBusy(false) }
+  }
+
+  return (
+    <Sheet title={existing ? 'Edit practice' : 'Post a practice'} onClose={onClose} footer={
+      <div className="space-y-2">
+        {err && <p role="alert" className="text-xs text-danger">{err}</p>}
+        <Button full icon="mdi:send" onClick={save} disabled={busy}>{busy ? 'Posting…' : existing ? 'Save and tell the team' : 'Post to the team'}</Button>
+      </div>
+    }>
+      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 9rem), 1fr))' }}>
+        <label className="block">
+          <span className="text-xs text-muted">Name</span>
+          <input value={title} maxLength={60} onChange={e => setTitle(e.target.value)} placeholder="Aerobic base" className={`mt-1 ${inputCls}`} />
+        </label>
+        <label className="block">
+          <span className="text-xs text-muted">Day</span>
+          <input type="date" value={date} min={todayKey()} onChange={e => setDate(e.target.value)} disabled={!!existing} className={`mt-1 ${inputCls}`} />
+        </label>
+      </div>
+      {!items.length && (
+        <div>
+          <div className="text-xs text-muted mb-1.5">Start from</div>
+          <div className="flex flex-wrap gap-1.5">
+            {PRACTICE_TEMPLATES.map(tp => (
+              <button key={tp.title} type="button" onClick={() => { setItems(tp.build(u.dist)); setTitle(x => x || tp.title) }}
+                className="press min-h-[36px] px-3.5 rounded-full text-xs font-semibold border bg-raised text-ink-2 border-line hover:border-line-strong">{tp.title}</button>
+            ))}
+          </div>
+        </div>
+      )}
+      {PRACTICE_PARTS.map(([part, label]) => (
+        <section key={part} aria-label={label} className="space-y-2">
+          <div className="text-sm font-semibold text-ink">{label}</div>
+          {items.map((i, n) => i.part === part && (
+            <div key={n} className="rounded-xl border border-line p-2.5 space-y-2">
+              <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 4.5rem), 1fr))' }}>
+                <label><span className="text-xs text-muted">Reps</span>
+                  <input type="number" inputMode="numeric" min={1} value={i.reps} onChange={e => set(n, 'reps', e.target.value)} className={`mt-0.5 ${inputCls}`} /></label>
+                <label><span className="text-xs text-muted">Each ({i.unit})</span>
+                  <input type="number" inputMode="numeric" step={25} min={25} value={i.distance} onChange={e => set(n, 'distance', e.target.value)} className={`mt-0.5 ${inputCls}`} /></label>
+                <label><span className="text-xs text-muted">Send-off</span>
+                  <input inputMode="numeric" value={i.send_off} placeholder="1:45" onChange={e => set(n, 'send_off', e.target.value.replace(/[^\d:]/g, '').slice(0, 5))} className={`mt-0.5 ${inputCls}`} /></label>
+                <label><span className="text-xs text-muted">Stroke</span>
+                  <select value={i.stroke} onChange={e => set(n, 'stroke', e.target.value)} className={`mt-0.5 ${inputCls}`}>
+                    {STROKES.map(st => <option key={st.id} value={st.id}>{st.label}</option>)}
+                  </select></label>
+              </div>
+              <div className="flex gap-2">
+                <input value={i.note} maxLength={60} placeholder="Note: drill, effort, kick" aria-label="Note" onChange={e => set(n, 'note', e.target.value)} className={`${inputCls} grow`} />
+                <button type="button" onClick={() => setItems(list => list.filter((_, x) => x !== n))} aria-label="Remove this set"
+                  className="press w-10 min-h-[38px] rounded-xl border border-line text-muted hover:text-danger flex items-center justify-center flex-shrink-0"><Icon icon="mdi:close" width={18} /></button>
+              </div>
+            </div>
+          ))}
+          <button type="button" onClick={() => setItems(list => [...list, blankItem(part, u.dist)])}
+            className="press w-full min-h-[40px] rounded-xl border border-dashed border-line-strong text-sm font-semibold text-ink-2 flex items-center justify-center gap-1.5">
+            <Icon icon="mdi:plus" width={18} />Add {label.toLowerCase()}
+          </button>
+        </section>
+      ))}
+      <label className="block">
+        <span className="text-xs text-muted">Notes for the team</span>
+        <textarea value={notes} maxLength={500} rows={2} onChange={e => setNotes(e.target.value)} placeholder="Bring fins. Focus on turns." className={`mt-1 ${inputCls} resize-none`} />
+      </label>
+      <p className="text-xs text-muted tabular-nums">{t.distance.toLocaleString()} {u.dist} total{t.seconds ? `, about ${Math.round(t.seconds / 60)} min` : ''}. Posting sends every swimmer a notification.</p>
+    </Sheet>
+  )
+}
+
+// Coach: today's and coming practices, and a button to post one
+function CoachPractices({ team }) {
+  const [state, setState] = useState({ list: null, ready: true })
+  const [editing, setEditing] = useState(null) // { date, existing }
+  const [err, setErr] = useState('')
+  const load = () => fetchPractices(team.id, todayKey()).then(r => setState({ list: r.practices, ready: r.ready })).catch(e => setErr(e.message))
+  useEffect(() => { load() }, [team.id])
+  if (!state.ready) return null
+  const today = state.list?.find(p => p.date === todayKey())
+  const coming = state.list?.filter(p => p.date !== todayKey()) ?? []
+
+  async function remove(p) {
+    if (!window.confirm(`Delete ${dayName(p.date).toLowerCase()}'s practice?`)) return
+    try { await deletePractice(p.id); load() } catch (x) { setErr(x.message) }
+  }
+
+  return (
+    <section aria-label="Practices">
+      <SectionTitle action={<InfoButton title="Practices">
+        Post the day's warm-up, sets and cool-down. Everyone on the team gets a notification and sees it on their Swim tab, and can log it as a swim in one tap.
+      </InfoButton>}>Today's practice</SectionTitle>
+      {state.list == null ? <SkeletonRows rows={2} label="Loading practices" /> : today ? (
+        <Card className="space-y-3">
+          <div className="flex flex-wrap items-start gap-2">
+            <div className="grow basis-0 min-w-[8rem] font-bold text-lg text-ink break-words">{today.title}</div>
+            <button onClick={() => setEditing({ date: today.date, existing: today })} className="press text-xs font-semibold text-neon-ink min-h-[36px] px-2">Edit</button>
+            <button onClick={() => remove(today)} className="press text-xs font-semibold text-muted hover:text-danger min-h-[36px] px-2">Delete</button>
+          </div>
+          <PracticeSets practice={today} />
+        </Card>
+      ) : (
+        <Button full icon="mdi:clipboard-plus-outline" onClick={() => setEditing({ date: todayKey() })}>Post today's practice</Button>
+      )}
+      {coming.length > 0 && (
+        <ul className="mt-2 space-y-1.5">
+          {coming.map(p => (
+            <li key={p.id}>
+              <button onClick={() => setEditing({ date: p.date, existing: p })} className="press w-full text-left bg-surface border border-line rounded-xl px-3 py-2 flex flex-wrap justify-between gap-x-3 text-sm">
+                <span className="font-semibold text-ink">{dayName(p.date)}: {p.title}</span>
+                <span className="text-muted tabular-nums">{practiceTotals(p.items).distance.toLocaleString()} {practiceTotals(p.items).unit}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {today && <button onClick={() => setEditing({ date: plusDays(1) })} className="press mt-2 w-full min-h-[40px] text-sm font-semibold text-neon-ink">Plan another day</button>}
+      {err && <p role="alert" className="text-xs text-danger mt-1">{err}</p>}
+      {editing && <PracticeEditor teamId={team.id} date={editing.date} existing={editing.existing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load() }} />}
+    </section>
+  )
+}
+
+// Swimmer: the coach's practice for today (or the next one), logged as a swim in one tap
+function TeamPractice({ teamId, compact = false, onOpen, onLogged }) {
+  const [list, setList] = useState(null)
+  const [time, setTime] = useState('')
+  const [state, setState] = useState('idle') // idle | saving | done
+  const [err, setErr] = useState('')
+  useEffect(() => { fetchPractices(teamId, todayKey()).then(r => setList(r.practices)).catch(() => setList([])) }, [teamId])
+  const p = list?.[0]
+  if (!p) return null
+  const t = practiceTotals(p.items)
+  const isToday = p.date === todayKey()
+
+  if (compact) return (
+    <Card pad="sm">
+      <ListRow icon="mdi:clipboard-text-outline" tile="neon-ink" title={`${dayName(p.date)}: ${p.title}`}
+        meta={`From your coach · ${t.distance.toLocaleString()} ${t.unit}`} chevron onClick={onOpen} />
+    </Card>
+  )
+
+  async function log() {
+    setErr('')
+    const seconds = t.seconds ?? parseDuration(time)
+    if (!seconds) return setErr('Enter how long the practice took, like 55:00')
+    setState('saving')
+    try {
+      const distance_m = Math.round((t.unit === 'yd' ? t.distance * 0.9144 : t.distance) * 10) / 10
+      await saveCardio({ date: todayKey(), kind: 'swim', stroke: mainStroke(p.items), distance_m, seconds, notes: `Team practice: ${p.title}`.slice(0, 300) })
+      setState('done'); onLogged?.()
+    } catch (x) { setErr(x.message || 'Could not save'); setState('idle') }
+  }
+
+  return (
+    <Card hero className="space-y-3">
+      <div>
+        <div className="text-xs font-semibold text-neon-ink">{dayName(p.date)} · from your coach</div>
+        <div className="text-xl font-bold text-ink break-words leading-tight">{p.title}</div>
+      </div>
+      <PracticeSets practice={p} />
+      {isToday && (state === 'done' ? (
+        <p role="status" className="text-sm font-semibold text-neon-ink flex items-center gap-1.5"><Icon icon="mdi:check" width={18} />Logged. Your coach sees it.</p>
+      ) : (
+        <div className="space-y-2">
+          {!t.seconds && (
+            <label className="block">
+              <span className="text-xs text-muted">How long it took</span>
+              <input inputMode="numeric" value={time} placeholder="55:00" onChange={e => setTime(e.target.value.replace(/[^\d:]/g, '').slice(0, 8))} className={`mt-1 ${inputCls}`} />
+            </label>
+          )}
+          <Button full icon="mdi:check" onClick={log} disabled={state === 'saving'}>{state === 'saving' ? 'Saving…' : 'I swam it, log it'}</Button>
+          {err && <p role="alert" className="text-xs text-danger">{err}</p>}
+        </div>
+      ))}
+    </Card>
   )
 }
 
@@ -451,6 +762,7 @@ function MyTeamCard({ team, coachUrl, onLeft }) {
 }
 
 function CoachView({ team, roster, prs, urls, onChanged, onOpenSwimmer }) {
+  const u = useSwimUnits()
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(team.name)
   const [copied, setCopied] = useState(false)
@@ -508,6 +820,8 @@ function CoachView({ team, roster, prs, urls, onChanged, onOpenSwimmer }) {
         <p className="text-xs text-muted">The link adds swimmers straight to your team. Swimmers who find you in search ask first.</p>
       </Card>
 
+      <CoachPractices team={team} />
+
       {requests.length > 0 && (
         <section aria-label="Asking to join">
           <SectionTitle>Asking to join</SectionTitle>
@@ -535,7 +849,10 @@ function CoachView({ team, roster, prs, urls, onChanged, onOpenSwimmer }) {
                 className="press bg-surface border border-line hover:border-line-strong rounded-2xl p-3 flex flex-col items-center text-center gap-2">
                 <Photo url={urls[r.photo_path]} name={r.nickname} size={64} />
                 <span className="text-[0.8125rem] font-semibold text-ink [overflow-wrap:anywhere] leading-tight">@{r.nickname ?? 'swimmer'}</span>
-                <span className="text-xs text-muted">{r.last_swim ? `Swam ${daysAgo(r.last_swim)}` : 'No swims yet'}</span>
+                {r.last_swim ? <>
+                  <span className="text-sm font-bold text-neon-ink tabular-nums leading-none">{fmtDistance(r.metres_30d ?? 0, u)}</span>
+                  <span className="text-xs text-muted leading-tight">{r.swims_30d ?? 0} {r.swims_30d === 1 ? 'swim' : 'swims'} in 30 days · {daysAgo(r.last_swim)}</span>
+                </> : <span className="text-xs text-muted">No swims yet</span>}
               </button>
             ))}
           </div>
@@ -555,13 +872,18 @@ function CoachView({ team, roster, prs, urls, onChanged, onOpenSwimmer }) {
 function Leaderboard({ prs, roster, urls, onOpenSwimmer }) {
   const u = useSwimUnits()
   const [stroke, setStroke] = useState('free')
-  const board = strokeBoard(prs, roster, stroke)
+  const [band, setBand] = useState('sprint')
+  const board = strokeBoard(prs, roster, stroke, band)
+  const bandInfo = DISTANCE_BANDS.find(b => b.id === band)
   return (
     <section aria-label="Leaderboard">
       <SectionTitle action={<InfoButton title="Leaderboard">
-        Each swimmer's PR for the stroke: their fastest pace per {u.per} on any swim of at least 25 m. Tap a swimmer to see all their swims.
+        Each swimmer's best pace per {u.per} for the stroke, ranked within a distance so sprints and distance swims aren't mixed: sprint is 50 to 100, middle 200 to 300, distance 400 and up. Tap a swimmer to see all their swims.
       </InfoButton>}>Leaderboard</SectionTitle>
       <Segmented options={STROKES.map(s => [s.id, s.label])} value={stroke} onChange={setStroke} label="Stroke" kind="choice" scroll />
+      <div className="mt-2">
+        <Segmented options={DISTANCE_BANDS.map(b => [b.id, b.label])} value={band} onChange={setBand} label="Distance" kind="choice" />
+      </div>
       {board.length ? (
         <ol className="mt-3 bg-surface border border-line rounded-2xl divide-y divide-line">
           {board.map(p => (
@@ -583,7 +905,7 @@ function Leaderboard({ prs, roster, urls, onOpenSwimmer }) {
           ))}
         </ol>
       ) : (
-        <p className="text-sm text-muted text-center py-5">No {strokeLabel(stroke).toLowerCase()} PRs yet. They show once your swimmers log this stroke.</p>
+        <p className="text-sm text-muted text-center py-5">No {strokeLabel(stroke).toLowerCase()} swims of {bandInfo.hint} {u.dist} yet. They show once your swimmers log one.</p>
       )}
     </section>
   )
@@ -653,7 +975,10 @@ function Team({ invite, onInviteDone, onOpenSwimmer, onOpenApplications, reload,
       {coached ? (
         <CoachView team={coached} roster={roster} prs={prs} urls={urls} onChanged={reload} onOpenSwimmer={onOpenSwimmer} />
       ) : mine ? (
-        <MyTeamCard team={mine} coachUrl={urls[mine.coach_photo]} onLeft={reload} />
+        <>
+          <MyTeamCard team={mine} coachUrl={urls[mine.coach_photo]} onLeft={reload} />
+          {mine.status === 'active' && <TeamPractice teamId={mine.id} />}
+        </>
       ) : (
         <FindTeam onJoined={reload} />
       )}
@@ -671,7 +996,7 @@ function Team({ invite, onInviteDone, onOpenSwimmer, onOpenApplications, reload,
 const TABS = [['me', 'My swims'], ['team', 'Team']]
 
 // The Swim tab: strokes with PR and last session, logging, and swim teams with a coach
-export default function Swim({ intent, onIntentDone }) {
+export default function Swim({ intent, onIntentDone, isPro, onUpgrade }) {
   const u = useSwimUnits()
   const [tab, setTab] = useState(intent?.invite || intent?.tab === 'team' ? 'team' : 'me')
   const [swims, setSwims] = useState(null)
@@ -680,6 +1005,7 @@ export default function Swim({ intent, onIntentDone }) {
   const [swimmer, setSwimmer] = useState(null)
   const [applications, setApplications] = useState(false)
   const [invite, setInvite] = useState(intent?.invite ?? null)
+  const landed = useRef(false)
 
   const loadSwims = () => fetchCardio(500).then(l => setSwims(l.filter(x => x.kind === 'swim'))).catch(() => setSwims([]))
   async function loadTeam() {
@@ -691,6 +1017,9 @@ export default function Swim({ intent, onIntentDone }) {
       const urls = await photoUrls([myPhoto, mine?.coach_photo, ...roster.map(r => r.photo_path)])
       setTeam({ coached, mine, roster, prs, myPhoto, urls, coach, isAdmin })
       setTeamState('ready')
+      // A coach opens Swim to see the team: start there the first time it loads
+      if (coached && !landed.current) setTab('team')
+      landed.current = true
     } catch {
       setTeamState('error')
     }
@@ -732,7 +1061,8 @@ export default function Swim({ intent, onIntentDone }) {
 
       <Segmented options={TABS.map(([id, label]) => [id, id === 'team' && waiting ? `${label} (${waiting})` : label])} value={tab} onChange={setTab} label="Swim" />
 
-      {tab === 'me' && (swims ? <MySwims swims={swims} onChanged={loadSwims} /> : <SkeletonRows rows={5} label="Loading swims" />)}
+      {tab === 'me' && team?.mine?.status === 'active' && <TeamPractice teamId={team.mine.id} compact onOpen={() => setTab('team')} />}
+      {tab === 'me' && (swims ? <MySwims swims={swims} onChanged={loadSwims} isPro={isPro} onUpgrade={onUpgrade} /> : <SkeletonRows rows={5} label="Loading swims" />)}
       {tab === 'team' && (
         teamState === 'loading' ? <SkeletonRows rows={4} label="Loading your team" />
           : teamState === 'error' ? <InlineError onRetry={() => { setTeamState('loading'); loadTeam() }}>Couldn't load your team.</InlineError>

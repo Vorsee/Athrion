@@ -29,4 +29,4 @@ export function orderGoals(picked) {
   return w ? [w, ...picked.filter(g => g !== w)] : picked
 }
 
-export const goalsLabel = goals => goals.filter(Boolean).map((g, i) => (i ? GOAL_LABELS[g]?.toLowerCase() : GOAL_LABELS[g])).join(' + ')
+export const goalsLabel = goals => [...new Set(goals.filter(Boolean))].map((g, i) => (i ? GOAL_LABELS[g]?.toLowerCase() : GOAL_LABELS[g])).join(' + ')

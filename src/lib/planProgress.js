@@ -33,7 +33,8 @@ export function planProgress({ schedule = [], history = [], start, weeks = 8, to
   const monday = mondayOf(today)
   const thisWeek = DAYS.map((day, i) => {
     const date = localDateKey(new Date(monday.getTime() + i * DAY_MS))
-    return { day, date, planned: plannedDay[day]?.type === 'workout', title: plannedDay[day]?.title ?? null, done: doneDays.has(date), today: date === todayKey }
+    // Days before the goal started were never planned, so they can't be missed
+    return { day, date, planned: date >= startKey && plannedDay[day]?.type === 'workout', title: plannedDay[day]?.title ?? null, done: doneDays.has(date), today: date === todayKey }
   })
 
   // Planned so far: every planned day from the start up to today

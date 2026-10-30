@@ -21,6 +21,7 @@ export const FOODS = {
   tuna:        { name: 'Tuna in water',        kcal: 116, p: 26,  c: 0,  f: 1,   step: 25, not: ['vegan', 'vegetarian'] },
   lentils:     { name: 'Cooked lentils',       kcal: 116, p: 9,   c: 20, f: 0.4, step: 25 },
   chickpeas:   { name: 'Cooked chickpeas',     kcal: 164, p: 8.9, c: 27, f: 2.6, step: 25 },
+  blackBeans:  { name: 'Cooked black beans',   kcal: 132, p: 8.9, c: 24, f: 0.5, step: 25 },
   tempeh:      { name: 'Tempeh',               kcal: 192, p: 20,  c: 7.6, f: 11, step: 25 },
   rice:        { name: 'Cooked rice',          kcal: 130, p: 2.7, c: 28, f: 0.3, step: 25 },
   quinoa:      { name: 'Cooked quinoa',        kcal: 120, p: 4.4, c: 21, f: 1.9, step: 25 },
@@ -56,6 +57,9 @@ export const MEALS = {
     { title: 'Beef and pasta with vegetables', items: [['beef', 'protein', 150], ['pasta', 'base', 200], ['veg', 'fixed', 150], ['oliveOil', 'fat', 5]] },
     { title: 'Tempeh stir-fry with rice',    items: [['tempeh', 'protein', 150], ['rice', 'base', 200], ['veg', 'fixed', 200], ['oliveOil', 'fat', 10]] },
     { title: 'Chicken and quinoa plate',     items: [['chicken', 'protein', 150], ['quinoa', 'base', 200], ['veg', 'fixed', 150], ['avocado', 'fat', 50]] },
+    { title: 'Chickpea curry with rice',     items: [['chickpeas', 'protein', 250], ['rice', 'base', 175], ['veg', 'fixed', 150], ['oliveOil', 'fat', 10]] },
+    { title: 'Black bean chili with tofu',   items: [['tofu', 'protein', 150], ['blackBeans', 'protein', 150], ['rice', 'base', 150], ['veg', 'fixed', 150], ['avocado', 'fat', 40]] },
+    { title: 'Vegetable omelette with potatoes', items: [['eggs', 'protein', 150], ['cottage', 'protein', 100], ['potatoes', 'base', 250], ['veg', 'fixed', 150], ['oliveOil', 'fat', 5]] },
   ],
   snack: [
     { title: 'Cottage cheese and apple',     items: [['cottage', 'protein', 150], ['apple', 'base', 150]] },

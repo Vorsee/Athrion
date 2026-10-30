@@ -22,6 +22,7 @@ const KIND_ICON = {
   team_declined: 'mdi:account-remove-outline',
   team_removed: 'mdi:account-remove-outline',
   team_left: 'mdi:account-arrow-right-outline',
+  team_practice: 'mdi:clipboard-text-outline',
 }
 
 export function timeAgo(iso, now = Date.now()) {

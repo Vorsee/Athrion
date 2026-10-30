@@ -135,7 +135,7 @@ const SWITCH: Record<string, string> = {
   month_result: 'notify_achievements', badge: 'notify_achievements', target: 'notify_achievements',
   recap: 'notify_recap', 'open-workout': 'notify_workout_open',
   team_request: 'notify_team', team_joined: 'notify_team', team_accepted: 'notify_team',
-  team_declined: 'notify_team', team_removed: 'notify_team', team_left: 'notify_team',
+  team_declined: 'notify_team', team_removed: 'notify_team', team_left: 'notify_team', team_practice: 'notify_team',
 }
 export function pushAllowed(kind: string, prefs: any) {
   const key = SWITCH[kind]

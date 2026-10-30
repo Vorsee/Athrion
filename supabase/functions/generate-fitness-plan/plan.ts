@@ -21,7 +21,7 @@ export const GOAL_PROGRAMMING: Record<string, string> = {
   maintain_weight: 'Balanced maintenance. Full-body strength 2-3x/week at 8-12 reps, plus moderate cardio. Sustainable volume.',
   general_fitness: 'Well-rounded fitness. Alternate full-body strength (8-12 reps), cardio/conditioning, and a core + mobility component. Varied, approachable sessions.',
   mobility_flexibility: 'Mobility and flexibility. Sessions are mobility flows, dynamic and loaded stretching, yoga-style holds, and light stability/strength work. Reps are mostly holds (e.g. 30-60s) or controlled reps. Low intensity.',
-  swimming: 'Dryland training for swimmers, around their pool sessions. Pulling strength (pull-ups, rows, lat pulldowns), shoulder health (external rotation, face pulls, scapular work), core and anti-rotation work, hip and leg power for starts and turns (squats, jumps), and thoracic and shoulder mobility. 2-4 sets of 6-12 reps, 60-90s rest, moderate loads so the legs and shoulders are fresh for the water. Avoid heavy overhead pressing volume. Mention in the notes which swim days the session fits around.',
+  swimming: 'Pool sessions plus dryland. Write 2-3 pool sessions a week (sport "swim"): a technique day (drills such as catch-up, fingertip drag, 6-kick switch, kick with a board), an aerobic day (longer repeats at a steady pace, short rest) and, for intermediate and advanced swimmers, a speed day (short fast repeats with full recovery). Each pool session: warm-up 200-400 easy, a drill set, the main set, a kick or pull set, and an easy cool-down. Set send-offs from swimPaces when given (send-off = their pace per 100 plus 10-20 s), else from experience (beginner around 2:30 per 100, intermediate 2:00, advanced 1:40). Beginners total 800-1500 m a session, intermediate 1500-3000, advanced 3000-4500. Mix strokes across the week (freestyle most, plus backstroke, breaststroke, and butterfly or medley for advanced). The other training days are dryland: Pulling strength (pull-ups, rows, lat pulldowns), shoulder health (external rotation, face pulls, scapular work), core and anti-rotation work, hip and leg power for starts and turns (squats, jumps), and thoracic and shoulder mobility. 2-4 sets of 6-12 reps, 60-90s rest, moderate loads so the legs and shoulders are fresh for the water. Avoid heavy overhead pressing volume. Mention in the notes which swim days the session fits around.',
 }
 
 // ── Prompt ────────────────────────────────────────────────────────────────────
@@ -43,6 +43,7 @@ Rules:
 - Legs are muscles too: unless an injury rules it out, every plan with 3 or more training days trains the lower body (quads, hamstrings, glutes, calves) at least as often as the upper body, with at least one full leg day or a squat or lunge and a hip hinge in most sessions. Never write an upper-body-only week.
 - Cardio has a place in every plan except mobility: at least one cardio session a week (a short cardio day such as "Easy Cardio" on a rest day, or 10-20 minutes at the end of a session), written as exercises with a duration in reps, for example "Incline Walk" with reps "20-30 min".
 - Use plain, common exercise names people know and that match a normal gym app library: "Squat", "Bench Press", "Romanian Deadlift", "Lunge", "Leg Press", "Lat Pulldown", "Standing Calf Raise", "Incline Walk", "Stationary Bike". Avoid made-up or brand names.
+- Every day has a sport: "gym" for land training and rest days, "swim" for pool sessions. Pool sessions only when swimming is a goal. In a pool session each exercise is one set of repeats: name says the part and the stroke ("Warm-up: easy freestyle", "Drill: catch-up freestyle", "Main set: freestyle", "Kick: flutter kick with board", "Cool-down: easy backstroke"), sets is the number of repeats, reps is the distance and send-off ("100 m on 1:50", or "400 m easy" for a single swim), restSeconds is 0, equipment is "Pool"; warmup and cooldown are short dryland steps (arm circles, band pull-aparts, stretching).
 - weeklySchedule has exactly 7 entries, Monday through Sunday, in order.`
 
 function str() { return { type: 'string' } }
@@ -68,6 +69,7 @@ export const PLAN_SCHEMA = obj({
     items: obj({
       day: { type: 'string', enum: DAYS },
       type: { type: 'string', enum: ['workout', 'rest', 'active_recovery'] },
+      sport: { type: 'string', enum: ['gym', 'swim'] },
       title: str(),
       sessionMode: { type: 'string', enum: ['solo', 'group', 'solo_or_group'] },
       durationMinutes: num(),
@@ -151,6 +153,8 @@ export function buildUserMessage(fp: any, nt: any, progress: any): string {
         goalTargetDate: fp.goalTargetDate ?? null,
         goalWeeklyLb: fp.goalWeeklyLb ?? null,
       },
+      // Swimmers: best pace per 100 m by stroke from their logged swims ("1:52"), for send-offs
+      swimPaces: fp.swimPaces ?? undefined,
       // Lift targets set on Plan: best set of 5, now and target, in lb. Build the main lifts around them.
       keyLifts: (fp.goalLifts ?? []).map((l: any) => ({ name: l.name, bestSetOf5Lb: l.startLb, targetLb: l.targetLb })),
     },
@@ -443,6 +447,51 @@ const CARDIO_DAY = {
   recoveryNotes: '20-30 min of easy cardio you could talk through: incline walk, stationary bike or elliptical. Helps recovery and heart health without eating into muscle gains.',
 }
 
+// Pool sessions for swimming goals: technique, aerobic and speed, sized by experience.
+// Send-offs come from the person's freestyle pace when they've logged swims.
+const SWIM_LEVEL: Record<string, { pace: number, scale: number }> = {
+  beginner: { pace: 150, scale: 0.6 }, intermediate: { pace: 120, scale: 1 }, advanced: { pace: 100, scale: 1.4 },
+}
+// Seconds to a send-off like 1:55, on a 5 s step
+const clock = (s: number) => { const t = Math.round(s / 5) * 5; return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}` }
+function paceSecs(text?: string): number | null {
+  const m = /^(\d+):(\d{2})$/.exec(text ?? '')
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null
+}
+export function swimSessions(fp: any) {
+  const lvl = SWIM_LEVEL[fp.experienceLevel] ?? SWIM_LEVEL.intermediate
+  const pace = paceSecs(fp.swimPaces?.free) ?? lvl.pace // seconds per 100 m
+  const n = (k: number) => Math.max(2, Math.round(k * lvl.scale))
+  const metres = (k: number) => Math.max(50, Math.round((k * lvl.scale) / 50) * 50)
+  const on = (dist: number, extra = 15) => `${dist} m on ${clock((pace * dist) / 100 + extra)}`
+  const set = (name: string, sets: number, reps: string, tip: string, easier: string, harder: string) => ({
+    name, sets, reps, restSeconds: 0, intensityNote: '', formTip: tip, easierVersion: easier, harderVersion: harder, equipment: 'Pool',
+  })
+  const warm = set('Warm-up: easy freestyle', 1, `${metres(300)} m easy`, 'Long and relaxed, breathe every 3 strokes', 'Mix in backstroke', 'Add 4 x 25 build')
+  const cool = set('Cool-down: easy backstroke', 1, `${metres(150)} m easy`, 'Slow, long strokes', 'Any stroke', 'Add 100 easy freestyle')
+  return [
+    { title: 'Swim: Technique', exercises: [warm,
+      set('Drill: catch-up freestyle', n(6), on(50, 20), 'One hand waits in front until the other arrives', 'Use fins', 'Fingertip drag instead'),
+      set('Kick: flutter kick with board', n(4), on(50, 25), 'Kick from the hips, small fast kicks', 'Fins on', 'No board, streamline'),
+      set('Main set: freestyle', n(6), on(100), 'Hold the same time on every repeat', 'Swim 50s instead', 'Take 5 s off the send-off'),
+      set('Drill: breaststroke pull with flutter kick', n(4), on(50, 25), 'Pull, breathe, glide', 'Fins on', 'Full breaststroke'), cool] },
+    { title: 'Swim: Aerobic', exercises: [warm,
+      set('Main set: freestyle', n(4), on(200, 20), 'Steady pace you could hold for an hour', 'Swim 100s', 'Negative split each 200'),
+      set('Pull: freestyle with pull buoy', n(4), on(100), 'Long reach, high elbow', 'Fewer repeats', 'Add paddles'),
+      set('Main set: backstroke', n(4), on(50, 20), 'Head still, hips up', 'Kick only', 'Faster send-off'), cool] },
+    { title: 'Swim: Speed', exercises: [warm,
+      set('Drill: 6-kick switch freestyle', n(4), on(50, 25), 'Rotate fully onto your side', 'Fins on', 'Fewer kicks'),
+      set('Main set: fast freestyle', n(8), on(25, 30), 'Fast but smooth, full recovery between', 'Fewer repeats', 'Butterfly every 4th'),
+      set('Main set: medley', n(4), on(100, 25), 'Fly, back, breast, free: 25 each', 'Freestyle instead of fly', 'Faster send-off'), cool] },
+  ]
+}
+const swimDay = (s: any) => ({
+  type: 'workout', sport: 'swim', title: s.title, sessionMode: 'solo', durationMinutes: 45,
+  workout: { warmup: [{ name: 'Arm circles and band pull-aparts', duration: '3 min', instructions: 'Loosen the shoulders before you get in.' }],
+    exercises: s.exercises, cooldown: [{ name: 'Shoulder and lat stretch', duration: '3 min', instructions: 'Hold each side 30 s.' }] },
+  recoveryNotes: 'Log it on the Swim tab when you get out.',
+})
+
 // Which goal's sessions fill the week. With a weight goal and a training goal picked together
 // (lose weight + build muscle), the training goal shapes the sessions; the weight goal already set
 // the calories, and losing weight adds cardio.
@@ -459,9 +508,8 @@ export function makeFallbackPlan(fp: any, nt: any): any {
   const goals = [fp.primaryGoal, ...(fp.secondaryGoals ?? [])].filter((g: string, i: number, a: string[]) => g && a.indexOf(g) === i).slice(0, 2)
   const label = goals.length > 1 ? goals.map((g: string) => GOAL_LABELS[g] ?? g).join(' + ') : GOAL_LABELS[goal]
   // The rest-day cardio: a swim when swimming is one of the goals
-  const cardioDay = goals.includes('swimming')
-    ? { ...CARDIO_DAY, title: 'Swim', recoveryNotes: '20-40 min in the pool: 5 min easy, technique drills, then steady laps. Log it on the Swim tab.' }
-    : CARDIO_DAY
+  const swims = goals.includes('swimming') ? swimSessions(fp) : []
+  const cardioDay = CARDIO_DAY
   const days = Math.min(Math.max(fp.workoutDaysPerWeek ?? 3, 1), 7)
   const useGym = fp.workoutLocation === 'gym' || fp.workoutLocation === 'any'
   const beginner = fp.experienceLevel === 'beginner'
@@ -478,6 +526,8 @@ export function makeFallbackPlan(fp: any, nt: any): any {
 
   const schedule = DAYS.map(day => {
     const idx = trainingDays.indexOf(day)
+    // Swimming as the main goal: every other training day is in the pool
+    if (idx !== -1 && fp.primaryGoal === 'swimming' && idx % 2 === 0) return { day, ...swimDay(swims[(idx / 2) % swims.length]) }
     if (idx !== -1) {
       const split = goal === 'build_muscle' ? MUSCLE_SPLITS[days] : null
       const session = split ? sessions[split[idx % split.length]] : sessions[idx % sessions.length]
@@ -497,7 +547,7 @@ export function makeFallbackPlan(fp: any, nt: any): any {
       // If the dislikes would empty the session, keep it rather than leave a workout day with nothing in it
       const exercises = liked.length ? liked : all
       return {
-        day, type: 'workout', title: session.title,
+        day, type: 'workout', sport: 'gym', title: session.title,
         sessionMode: fp.sessionPreference === 'group' ? 'group' : 'solo_or_group',
         durationMinutes: fp.preferredSessionDuration ?? 45,
         workout: { warmup, exercises, cooldown: COOLDOWN },
@@ -506,19 +556,19 @@ export function makeFallbackPlan(fp: any, nt: any): any {
     }
     if ((goal === 'build_muscle' || goal === 'improve_strength' || goals.includes('swimming') || goals.includes('lose_weight')) && !activeRecoveryUsed && days < 6) {
       activeRecoveryUsed = true
-      return { day, ...cardioDay, workout: { warmup: [], exercises: [], cooldown: [] } }
+      return swims.length ? { day, ...swimDay(swims[fp.primaryGoal === 'swimming' ? 2 : 0]) } : { day, sport: 'gym', ...cardioDay, workout: { warmup: [], exercises: [], cooldown: [] } }
     }
     if (activeRecoveryGoals.includes(goal) && !activeRecoveryUsed && days < 6) {
       activeRecoveryUsed = true
       return {
-        day, type: 'active_recovery', title: 'Active Recovery',
+        day, type: 'active_recovery', sport: 'gym', title: 'Active Recovery',
         sessionMode: 'solo', durationMinutes: 30,
         workout: { warmup: [], exercises: [], cooldown: [] },
         recoveryNotes: '20-30 min easy walk or bike plus 10 min of gentle stretching. Aim for 8-10k steps.',
       }
     }
     return {
-      day, type: 'rest', title: 'Rest & Recovery',
+      day, type: 'rest', sport: 'gym', title: 'Rest & Recovery',
       sessionMode: 'solo', durationMinutes: 0,
       workout: { warmup: [], exercises: [], cooldown: [] },
       recoveryNotes: 'Full rest or a light walk. Prioritise sleep and hydration.',

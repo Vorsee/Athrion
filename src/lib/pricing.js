@@ -19,7 +19,9 @@ export const priceLine = () => `${money(PLANS.monthly.price)} a month or ${money
 
 // One list, used everywhere Pro is described
 export const PRO_FEATURES = [
-  { icon: 'mdi:calendar-check-outline', title: 'A training plan built for your goal', body: 'Your week of workouts, sets and reps, rebuilt as you log.' },
+  { icon: 'mdi:calendar-check-outline', title: 'A training plan that coaches you', body: 'Next-session targets on every exercise, a weekly review, missed days moved and lighter weeks built in.' },
+  { icon: 'mdi:swim', title: 'Pool workouts and stroke charts', body: 'Swim sessions with drills and send-offs in your plan, and your pace for every stroke over time.' },
+  { icon: 'mdi:silverware-fork-knife', title: 'An AI meal plan for your week', body: '7 days of meals for your targets, diet and tastes, with a shopping list.' },
   { icon: 'mdi:target', title: 'Calorie targets that follow your real weight', body: 'Adjusted every week from your weigh-ins and meals.' },
   { icon: 'mdi:camera-outline', title: 'Log a meal from a photo', body: 'Snap your plate and get calories and macros in seconds.' },
   { icon: 'mdi:dumbbell', title: 'Unlimited saved workouts', body: 'Free accounts can save 3.' },

@@ -10,16 +10,19 @@ import {
   dbProfileToPayload, dbNutritionToPayload, updatePlanData,
 } from '../lib/fitnessApi.js'
 import { saveGoals, saveProfileWeight, fetchWorkoutHistory } from '../lib/api.js'
-import { fetchMeasurements, fetchCheckinWeights, saveMeasurement } from '../lib/progressApi.js'
+import { fetchMeasurements, fetchCheckinWeights, saveMeasurement, fetchCardio } from '../lib/progressApi.js'
+import { strokeLabel } from '../lib/swim.js'
 import { calculateNutritionTargets, GOAL_LABELS, GOAL_ICONS, healthFrom } from '../lib/nutrition.js'
 import { GoalCard, ResultsCard, GoalSheet, WeightSheet } from '../components/GoalProgress.jsx'
 import { planProgress, journeyStart, mergeWeights, DAYS } from '../lib/planProgress.js'
-import { weightPlan, isWeightGoal } from '../lib/weightGoal.js'
+import { weightPlan, isWeightGoal, goalProgress } from '../lib/weightGoal.js'
 import { goalsLabel } from '../lib/goalPick.js'
 import { localDateKey, todayKey } from '../lib/data.js'
-import { SAMPLE_PLAN } from '../lib/samplePlan.js'
+import { sampleFor } from '../lib/sampleFor.js'
 import ProLock from '../components/ProLock.jsx'
 import { useUnit } from '../lib/units.js'
+import { isDeloadWeek, dayTargets, startableDay, reshuffleWeek, weeklyReview } from '../lib/coaching.js'
+import { liftProgress } from '../lib/liftGoals.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -33,11 +36,15 @@ function formatVolume(ex) {
 }
 
 // One line per exercise: name, sets × reps in neon, actions. Notes open from ⓘ.
-function PlanExerciseCard({ ex, onSwap }) {
+// target: next session's numbers from the log (lib/coaching.js), shown under the name
+function PlanExerciseCard({ ex, onSwap, target }) {
   const [swapping, setSwapping] = useState(false)
   const notes = [ex.intensityNote, ex.formTip, ex.easierVersion && `Easier: ${ex.easierVersion}`, ex.swappedFrom && `Swapped from ${ex.swappedFrom}`].filter(Boolean)
+  const meta = target
+    ? <span><span className="font-semibold text-neon-ink">Next: {target.text}</span>, {target.reason}</span>
+    : ex.restSeconds > 0 && `${ex.restSeconds}s rest`
   return (
-    <ExerciseRow icon={getExerciseIcon(ex)} name={ex.name} meta={ex.restSeconds > 0 && `${ex.restSeconds}s rest`} value={formatVolume(ex)}>
+    <ExerciseRow icon={getExerciseIcon(ex)} name={ex.name} meta={meta} value={formatVolume(ex)}>
         {notes.length > 0 && (
           <InfoButton title={ex.name} label={`Notes for ${ex.name}`}>
             <ul className="space-y-2 text-sm text-ink-2">{notes.map((n, i) => <li key={i}>{n}</li>)}</ul>
@@ -148,13 +155,14 @@ function TodayWorkout({ dayData, onGoToWorkout, onStartWorkout, onSwap }) {
 
 // Today in one row: what the plan has on, and a way to start it. The exercises live on Train
 // and in the weekly schedule below, not repeated here.
-function TodayRow({ dayData, onGoToWorkout, onStartWorkout }) {
+function TodayRow({ dayData, onGoToWorkout, onStartWorkout, onOpenSwim }) {
   if (!dayData) return null
   const isRest = dayData.type !== 'workout'
   const n = dayData.workout?.exercises?.length ?? 0
+  const swim = dayData.sport === 'swim'
   return (
     <Card className="flex flex-wrap items-center gap-x-3 gap-y-2">
-      <Icon icon={isRest ? 'mdi:sleep' : 'mdi:dumbbell'} width={26} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
+      <Icon icon={isRest ? 'mdi:sleep' : swim ? 'mdi:swim' : 'mdi:dumbbell'} width={26} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
       <div className="grow basis-0 min-w-[8rem]">
         <div className="text-xs font-semibold text-neon-ink">Today</div>
         <div className="font-bold text-lg text-ink leading-tight break-words">{dayData.title}</div>
@@ -162,6 +170,7 @@ function TodayRow({ dayData, onGoToWorkout, onStartWorkout }) {
       </div>
       {isRest
         ? onGoToWorkout && <Button size="sm" variant="secondary" onClick={onGoToWorkout} className="ml-auto">Train anyway</Button>
+        : swim ? onOpenSwim && <Button size="sm" icon="mdi:swim" onClick={onOpenSwim} className="ml-auto">Log swim</Button>
         : n > 0 && <Button size="sm" icon="mdi:play" onClick={() => (onStartWorkout ? onStartWorkout(dayData) : onGoToWorkout())} className="ml-auto">Start</Button>}
     </Card>
   )
@@ -171,13 +180,16 @@ function TodayRow({ dayData, onGoToWorkout, onStartWorkout }) {
 function useGoalData() {
   const [data, setData] = useState(null)
   async function load() {
-    const [fp, measurements, checkins, history] = await Promise.all([
+    const [fp, measurements, checkins, workouts, cardio] = await Promise.all([
       fetchFitnessProfile().catch(() => null),
       fetchMeasurements().catch(() => []),
       fetchCheckinWeights().catch(() => []),
       fetchWorkoutHistory().catch(() => []),
+      fetchCardio(500).catch(() => []),
     ])
-    setData({ fp, weights: mergeWeights(measurements, checkins), history })
+    // Swims count as training days too, so the plan's pool sessions show as done
+    const swims = (cardio ?? []).filter(l => l.kind === 'swim').map(l => ({ date: l.date, created_at: l.created_at, name: l.stroke ? `${strokeLabel(l.stroke)} swim` : 'Swim', sets: [], volume: 0 }))
+    setData({ fp, weights: mergeWeights(measurements, checkins), history: [...workouts, ...swims] })
   }
   useEffect(() => { load() }, [])
   return [data, load]
@@ -249,12 +261,12 @@ function AdaptCard({ plan, checkin, checkinFresh, generating, onAdapt, onCheckin
     <Card>
       <div className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
-          <span className="font-bold text-2xl text-ink">Week {week}</span>
+          <span className="font-bold text-2xl text-ink">Weekly check-in</span>
           {week > 1 && <Fact icon="mdi:refresh">Adapted</Fact>}
           {plan.ai_model?.startsWith('fallback') && <span className="text-xs text-muted">Standard plan</span>}
         </div>
         {hasChanges && (
-          <InfoButton title={`What changed in week ${week}`}>
+          <InfoButton title="What changed this week">
             {adaptation.summary && <p className="text-sm text-ink-2">{adaptation.summary}</p>}
             {adaptation.changes?.length > 0 && (
               <ul className="space-y-2">
@@ -286,7 +298,7 @@ function AdaptCard({ plan, checkin, checkinFresh, generating, onAdapt, onCheckin
 // ─────────────────────────────────────────────────────────────────────────────
 // Weekly Schedule
 // ─────────────────────────────────────────────────────────────────────────────
-function WeeklySchedule({ schedule, onSwap }) {
+function WeeklySchedule({ schedule, onSwap, targetsFor }) {
   const [openDay, setOpenDay] = useState(null)
   if (!schedule?.length) return null
   const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -321,8 +333,9 @@ function WeeklySchedule({ schedule, onSwap }) {
               </button>
               {open && (
                 <div className="px-2 pb-2 space-y-2">
+                  {d.movedFrom && <p className="text-xs text-muted px-1">Moved from {d.movedFrom}, which was missed.</p>}
                   {exercises.length > 0
-                    ? exercises.map((ex, i) => <PlanExerciseCard key={i} ex={ex} onSwap={onSwap && (name => onSwap(day, i, name))} />)
+                    ? (() => { const t = targetsFor?.(d) ?? {}; return exercises.map((ex, i) => <PlanExerciseCard key={i} ex={ex} target={t[ex.name]} onSwap={onSwap && !d.movedFrom && (name => onSwap(day, i, name))} />) })()
                     : <p className="text-xs text-muted px-1">{d.recoveryNotes || 'Rest day.'}</p>}
                 </div>
               )}
@@ -485,11 +498,65 @@ function CheckinModal({ planId, onClose, onSaved, onProfileChange }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Coach's note: how the week is going, what went well, what to change, and what moved.
+// Sundays (and Mondays, for the week just gone) it's the weekly review.
+// ─────────────────────────────────────────────────────────────────────────────
+function CoachCard({ review, moves, deload, week }) {
+  const day = new Date().getDay()
+  const title = day === 0 ? 'Your weekly review' : "Coach's note"
+  return (
+    <Card className="space-y-3">
+      <SectionTitle action={<InfoButton title="How your coach works">
+        <div className="space-y-2 text-sm text-ink-2">
+          <p>Each exercise shows next session's target from your log: one more rep, or the next weight once every set reaches the top of the range. Workout fills it in for you.</p>
+          <p>Missed a workout? It moves to the next free day this week. Every 5th week is lighter: one set less and about 80% of your working weight.</p>
+          <p>On Sunday this card is your weekly review.</p>
+        </div>
+      </InfoButton>}>{title}</SectionTitle>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={`inline-flex text-xs font-semibold px-2 py-0.5 rounded-md ${review.status === 'behind' ? 'bg-warn/15 text-warn' : 'bg-neon/15 text-neon-ink'}`}>
+          {review.status === 'behind' ? 'Behind' : review.status === 'early' ? 'This week' : 'On track'}
+        </span>
+        <span className="text-sm font-semibold text-ink">{review.headline}</span>
+      </div>
+      {deload && (
+        <div className="flex gap-2.5 rounded-xl bg-raised border border-line px-3 py-2.5 text-sm text-ink-2">
+          <Icon icon="mdi:battery-charging-medium" width={20} className="text-neon-ink flex-shrink-0 mt-0.5" aria-hidden="true" />
+          <span><span className="font-semibold text-ink">Week {week} is a lighter week.</span> One set less per exercise and about 80% of your working weight. The targets below already include it.</span>
+        </div>
+      )}
+      {moves.length > 0 && (
+        <ul className="space-y-1.5">
+          {moves.map(m => (
+            <li key={m.from} className="flex gap-2.5 text-sm text-ink-2">
+              <Icon icon="mdi:calendar-arrow-right" width={18} className="text-neon-ink flex-shrink-0 mt-0.5" aria-hidden="true" />
+              <span>{m.title} was missed on {m.from}. {m.to ? <>It's now on <span className="font-semibold text-ink">{m.to}</span>.</> : 'No free day is left this week, so carry on with the plan.'}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {[['What went well', 'mdi:check-circle-outline', review.wentWell], ['What to change', 'mdi:arrow-right-circle-outline', review.change]].map(([label, icon, items]) => items.length > 0 && (
+        <div key={label}>
+          <div className="text-xs font-semibold text-muted mb-1">{label}</div>
+          <ul className="space-y-1.5">
+            {items.map(t => (
+              <li key={t} className="flex gap-2.5 text-sm text-ink-2">
+                <Icon icon={icon} width={18} className="text-neon-ink flex-shrink-0 mt-0.5" aria-hidden="true" /><span>{t}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </Card>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Pro lock: the real page with a sample plan, dimmed behind an upgrade card.
 // Labelled as a sample, and without its calories, which would contradict the person's own on Food.
 // ─────────────────────────────────────────────────────────────────────────────
-function LockedPlan({ onUpgrade, onStartSetup }) {
-  const plan = SAMPLE_PLAN
+function LockedPlan({ fp, onUpgrade, onStartSetup }) {
+  const plan = sampleFor(fp)
   const planData = plan.plan_data
   const todayData = planData.weeklySchedule.find(d => d.day === TODAY_NAME) ?? null
   const noop = () => {}
@@ -499,12 +566,12 @@ function LockedPlan({ onUpgrade, onStartSetup }) {
       secondary={onStartSetup && { label: 'Answer the questions first, free', onClick: onStartSetup }}
       description="Behind this is an example. Yours is built from a few questions about your goal, schedule and equipment, and adapts every week from your check-ins.">
       <div className="space-y-4 pt-2">
-        <PageHeader icon={GOAL_ICONS[plan.primary_goal]} title={`Sample: ${planData.summary.planName}`}
+        <PageHeader icon={GOAL_ICONS[plan.primary_goal] ?? 'mdi:target'} title={`Sample: ${planData.summary.planName}`}
           facts={<>
             <Fact icon="mdi:eye-outline">Example plan</Fact>
             <Fact icon="mdi:calendar-range">{plan.duration_weeks} weeks</Fact>
             <Fact icon="mdi:calendar-check-outline">{workoutDays(planData, plan)} days a week</Fact>
-            <Fact icon="mdi:target">{GOAL_LABELS[plan.primary_goal]}</Fact>
+            <Fact icon="mdi:target">{fp?.secondary_goals?.length ? goalsLabel([plan.primary_goal, ...fp.secondary_goals]) : GOAL_LABELS[plan.primary_goal]}</Fact>
           </>} />
         {todayData && <TodayWorkout dayData={todayData} />}
         <WeeklySchedule schedule={planData.weeklySchedule} onSwap={noop} />
@@ -565,7 +632,7 @@ function FreePlan({ onUpgrade, onStartSetup, profile, onProfileChange }) {
           <Button full icon="mdi:target" onClick={onStartSetup}>Set my goal, free</Button>
         </Card>
       )}
-      <LockedPlan onUpgrade={onUpgrade} />
+      <LockedPlan fp={fp} onUpgrade={onUpgrade} />
       {sheet === 'goal' && <GoalSheet fp={fp} profile={profile} history={data?.history} onClose={() => setSheet(null)} onSave={saveGoal} saving={saving} error={err} />}
       {sheet === 'weight' && <WeightSheet onClose={() => setSheet(null)} saving={saving} error={err}
         onSave={async lb => { setSaving(true); setErr(''); try { await logWeight(lb, onProfileChange); setSheet(null); await reload() } catch (e) { setErr(e.message || 'Could not save') } finally { setSaving(false) } }} />}
@@ -573,7 +640,8 @@ function FreePlan({ onUpgrade, onStartSetup, profile, onProfileChange }) {
   )
 }
 
-function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
+function PlanPage({ onGoToWorkout, onStartWorkout, onOpenSwim, profile, onProfileChange }) {
+  const { unit } = useUnit()
   const [plan, setPlan]             = useState(undefined) // undefined=loading
   const [nutrition, setNutrition]   = useState(null)
   const [checkin, setCheckin]       = useState(null)
@@ -706,17 +774,33 @@ function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
   )
 
   const planData = plan.plan_data ?? {}
-  const schedule = planData.weeklySchedule ?? []
-  const todayData = schedule.find(d => d.day === TODAY_NAME) ?? null
+  const planSchedule = planData.weeklySchedule ?? []
   const summary = planData.summary ?? {}
   const goalLabel = GOAL_LABELS[plan.primary_goal] ?? plan.primary_goal
   const goalIcon = GOAL_ICONS[plan.primary_goal] ?? 'mdi:target'
 
   const progress = goalData && planProgress({
-    schedule, history: goalData.history,
+    schedule: planSchedule, history: goalData.history,
     start: journeyStart({ goalStartDate: goalData.fp?.goal_start_date, plan }),
     weeks: summary.durationWeeks ?? plan.duration_weeks ?? 8,
   })
+
+  // The coaching: missed workouts moved to free days, a lighter week every 5th, targets per exercise
+  const deload = !!progress && isDeloadWeek(progress.week)
+  const { schedule, moves } = progress ? reshuffleWeek(planSchedule, progress.thisWeek) : { schedule: planSchedule, moves: [] }
+  const todayData = schedule.find(d => d.day === TODAY_NAME) ?? null
+  const targetsFor = d => (goalData ? dayTargets(d, goalData.history, { unit, deload }) : {})
+  const fp = goalData?.fp
+  const weightGoal = fp && isWeightGoal(fp.primary_goal) && fp.target_weight_lb
+  const review = progress && weeklyReview({
+    progress, history: goalData.history, deload, unit,
+    goal: weightGoal ? goalProgress({
+      startLb: Number(fp.goal_start_weight_lb ?? profile?.weight_lb), targetLb: Number(fp.target_weight_lb),
+      startDate: fp.goal_start_date, targetDate: fp.goal_target_date, weights: goalData.weights,
+    }) : null,
+    liftPct: liftProgress(fp?.goal_lifts, goalData.history, fp?.goal_start_date)?.pct ?? null,
+  })
+  const startDay = d => onStartWorkout(startableDay(d, deload))
 
   async function saveWeight(lb) {
     setWeightBusy(true); setWeightErr('')
@@ -747,7 +831,9 @@ function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
       {progress && <GoalCard fp={goalData.fp} profile={profile} weights={goalData.weights} progress={progress} history={goalData.history}
         onEditGoal={() => setShowGoal(true)} onLogWeight={() => setShowWeight(true)} />}
 
-      <TodayRow dayData={todayData} onGoToWorkout={onGoToWorkout} onStartWorkout={onStartWorkout} />
+      <TodayRow dayData={todayData} onGoToWorkout={onGoToWorkout} onStartWorkout={onStartWorkout && startDay} onOpenSwim={onOpenSwim} />
+
+      {review && <CoachCard review={review} moves={moves} deload={deload} week={progress.week} />}
 
       <AdaptCard plan={plan} checkin={checkin} checkinFresh={checkinFresh} generating={generating}
         onAdapt={() => handleRegenerate(undefined, 'adapt')} onCheckin={() => setShowCheckin(true)} />
@@ -758,7 +844,7 @@ function PlanPage({ onGoToWorkout, onStartWorkout, profile, onProfileChange }) {
       <NutritionCard planNutrition={planData.nutrition} dbNutrition={nutrition} />
 
       {/* Weekly schedule */}
-      <WeeklySchedule schedule={schedule} onSwap={handleSwap} />
+      <WeeklySchedule schedule={schedule} onSwap={handleSwap} targetsFor={targetsFor} />
 
       {planData.safety && <SafetyCard safety={planData.safety} />}
       <CoachNotes advice={planData.advice} progression={planData.progression} />

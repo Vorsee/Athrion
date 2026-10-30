@@ -66,3 +66,23 @@ export async function searchTeams(q) {
 // 'active' (on the team) or 'pending' (the coach is asked)
 export const joinTeam = async ({ team = null, code = null }) =>
   must(await supabase.rpc('join_swim_team', { p_team: team, p_code: code }))
+
+// ── Practices (025) ──────────────────────────────────────────────────────────
+// A team's practices from a date on, soonest first. Before 025 runs: none, and ready is false.
+export async function fetchPractices(teamId, from) {
+  const { data, error } = await supabase.from('swim_practices').select('id, date, title, items, notes, updated_at')
+    .eq('team_id', teamId).gte('date', from).order('date').limit(14)
+  if (error) {
+    if (error.code === '42P01' || error.code === 'PGRST205') return { practices: [], ready: false }
+    throw new Error(error.message || 'Something went wrong')
+  }
+  return { practices: data ?? [], ready: true }
+}
+// Posting one tells every swimmer on the team (025's trigger)
+export async function savePractice({ teamId, date, title, items, notes = '' }) {
+  const { data: { user } } = await supabase.auth.getUser()
+  return one(must(await supabase.from('swim_practices').upsert(
+    { team_id: teamId, coach_id: user.id, date, title: title.trim().slice(0, 60), items, notes: notes.trim().slice(0, 500), updated_at: new Date().toISOString() },
+    { onConflict: 'team_id,date' }).select('id, date, title, items, notes, updated_at')))
+}
+export const deletePractice = async id => must(await supabase.from('swim_practices').delete().eq('id', id))

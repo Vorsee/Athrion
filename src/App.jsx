@@ -13,7 +13,7 @@ import { PageSkeleton } from './components/ui/States.jsx'
 import { readGuidePick, clearGuidePick } from './lib/guidePlans.js'
 import { rememberInvite, readInvite } from './lib/socialApi.js'
 import { parseShopPath, readShopLink, clearShopLink, shopTarget } from './lib/shopLink.js'
-import { SWIM_INVITE_PATH, rememberSwimInvite, readSwimInvite } from './lib/swim.js'
+import { SWIM_INVITE_PATH, rememberSwimInvite, readSwimInvite, rememberSwimStart, readSwimStart, clearSwimStart } from './lib/swim.js'
 import { fetchIsAdmin } from './lib/coachApi.js'
 import { useUnreadCount } from './lib/notifications.js'
 import { hasConsented } from './lib/legal.js'
@@ -86,7 +86,7 @@ export default function App() {
     const m = window.location.pathname.match(SWIM_INVITE_PATH)
     if (m) { rememberSwimInvite(m[1].toLowerCase()); window.history.replaceState(null, '', '/') }
     const invite = readSwimInvite()
-    return invite ? { invite } : null
+    return invite ? { invite } : readSwimStart() ? { start: true } : null
   })
   const [isAdmin, setIsAdmin] = useState(undefined) // undefined until checked
   const [profile, setProfile]   = useState(undefined) // undefined=loading, null=incomplete, obj=complete
@@ -232,6 +232,7 @@ export default function App() {
   useEffect(() => {
     if (swimIntent && swimIntent !== handledSwim.current && session && profile && !guide) {
       handledSwim.current = swimIntent
+      clearSwimStart()
       navigate('swim')
     }
   }, [swimIntent, session, profile, guide])
@@ -320,7 +321,10 @@ export default function App() {
         : shopLink
         ? <ShopPreview link={shopLink} onStart={() => setAuthMode('register')} onSignIn={() => setAuthMode('login')}
             onHome={() => { clearShopLink(); setPendingOpen(null); window.history.replaceState(null, '', '/'); setShopLink(null) }} />
-        : <Landing onCreateAccount={() => setAuthMode('register')} onSignIn={() => setAuthMode('login')} />}
+        : <Landing onCreateAccount={from => {
+            if (from === 'swim') { rememberSwimStart(); setSwimIntent(i => i ?? { start: true }) }
+            setAuthMode('register')
+          }} onSignIn={() => setAuthMode('login')} />}
     </Suspense>
   )
 
@@ -379,9 +383,9 @@ export default function App() {
     coach: { onOpenShop: () => navigate('shop') },
     calories: { profile, isPro, onUpgrade: goUpgrade, onGoToPlan: () => navigate('plan'), intent: foodIntent, onIntentHandled: () => setFoodIntent(null) },
     group: { session, intent: groupIntent, onIntentDone: () => setGroupIntent(null) },
-    swim: { intent: swimIntent, onIntentDone: () => setSwimIntent(null) },
+    swim: { intent: swimIntent, onIntentDone: () => setSwimIntent(null), isPro, onUpgrade: goUpgrade },
     progress: { profile, onProfileChange: refreshProfile },
-    plan: { isPro, onUpgrade: goUpgrade, onStartSetup: () => setPlanSetup(true), onGoToWorkout: () => navigate('workout'), onStartWorkout: handleStartPlanDay, profile, onProfileChange: () => { refreshProfile(); refreshFitnessProfile() } },
+    plan: { isPro, onUpgrade: goUpgrade, onStartSetup: () => setPlanSetup(true), onGoToWorkout: () => navigate('workout'), onStartWorkout: handleStartPlanDay, onOpenSwim: () => navigate('swim'), profile, onProfileChange: () => { refreshProfile(); refreshFitnessProfile() } },
   }
 
   const PageComponent = (!isAdmin && ADMIN_PAGES.includes(page) ? null : PAGES[page]) ?? Workout

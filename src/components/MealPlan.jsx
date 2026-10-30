@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Icon } from '@iconify/react'
-import { Button, Card, SectionTitle, InfoButton, Fact } from './ui/index.js'
+import { Button, Card, SectionTitle, InfoButton, Fact, Chip } from './ui/index.js'
 import { buildDay, amountText } from '../lib/mealPlan.js'
 import { DIET_OPTS } from '../lib/nutrition.js'
 
@@ -10,7 +10,7 @@ const ICON = { breakfast: 'mdi:weather-sunset-up', lunch: 'mdi:white-balance-sun
 
 // A suggested day that fits the person's targets. Swap a meal for another option, or log it.
 // onLog(mealId, foods): foods in the Food log's shape
-export default function MealPlan({ calories, protein, diet = [], onLog, loggedMeals = [] }) {
+export default function MealPlan({ calories, protein, diet = [], onDietChange, onLog, loggedMeals = [] }) {
   const [picks, setPicks] = useState(readPicks)
   const [logged, setLogged] = useState({})
   const day = buildDay({ calories, protein, diet, picks })
@@ -26,7 +26,7 @@ export default function MealPlan({ calories, protein, diet = [], onLog, loggedMe
     onLog(m.meal, m.items.map(i => ({ name: `${i.name}, ${amountText(i)}`, kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat, meal: m.meal })))
     setLogged(l => ({ ...l, [m.meal]: true }))
   }
-  const dietLabels = DIET_OPTS.filter(o => diet.includes(o.id)).map(o => o.label.split(' (')[0])
+  const toggleDiet = id => onDietChange(diet.includes(id) ? diet.filter(d => d !== id) : [...diet, id])
 
   return (
     <div className="space-y-3">
@@ -41,8 +41,14 @@ export default function MealPlan({ calories, protein, diet = [], onLog, loggedMe
         <div className="flex flex-wrap gap-1.5">
           <Fact icon="mdi:fire">{day.totals.kcal.toLocaleString()} of {calories.toLocaleString()} kcal</Fact>
           <Fact icon="mdi:food-steak">{day.totals.protein} of {protein} g protein</Fact>
-          {dietLabels.map(l => <Fact key={l} icon="mdi:leaf">{l}</Fact>)}
         </div>
+        {onDietChange && (
+          <div className="flex flex-wrap gap-1.5 mt-3" role="group" aria-label="Diet">
+            {DIET_OPTS.map(o => (
+              <Chip key={o.id} selected={diet.includes(o.id)} onClick={() => toggleDiet(o.id)}>{o.id === 'fasting' ? 'I fast' : o.label}</Chip>
+            ))}
+          </div>
+        )}
         {short && <p className="text-xs text-muted mt-2">Plant foods bring carbs with their protein, so this day runs a little short on protein. A soy or pea protein shake closes the gap.</p>}
       </Card>
 

@@ -56,7 +56,13 @@ describe('Plan', () => {
     expect(await screen.findByText('No active plan')).toBeInTheDocument()
   })
   it('shows today as a rest day with Train Anyway, and the weekly schedule', async () => {
-    sb.set('fitness_plans', { data: planRow, error: null })
+    // Workouts only on days after today: a missed earlier one would move onto today (reshuffleWeek)
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    const todayIdx = (new Date().getDay() + 6) % 7
+    const restToday = structuredClone(planRow)
+    restToday.plan_data.weeklySchedule = restToday.plan_data.weeklySchedule.map((d, i) => (i > todayIdx ? d : { ...d, type: 'rest', title: 'Rest & Recovery', workout: { warmup: [], exercises: [], cooldown: [] } }))
+    expect(restToday.plan_data.weeklySchedule.map(d => d.day)).toEqual(days)
+    sb.set('fitness_plans', { data: restToday, error: null })
     sb.set('fitness_profiles', { data: fitnessProfile, error: null })
     sb.set('nutrition_targets', { data: { calorie_target: 2500, protein_grams: 180, carb_grams: 280, fat_grams: 70 }, error: null })
     const go = vi.fn()

@@ -6,6 +6,7 @@ import { fetchWorkoutHistory, saveWorkoutEntry, fetchCustomWorkouts, saveCustomW
 import { fetchActivePlan } from '../lib/fitnessApi.js'
 import { DemoButton, ExerciseDemoSheet } from '../components/ExerciseDemo.jsx'
 import { buildExerciseHistory, getRecords, suggestNext, parseRepRange, findNewPRs } from '../lib/progress.js'
+import { lighter } from '../lib/coaching.js'
 import { BADGES, computeEarnedBadges } from '../lib/badges.js'
 import { fetchBadges, awardBadges } from '../lib/progressApi.js'
 import { tok } from '../lib/tokens.js'
@@ -29,7 +30,8 @@ function matchPlanExercises(planExercises) {
     const found = EXERCISES.find(e => e.name.toLowerCase() === pe.name.toLowerCase())
     // Keep the plan's rep target so progression suggestions use the right range; a coach's
     // workout also brings its tip and how-to video
-    const coach = { ...(pe.coachTip && { coachTip: pe.coachTip }), ...(pe.coachVideo && { coachVideo: pe.coachVideo }) }
+    const coach = { ...(pe.coachTip && { coachTip: pe.coachTip }), ...(pe.coachVideo && { coachVideo: pe.coachVideo }), ...(pe.deload && { deload: true }) }
+    // A lighter week on the plan (lib/coaching.js) carries deload, so the weights filled in drop to about 80%
     if (found) return { ...found, reps: pe.reps, ...coach }
     return { name: pe.name, muscle: '', icon: 'mdi:dumbbell', sets: pe.sets, reps: pe.reps, restSeconds: pe.restSeconds, ...coach }
   })
@@ -710,9 +712,14 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
           )}
 
           {(!isRestDay || shownWorkout) && (
+            shownWorkout?.sport === 'swim' && onOpenPage ? (
+              // A pool session from the plan: swum, then logged on Swim
+              <Button full icon="mdi:swim" className="h-14 text-base" onClick={() => onOpenPage('swim')}>Log this swim</Button>
+            ) : (
             <Button full icon="mdi:play" className="h-14 text-base" onClick={shownWorkout ? handlePlanStart : () => onStart(fallbackExs, fallbackName)}>
               {isRestDay ? 'Train anyway' : 'Start workout'}
             </Button>
+            )
           )}
           <Button variant="ghost" full icon="mdi:plus" onClick={onFreeStart} className="mt-2">Free workout</Button>
       </Card>
@@ -975,7 +982,10 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
   const records = pastSessions.length ? getRecords(pastSessions) : null
   const mode = exerciseMode(ex)
   const timed = mode === 'time' ? parseTimeTarget(ex.reps) : null
-  const suggestion = suggestNext(pastSessions, { ...parseRepRange(ex.reps), unit, timed })
+  const suggested = suggestNext(pastSessions, { ...parseRepRange(ex.reps), unit, timed })
+  const suggestion = ex.deload && suggested?.weight > 0
+    ? { ...suggested, weight: lighter(suggested.weight, unit), reason: 'Lighter week: about 80% of your working weight' }
+    : suggested
   const lastSameSet = lastSession?.sets?.[setIdx] ?? null
   const [holding, setHolding] = useState(false) // the stopwatch is running
   const stopHold = useRef(null) // stops it and returns the exact time

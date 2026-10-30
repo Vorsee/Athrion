@@ -79,6 +79,16 @@ export async function saveNutritionTarget(targets) {
   return data
 }
 
+// The diet answer alone (vegan, halal...), from the meal plan. Saved as the plan questions save
+// it, so the next plan and the meal plan agree. No fitness profile yet: nothing to update.
+export async function saveDiet(ids, opts) {
+  const { data: { user } } = await supabase.auth.getUser()
+  const labels = opts.filter(o => ids.includes(o.id)).map(o => o.label)
+  const { error } = await supabase.from('fitness_profiles')
+    .update({ limitations: labels.length ? `Diet: ${labels.join('; ')}` : '' }).eq('user_id', user.id)
+  if (error) throw error
+}
+
 export async function fetchLatestNutritionTarget() {
   const { data, error } = await supabase
     .from('nutrition_targets')
@@ -141,7 +151,23 @@ export function dbNutritionToPayload(row) {
 // ── Plan Generation (calls Edge Function) ─────────────────────────────────────
 
 // mode 'adapt' rewrites the active plan using recent check-ins, workouts and health data
+// Swimmers: their best pace per 100 m for each stroke, so the plan's send-offs fit them
+async function swimPaces() {
+  const { data } = await supabase.from('cardio_logs').select('stroke, distance_m, seconds').eq('kind', 'swim').gte('distance_m', 50).limit(500)
+  const best = {}
+  for (const l of data ?? []) {
+    const per100 = (l.seconds / Number(l.distance_m)) * 100
+    if (l.stroke && (!best[l.stroke] || per100 < best[l.stroke])) best[l.stroke] = per100
+  }
+  return Object.keys(best).length
+    ? Object.fromEntries(Object.entries(best).map(([k, v]) => [k, `${Math.floor(Math.round(v) / 60)}:${String(Math.round(v) % 60).padStart(2, '0')}`]))
+    : undefined
+}
+
 export async function generatePlan(fitnessProfile, nutritionTargets, mode = 'new') {
+  if ([fitnessProfile.primaryGoal, ...(fitnessProfile.secondaryGoals ?? [])].includes('swimming')) {
+    fitnessProfile = { ...fitnessProfile, swimPaces: await swimPaces().catch(() => undefined) }
+  }
   const { data: { session } } = await supabase.auth.getSession()
   if (!session?.access_token) throw new Error('Not authenticated')
 

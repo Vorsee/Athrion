@@ -182,7 +182,7 @@ export function ResultsCard({ fp, weights, progress, history }) {
       return acc.some(x => x.date === d && x.kind === 'w') ? acc : [...acc, { date: d, kind: 'w', icon: 'mdi:dumbbell', text: h.name || 'Workout' }]
     }, []),
     ...since.map(x => ({ date: x.date, icon: 'mdi:scale-bathroom', text: `Weighed ${fromLb(x.weight_lb)} ${unit}` })),
-    fp?.goal_target_date && { date: fp.goal_target_date, icon: 'mdi:flag-checkered', text: `Target: ${target} ${unit}`, future: fp.goal_target_date > todayKey() },
+    fp?.goal_target_date && { date: fp.goal_target_date, icon: 'mdi:flag-checkered', text: target != null ? `Target: ${target} ${unit}` : 'Goal date', future: fp.goal_target_date > todayKey() },
   ].filter(Boolean).sort((a, b) => b.date.localeCompare(a.date))
   const [showAll, setShowAll] = useState(false)
   const shown = showAll ? timeline : timeline.slice(0, 6)

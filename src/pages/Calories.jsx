@@ -5,13 +5,17 @@ import { supabase } from '../lib/supabase.js'
 import { fetchTodayCalorieLog, saveTodayCalorieLog, fetchCalorieLogs, saveGoals } from '../lib/api.js'
 import { resolveGoals } from '../lib/goals.js'
 import { MIN_CALORIES, DIET_OPTS, chipsFrom } from '../lib/nutrition.js'
-import { fetchLatestNutritionTarget, fetchFitnessProfile } from '../lib/fitnessApi.js'
+import { fetchLatestNutritionTarget, fetchFitnessProfile, saveDiet } from '../lib/fitnessApi.js'
 import MealPlan from '../components/MealPlan.jsx'
+import AiMealPlan from '../components/AiMealPlan.jsx'
 import AdaptiveNutritionCard from '../components/AdaptiveNutritionCard.jsx'
 import BarcodeScanner from '../components/BarcodeScanner.jsx'
 import { tok } from '../lib/tokens.js'
 import { Segmented, Sheet, Button, Card, SectionTitle, SectionLink, ListRow, Fact, IconButton } from '../components/ui/index.js'
 import { useHeaderAction } from '../lib/shell.js'
+
+const DIET_KEY = 'athrion_diet'
+const readDiet = () => { try { const v = JSON.parse(localStorage.getItem(DIET_KEY)); return Array.isArray(v) ? v : [] } catch { return [] } }
 
 const MEALS = [
   { id: 'breakfast', label: 'Breakfast', icon: 'mdi:weather-sunset-up', hours: [5,  11], color: 'warn' },
@@ -54,7 +58,8 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
   const [localGoals, setLocalGoals]   = useState(null)
   const [planNutrition, setPlanNutrition] = useState(null)
   const [scanning, setScanning]       = useState(false)
-  const [diet, setDiet]               = useState([]) // from the plan questions, for the meal plan
+  const [diet, setDiet]               = useState([]) // from the plan questions or the meal plan's chips
+  const hasFp = useRef(false)
   const fileRef = useRef()
   const [logFood, setLogFood]         = useState(false)
   useHeaderAction('mdi:plus', 'Log food', () => setLogFood(true))
@@ -106,9 +111,16 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
       .then(t => { if (t) setPlanNutrition(t) })
       .catch(() => {})
     fetchFitnessProfile()
-      .then(fp => setDiet(chipsFrom(fp?.limitations, DIET_OPTS)))
+      .then(fp => { hasFp.current = !!fp; setDiet(fp ? chipsFrom(fp.limitations, DIET_OPTS) : readDiet()) })
       .catch(() => {})
   }, [])
+
+  // Saved with the plan answers when there are some, else on this device until there are
+  function changeDiet(ids) {
+    setDiet(ids)
+    try { localStorage.setItem(DIET_KEY, JSON.stringify(ids)) } catch {}
+    if (hasFp.current) saveDiet(ids, DIET_OPTS).catch(() => {})
+  }
 
   function saveFoods(f) {
     setFoods(f)
@@ -230,8 +242,23 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
       <Segmented options={[['today', 'Today'], ['plan', 'Meal plan'], ['log', 'Log']]} value={tab} onChange={setTab} label="Food view" />
 
       {tab === 'plan' ? (
-        <MealPlan calories={goals.calories} protein={goals.protein} diet={diet}
-          onLog={(meal, items) => saveFoods([...foods, ...items])} />
+        isPro ? (
+          <AiMealPlan targets={{ calories: goals.calories, protein: goals.protein, carbs: goals.carbs, fat: fatGoal }} diet={diet} onDietChange={changeDiet}
+            onLog={(meal, items) => saveFoods([...foods, ...items])} />
+        ) : (
+          <div className="space-y-3">
+            <Card className="flex flex-wrap items-center gap-3">
+              <Icon icon="mdi:auto-fix" width={26} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
+              <div className="grow basis-0 min-w-[10rem]">
+                <div className="text-sm font-bold text-ink">A week of meals made for you <span className="ml-1 text-xs font-semibold text-on-neon bg-neon rounded-md px-1.5 py-0.5">Pro</span></div>
+                <p className="text-xs text-muted">7 days built by AI from the foods you like, your diet and cooking time, with a shopping list.</p>
+              </div>
+              {onUpgrade && <Button size="sm" onClick={onUpgrade}>Get Pro</Button>}
+            </Card>
+            <MealPlan calories={goals.calories} protein={goals.protein} diet={diet} onDietChange={changeDiet}
+              onLog={(meal, items) => saveFoods([...foods, ...items])} />
+          </div>
+        )
       ) : tab === 'today' ? (
         <>
           {/* Quick add: photo and barcode */}

@@ -9,7 +9,7 @@ const fmtHour = h => new Date(2000, 0, 1, h).toLocaleTimeString(undefined, { hou
 // Push switches per type (supabase/schema.sql, 011 and 019); the in-app bell always lists them
 const TYPES = [
   ['notify_friends', 'Friend requests and accepts'],
-  ['notify_team', 'Swim team requests and changes'],
+  ['notify_team', 'Swim team: practices, requests and changes'],
   ['notify_workout_open', 'A workout left open'],
   ['notify_achievements', 'Medals and month results'],
   ['notify_recap', 'Sunday recap of your week'],

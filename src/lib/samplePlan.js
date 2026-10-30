@@ -56,3 +56,4 @@ export const SAMPLE_PLAN = {
     },
   },
 }
+

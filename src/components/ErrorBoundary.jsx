@@ -3,8 +3,10 @@ import Brand from './Brand.jsx'
 
 const RELOADED = 'athrion_reloaded_after_error'
 
-// After a deploy, a tab still running the old version asks for code files that no longer exist
-const isStaleCode = e => /dynamically imported module|Importing a module script failed|error loading dynamically|ChunkLoadError|MIME type/i.test(String(e?.message || e))
+// After a deploy, a tab still running the old version asks for code files that no longer exist,
+// or loads a new page file that pulls in a second, newer copy of the app's code; that mix fails
+// with "Cannot access 'x' before initialization"
+const isStaleCode = e => /dynamically imported module|Importing a module script failed|error loading dynamically|ChunkLoadError|MIME type|before initialization/i.test(String(e?.message || e))
 
 // Without this, any crash while rendering leaves an empty page
 export default class ErrorBoundary extends Component {

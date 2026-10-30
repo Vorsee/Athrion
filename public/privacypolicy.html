@@ -47,7 +47,7 @@
     <ul>
       <li>We collect what you give us to run the app: your account, body stats, goals, workouts, meals, measurements and photos.</li>
       <li>We don't sell your data, don't show ads, and don't use tracking or advertising cookies.</li>
-      <li>To build your plan and read meal photos, the relevant data goes to our AI provider, Anthropic, which doesn't use it to train its models.</li>
+      <li>To build your plan and meal plan and to read meal photos, the relevant data goes to our AI provider, Anthropic, which doesn't use it to train its models.</li>
       <li>Other people only see what you choose to share: your nickname and points on leaderboards, and your sets in a Train together room.</li>
       <li>You can download all your data or delete your account at any time in the app: Profile → Your data.</li>
     </ul>
@@ -81,7 +81,7 @@
     <li><strong>Progress:</strong> weekly check-ins (weight, energy, sleep, hunger, soreness, stress, notes), body measurements, progress photos, and daily steps, sleep, resting heart rate and active energy that you enter or sync.</li>
     <li><strong>Social:</strong> your nickname, friend requests and friends, whether you appear on the public leaderboard, and the rooms and sets you log in Train together.</li>
     <li><strong>Coach shop:</strong> the coach workouts and plans you get or buy, and when.</li>
-    <li><strong>Swim teams:</strong> the team you join or ask to join, and the swimmer photo you add. If you coach a team: its name and who is on it.</li>
+    <li><strong>Swim teams:</strong> the team you join or ask to join, and the swimmer photo you add. If you coach a team: its name, who is on it, and the practices you post to it.</li>
     <li><strong>Reviews:</strong> the star rating, text and name you post in Rate ATHRION or on athrion.app. For a review sent from the website without an account, we also keep a one-way hash of your internet address, only to limit how many reviews one visitor can send; we can't turn it back into the address.</li>
     <li><strong>If you apply to be a coach:</strong> your coach name, photo, qualifications, bio, what you coach, links you add, and the workouts, plans, tips and videos you publish. We use your application to decide whether to approve you.</li>
     <li><strong>Settings:</strong> reminder times, time zone, notification preferences and theme.</li>
@@ -115,7 +115,8 @@
   <h2 id="ai">3. AI features</h2>
   <p>ATHRION Pro uses Anthropic's Claude AI models through Anthropic's commercial API:</p>
   <ul>
-    <li><strong>Plan generation:</strong> when you build or update a plan, we send your body stats, fitness profile (including any injuries, limitations or medical notes you entered), recent training, check-ins and health averages. We don't send your name or email.</li>
+    <li><strong>Plan generation:</strong> when you build or update a plan, we send your body stats, fitness profile (including any injuries, limitations or medical notes you entered), recent training, check-ins and health averages, and, if swimming is one of your goals, your best pace for each stroke. We don't send your name or email.</li>
+    <li><strong>Meal plan:</strong> when you build a meal plan, we send your calorie and macro targets, your diet choice (for example vegan, halal or fasting) and the foods you said you like or want left out. The plan is saved to your account until you build a new one or delete your account.</li>
     <li><strong>Meal photo scan:</strong> the photo you choose is sent to estimate its nutrition. We don't store the photo; only the food entries you save are kept.</li>
   </ul>
   <p>Under its commercial terms, Anthropic doesn't use API data to train its models and keeps it only for a limited time for safety and abuse monitoring. AI output can be wrong. It is general fitness guidance, not medical advice (see our <a href="/terms.html#health">Terms of use</a>).</p>
@@ -129,7 +130,7 @@
         <tr><td>Supabase</td><td>Database, sign-in, file storage, background functions</td><td>All the data described above</td></tr>
         <tr><td>Vercel</td><td>Hosting the website and payment routes</td><td>Technical data; payment requests</td></tr>
         <tr><td>Stripe</td><td>Payments and subscriptions</td><td>Email, payment details you enter with Stripe, subscription, coach shop purchases; for coaches, their payout account</td></tr>
-        <tr><td>Anthropic</td><td>AI plan generation and meal photo analysis (Pro)</td><td>The data listed in section 3</td></tr>
+        <tr><td>Anthropic</td><td>AI plan and meal plan generation and meal photo analysis (Pro)</td><td>The data listed in section 3</td></tr>
         <tr><td>Apple, Google, Mozilla push services</td><td>Delivering notifications to your device</td><td>Notification text and your device's push address</td></tr>
         <tr><td>Open Food Facts</td><td>Looking up a scanned barcode</td><td>The barcode number and your IP address</td></tr>
         <tr><td>jsDelivr, ExerciseDB</td><td>Serving exercise images</td><td>Your IP address, as with any image on the web</td></tr>

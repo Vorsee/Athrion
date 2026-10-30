@@ -90,7 +90,7 @@ describe('backup plans follow both goals', () => {
   })
   it('build muscle + swimming: the cardio day is a swim', () => {
     const plan = makeFallbackPlan({ primaryGoal: 'build_muscle', secondaryGoals: ['swimming'], workoutDaysPerWeek: 3, workoutLocation: 'gym' }, nt)
-    expect(plan.weeklySchedule.some(d => d.title === 'Swim')).toBe(true)
+    expect(plan.weeklySchedule.some(d => d.sport === 'swim')).toBe(true)
   })
   it('one goal works as before', () => {
     expect(trainingGoal({ primaryGoal: 'improve_strength' })).toBe('improve_strength')

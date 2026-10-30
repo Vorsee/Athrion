@@ -5,6 +5,7 @@ import { Segmented, BackLink } from '../components/ui/index.js'
 import { ConsentChecks } from '../components/LegalConsent.jsx'
 import { consentMetadata } from '../lib/legal.js'
 import { readInvite } from '../lib/socialApi.js'
+import { readSwimStart } from '../lib/swim.js'
 import Brand from '../components/Brand.jsx'
 
 const INPUT = 'w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-sm outline-none transition-colors'
@@ -17,6 +18,7 @@ export default function Auth({ initialMode = 'login', onBack }) {
   const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' })
   const [consent, setConsent] = useState({ terms: false, health: false })
   const [inviter] = useState(readInvite) // opened from someone's athrion.app/add/<nickname> link
+  const [swimStart] = useState(readSwimStart) // from "Start swimming" on the landing page
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -82,6 +84,13 @@ export default function Auth({ initialMode = 'login', onBack }) {
               <span className="font-semibold text-ink">@{inviter}</span> invited you to train together.{' '}
               {tab === 'register' ? 'Create a free account to add them as a friend.' : 'Sign in to add them as a friend.'}
             </div>
+          </div>
+        )}
+
+        {swimStart && !inviter && tab === 'register' && screen === 'form' && (
+          <div role="status" className="flex items-center gap-3 bg-neon-tint border border-neon-stroke/25 rounded-2xl px-4 py-3 mb-4">
+            <Icon icon="mdi:swim" width={24} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
+            <div className="text-sm text-ink-2">Create a free account and you'll land on Swim: log a swim, see a PR for every stroke, or join your team.</div>
           </div>
         )}
 

@@ -68,7 +68,7 @@ export default function Landing({ onCreateAccount, onSignIn }) {
               <h2 id="swim" className="font-bold text-2xl">Swim teams</h2>
               <p className="text-ink-2 mt-1">Every stroke, every PR. Coaches see their whole team.</p>
             </div>
-            <Button variant="secondary" icon="mdi:swim" onClick={onCreateAccount} className="w-full sm:w-auto">Start swimming</Button>
+            <Button variant="secondary" icon="mdi:swim" onClick={() => onCreateAccount('swim')} className="w-full sm:w-auto">Start swimming</Button>
           </div>
         </section>
 
@@ -98,7 +98,10 @@ export default function Landing({ onCreateAccount, onSignIn }) {
                 <Check>Everything in Free</Check>
                 {PRO_FEATURES.map(f => <Check key={f.title}>{f.title}</Check>)}
               </ul>
-              <p className="text-xs text-muted mt-5">Cancel anytime.</p>
+              <p className="text-xs text-muted mt-5">
+                Free for {TRIAL_DAYS} days, then {money(PLANS.monthly.price)} a month (or {money(PLANS.annual.price)} a year) starting on day {TRIAL_DAYS + 1}.
+                Cancel before then and you pay nothing. The trial is for first-time subscribers.
+              </p>
             </div>
           </div>
         </section>
@@ -150,7 +153,7 @@ function ProductPreview() {
       <div className={card}>
         <div className="text-xs font-semibold text-neon-ink">Train</div>
         <div className="font-bold text-lg mt-1">Upper body · 45 min</div>
-        {[['Bench press', '4 × 8', '+2.5 kg'], ['Bent-over row', '4 × 10', ''], ['Overhead press', '3 × 8', '']].map(([n, s, pr]) => (
+        {[['Bench press', '4 × 8', '+5 lb'], ['Bent-over row', '4 × 10', ''], ['Overhead press', '3 × 8', '']].map(([n, s, pr]) => (
           <div key={n} className="flex items-center justify-between text-sm py-1.5 border-b border-line last:border-0">
             <span className="text-ink-2">{n}</span>
             <span className="flex items-center gap-2">
