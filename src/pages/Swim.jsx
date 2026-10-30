@@ -17,6 +17,8 @@ import {
   fetchPractices, savePractice, deletePractice,
 } from '../lib/swimApi.js'
 import Sheet from '../components/Sheet.jsx'
+import ShareSheet from '../components/ShareSheet.jsx'
+import { cardContent } from '../lib/shareCard.js'
 import { localDateKey } from '../lib/data.js'
 import { shareLink } from '../lib/shopLink.js'
 import { fetchMyCoach, saveCoachProfile, fetchIsAdmin } from '../lib/coachApi.js'
@@ -79,7 +81,14 @@ export function StrokeGrid({ swims, selected, onSelect }) {
   )
 }
 
-function SwimList({ swims, onDelete }) {
+// A swim as a story card: distance, time and pace in the pool unit
+function swimCard(l, u, title) {
+  return cardContent({ kind: 'swim', date: l.date, title: title ?? (l.stroke ? `${strokeLabel(l.stroke)} swim` : 'Swim'),
+    distance: fmtDistance(l.distance_m, u), time: fmtDuration(l.seconds),
+    pace: l.seconds > 0 && Number(l.distance_m) > 0 ? `${fmtDuration(paceSecs(l, u))} /${u.per}` : '' })
+}
+
+function SwimList({ swims, onDelete, onShare }) {
   const u = useSwimUnits()
   return (
     <div className="divide-y divide-line">
@@ -94,9 +103,15 @@ function SwimList({ swims, onDelete }) {
               {fmtDate(l.date)}{l.stroke ? ` · ${strokeLabel(l.stroke)}` : ''} · {fmtDuration(paceSecs(l, u))} /{u.per}{l.notes ? ` · ${l.notes}` : ''}
             </div>
           </div>
+          {onShare && (
+            <button onClick={() => onShare(l)} aria-label={`Share swim on ${fmtDate(l.date)}`}
+              className="press w-9 h-9 inline-flex items-center justify-center rounded-md text-muted hover:text-neon-ink hover:bg-raised ml-auto">
+              <Icon icon="mdi:share-variant-outline" width={16} aria-hidden="true" />
+            </button>
+          )}
           {onDelete && (
             <button onClick={() => onDelete(l)} aria-label={`Delete swim on ${fmtDate(l.date)}`}
-              className="press w-9 h-9 inline-flex items-center justify-center rounded-md text-muted hover:text-danger hover:bg-danger/12 ml-auto">
+              className={`press w-9 h-9 inline-flex items-center justify-center rounded-md text-muted hover:text-danger hover:bg-danger/12 ${onShare ? '' : 'ml-auto'}`}>
               <Icon icon="mdi:close" width={16} aria-hidden="true" />
             </button>
           )}
@@ -134,9 +149,9 @@ function LogSwim({ stroke, setStroke, onSaved, bare = false }) {
       if (!(distance > 0)) throw new Error(`Enter the distance in ${u.dist}`)
       if (!seconds) throw new Error('Enter the time, like 32:00 or 1:05:00')
       const notes = [set?.note, form.notes.trim()].filter(Boolean).join('. ').slice(0, 300)
-      await saveCardio({ date: form.date, kind: 'swim', stroke, distance_m: Math.round(u.toM(distance) * 10) / 10, seconds, notes })
+      const saved = await saveCardio({ date: form.date, kind: 'swim', stroke, distance_m: Math.round(u.toM(distance) * 10) / 10, seconds, notes })
       setForm(blank)
-      onSaved()
+      onSaved(saved)
     } catch (e) {
       setErr(e.message || 'Could not save')
     } finally {
@@ -222,6 +237,9 @@ function StrokeProgress({ swims, stroke, isPro, onUpgrade }) {
 }
 
 function MySwims({ swims, onChanged, isPro, onUpgrade }) {
+  const u = useSwimUnits()
+  const [sharing, setSharing] = useState(null) // the card being shared
+  const [justLogged, setJustLogged] = useState(null) // the swim just saved, offered for sharing
   const [selected, setSelected] = useState(null) // a stroke opened from its card
   const [logging, setLogging] = useState(false)
   const [stroke, setStroke] = useState('free')
@@ -235,18 +253,26 @@ function MySwims({ swims, onChanged, isPro, onUpgrade }) {
 
       <Button full icon="mdi:plus" onClick={() => setLogging(true)}>Log a swim</Button>
 
+      {justLogged && (
+        <Card className="flex flex-wrap items-center gap-3 pop-in">
+          <Icon icon="mdi:check-circle-outline" width={24} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
+          <span className="grow min-w-[8rem] text-sm text-ink"><span className="font-semibold">Swim saved.</span> {fmtDistance(justLogged.distance_m, u)} in {fmtDuration(justLogged.seconds)}</span>
+          <Button size="sm" icon="mdi:share-variant-outline" onClick={() => { setSharing(swimCard(justLogged, u)); setJustLogged(null) }}>Share</Button>
+        </Card>
+      )}
+
       {selected ? (
         <Card className="space-y-3">
           <SectionTitle action={<button onClick={() => setSelected(null)} className="press text-xs font-semibold text-neon-ink min-h-[32px]">All strokes</button>}>
             {strokeLabel(selected)}
           </SectionTitle>
           <StrokeProgress swims={swims} stroke={selected} isPro={isPro} onUpgrade={onUpgrade} />
-          {shown.length ? <SwimList swims={shown} onDelete={del} /> : <p className="text-sm text-muted">No {strokeLabel(selected).toLowerCase()} swims yet.</p>}
+          {shown.length ? <SwimList swims={shown} onDelete={del} onShare={l => setSharing(swimCard(l, u))} /> : <p className="text-sm text-muted">No {strokeLabel(selected).toLowerCase()} swims yet.</p>}
         </Card>
       ) : swims.length > 0 ? (
         <Card>
           <SectionTitle action={swims.length > 5 && <button onClick={() => setAll(v => !v)} className="press text-xs font-semibold text-neon-ink min-h-[32px]">{all ? 'Less' : 'All'}</button>}>Recent swims</SectionTitle>
-          <SwimList swims={all ? swims : swims.slice(0, 5)} onDelete={del} />
+          <SwimList swims={all ? swims : swims.slice(0, 5)} onDelete={del} onShare={l => setSharing(swimCard(l, u))} />
         </Card>
       ) : (
         <EmptyState icon="mdi:swim" title="No swims yet">Log one to see your PR pace for each stroke.</EmptyState>
@@ -254,9 +280,10 @@ function MySwims({ swims, onChanged, isPro, onUpgrade }) {
 
       {logging && (
         <Sheet title="Log a swim" onClose={() => setLogging(false)}>
-          <LogSwim bare stroke={stroke} setStroke={setStroke} onSaved={() => { setLogging(false); onChanged() }} />
+          <LogSwim bare stroke={stroke} setStroke={setStroke} onSaved={row => { setLogging(false); setJustLogged(row ?? null); onChanged() }} />
         </Sheet>
       )}
+      {sharing && <ShareSheet content={sharing} onClose={() => setSharing(null)} />}
     </div>
   )
 }
@@ -496,6 +523,9 @@ function CoachPractices({ team }) {
 
 // Swimmer: the coach's practice for today (or the next one), logged as a swim in one tap
 function TeamPractice({ teamId, compact = false, onOpen, onLogged }) {
+  const u = useSwimUnits()
+  const [logged, setLogged] = useState(null)
+  const [sharing, setSharing] = useState(null)
   const [list, setList] = useState(null)
   const [time, setTime] = useState('')
   const [state, setState] = useState('idle') // idle | saving | done
@@ -507,8 +537,10 @@ function TeamPractice({ teamId, compact = false, onOpen, onLogged }) {
   const t = practiceTotals(p.items)
   // Logged: just a line saying so, the sets are done with
   if (state === 'done') return (
-    <Card pad="sm">
-      <p role="status" className="text-sm font-semibold text-neon-ink flex items-center gap-2 px-1 py-1"><Icon icon="mdi:check-circle-outline" width={20} />Today's practice is logged. Your coach sees it.</p>
+    <Card pad="sm" className="flex flex-wrap items-center gap-2">
+      <p role="status" className="grow text-sm font-semibold text-neon-ink flex items-center gap-2 px-1 py-1"><Icon icon="mdi:check-circle-outline" width={20} />Today's practice is logged. Your coach sees it.</p>
+      {logged && <Button size="sm" variant="secondary" icon="mdi:share-variant-outline" onClick={() => setSharing(swimCard(logged, u, p.title))}>Share</Button>}
+      {sharing && <ShareSheet content={sharing} onClose={() => setSharing(null)} />}
     </Card>
   )
 
@@ -526,7 +558,7 @@ function TeamPractice({ teamId, compact = false, onOpen, onLogged }) {
     setState('saving')
     try {
       const distance_m = Math.round((t.unit === 'yd' ? t.distance * 0.9144 : t.distance) * 10) / 10
-      await saveCardio({ date: todayKey(), kind: 'swim', stroke: mainStroke(p.items), distance_m, seconds, notes: `Team practice: ${p.title}`.slice(0, 300) })
+      setLogged(await saveCardio({ date: todayKey(), kind: 'swim', stroke: mainStroke(p.items), distance_m, seconds, notes: `Team practice: ${p.title}`.slice(0, 300) }))
       setState('done'); onLogged?.()
     } catch (x) { setErr(x.message || 'Could not save'); setState('idle') }
   }

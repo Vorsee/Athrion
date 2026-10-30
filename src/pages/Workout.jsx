@@ -7,6 +7,8 @@ import { fetchActivePlan, fetchFitnessProfile } from '../lib/fitnessApi.js'
 import { fetchCardio } from '../lib/progressApi.js'
 import { DemoButton, ExerciseDemoSheet } from '../components/ExerciseDemo.jsx'
 import { buildExerciseHistory, getRecords, suggestNext, parseRepRange, findNewPRs } from '../lib/progress.js'
+import ShareSheet from '../components/ShareSheet.jsx'
+import { cardContent } from '../lib/shareCard.js'
 import { lighter, historyFor, coachedWeek, swimsAsHistory, startableDay, shortVersion, shortOptions } from '../lib/coaching.js'
 import { BADGES, computeEarnedBadges } from '../lib/badges.js'
 import { fetchBadges, awardBadges } from '../lib/progressApi.js'
@@ -544,6 +546,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       startTime={startTime}
       freeWorkout={freeWorkout}
       activeExercises={activeExercises}
+      workoutName={activeWorkoutName}
       onSaveWorkout={handleSaveAsWorkout}
       saveStatus={lastSave}
       onRetrySave={retryPending}
@@ -1541,7 +1544,7 @@ function RestScreen({ exercises, restDuration, exIdx, setIdx, totalSets, onAdvan
 // ─────────────────────────────────────────────────────────────────────────────
 // Done
 // ─────────────────────────────────────────────────────────────────────────────
-function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, freeWorkout, activeExercises, onSaveWorkout, saveStatus, onRetrySave }) {
+function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, freeWorkout, activeExercises, workoutName: doneName, onSaveWorkout, saveStatus, onRetrySave }) {
   const { fmt, fmtVolume } = useUnit()
   const duration = Math.round((Date.now() - startTime) / 60000)
   const volume   = loggedSets.filter(s => !s.warmup).reduce((a, s) => a + s.weight * s.reps, 0)
@@ -1554,6 +1557,17 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
   }
 
   const [workoutName, setWorkoutName] = useState('My free workout')
+  const [sharing, setSharing] = useState(null) // the card being shared
+  // The story card: time, volume, sets, the best set of the first three lifts, and new records
+  const shareContent = () => {
+    const working = loggedSets.filter(x => !x.warmup)
+    const lifts = uniqueExNames.map(name => {
+      const best = working.filter(x => x.ex === name && x.weight > 0).sort((a, b) => b.weight - a.weight || b.reps - a.reps)[0]
+      return best ? `${name} · ${setText(best, fmt)}` : null
+    }).filter(Boolean)
+    return cardContent({ kind: 'workout', title: doneName || (freeWorkout ? 'Free workout' : 'Workout'), date: todayKey(),
+      minutes: duration, volume: volume > 0 ? fmtVolume(volume) : '', sets: working.length, lifts, records: prs.length })
+  }
   const [saveState, setSaveState]     = useState('idle') // idle | saving | saved
 
   async function handleSave() {
@@ -1643,7 +1657,11 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
         </Card>
       )}
 
-      <Button full onClick={onHome}>Done</Button>
+      <div className="w-full space-y-2">
+        <Button full icon="mdi:share-variant-outline" variant="secondary" onClick={() => setSharing(shareContent())}>Share to your story</Button>
+        <Button full onClick={onHome}>Done</Button>
+      </div>
+      {sharing && <ShareSheet content={sharing} onClose={() => setSharing(null)} />}
 
       <Card className="w-full text-left">
         <SectionTitle>Sets</SectionTitle>

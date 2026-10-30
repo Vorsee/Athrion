@@ -77,3 +77,16 @@ describe('the personal coaching tip', () => {
     expect(pool.workout.exercises.findIndex(e => /^Warm-up/.test(e.name))).toBeGreaterThan(0)
   })
 })
+
+describe('story cards', () => {
+  it('puts a workout and a swim into the card text', async () => {
+    const { cardContent } = await import('../../src/lib/shareCard.js')
+    const w = cardContent({ kind: 'workout', title: 'Push day', date: '2026-10-30', minutes: 0, volume: '12,000 lb', sets: 14, lifts: ['a', 'b', 'c', 'd'], records: 1 })
+    expect(w.stats.map(s => s[0])).toEqual(['Volume', 'Sets']) // a zero time is left out
+    expect(w.lines).toHaveLength(3)
+    expect(w.highlight).toBe('1 new record')
+    const s = cardContent({ kind: 'swim', title: 'Freestyle swim', date: '2026-10-30', distance: '1,500 m', time: '26:00', pace: '1:44 /100 m' })
+    expect(s.stats).toEqual([['Distance', '1,500 m'], ['Time', '26:00'], ['Pace', '1:44 /100 m']])
+    expect(s.eyebrow).toMatch(/^Swim · /)
+  })
+})
