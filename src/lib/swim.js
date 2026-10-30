@@ -128,19 +128,16 @@ export const DRYLAND_MOVES = [
   ['Band pull-aparts', '15'], ['Band external rotation', '12'], ['Push-ups', '10'], ['Plank', '30 s'],
   ['Dead bugs', '10'], ['Squat jumps', '8'], ['Streamline jumps', '8'], ['Arm circles', '30 s'],
 ]
-const DRY = [['dryland', 2, 'Band pull-aparts', '15'], ['dryland', 2, 'Squat jumps', '8'], ['dryland', 2, 'Plank', '30 s']]
-
-// Starting points the coach can edit, in their pool unit
-export const PRACTICE_TEMPLATES = [
-  { title: 'Aerobic base', items: [...DRY, ['warmup', 1, 400, 'free', '', 'Easy, long strokes'], ['warmup', 4, 50, 'free', '1:00', 'Drill: catch-up'],
-    ['main', 5, 200, 'free', '3:10', 'Steady, same time every 200'], ['main', 4, 100, 'back', '1:50', ''], ['cooldown', 1, 200, 'free', '', 'Easy']] },
-  { title: 'Sprint', items: [...DRY, ['warmup', 1, 300, 'free', '', 'Easy'], ['warmup', 6, 25, 'free', '0:40', 'Build to fast'],
-    ['main', 8, 50, 'free', '1:30', 'All out, full recovery'], ['main', 4, 25, 'fly', '0:45', 'Fast'], ['cooldown', 1, 200, 'back', '', 'Easy']] },
-  { title: 'Technique', items: [...DRY, ['warmup', 1, 300, 'free', '', 'Easy'], ['main', 6, 50, 'free', '1:05', 'Fingertip drag'],
-    ['main', 6, 50, 'breast', '1:15', 'Two kicks, one pull'], ['main', 4, 100, 'im', '2:00', 'Smooth turns'], ['cooldown', 1, 200, 'free', '', 'Easy']] },
-].map(t => ({ title: t.title, build: unit => t.items.map(([part, reps, distance, stroke, send_off, note]) => (part === 'dryland'
-  ? { part, reps, name: distance, amount: stroke, note: '' }
-  : { part, reps, distance, unit, stroke, send_off, note })) }))
+// One-tap sets for each part of a practice, in the coach's pool unit. Each adds one set, never a
+// whole practice. [reps, distance, stroke, send-off, note]
+const SUGGEST = {
+  warmup: [[1, 400, 'free', '', 'Easy'], [1, 200, 'back', '', 'Easy'], [4, 50, 'free', '1:00', 'Drill: catch-up'], [4, 25, 'free', '0:40', 'Build']],
+  main: [[8, 100, 'free', '1:45', ''], [5, 200, 'free', '3:10', 'Steady'], [8, 50, 'free', '1:00', 'Fast'], [6, 50, 'back', '1:10', ''], [6, 50, 'breast', '1:15', ''], [4, 100, 'im', '2:00', ''], [4, 25, 'fly', '0:45', 'Fast']],
+  cooldown: [[1, 200, 'free', '', 'Easy'], [1, 100, 'back', '', 'Easy']],
+}
+export const practiceSuggestions = (part, unit = 'm') => (part === 'dryland'
+  ? DRYLAND_MOVES.map(([name, amount]) => ({ part, reps: 2, name, amount, note: '' }))
+  : (SUGGEST[part] ?? []).map(([reps, distance, stroke, send_off, note]) => ({ part, reps, distance, unit, stroke, send_off, note })))
 
 const secsOf = t => { const m = /^(\d+):(\d{2})$/.exec(t ?? ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null }
 // Total distance (in the practice's unit) and, when every pool set has a send-off, the time it

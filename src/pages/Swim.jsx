@@ -7,7 +7,7 @@ import { cardioUnits, parseDuration, fmtDuration, fmtDistance, paceSecs } from '
 import {
   STROKES, DISTANCE_BANDS, PR_MIN_M, strokeLabel, strokeStats, strokeBoard, daysAgo, swimInviteLink, clearSwimInvite,
   readPoolUnit, setPoolUnit, subscribePoolUnit, intervalSet,
-  swimmerName, PRACTICE_PARTS, PRACTICE_TEMPLATES, DRYLAND_MOVES, isDryland, blankItem, practiceTotals, practiceLine, mainStroke,
+  swimmerName, PRACTICE_PARTS, practiceSuggestions, DRYLAND_MOVES, isDryland, blankItem, practiceTotals, practiceLine, mainStroke,
 } from '../lib/swim.js'
 import {
   photoUrls, fetchMyPhoto, uploadMyPhoto, fetchCoachedTeam, saveTeam, newTeamCode, fetchRoster, fetchSwimmerSwims,
@@ -295,17 +295,73 @@ function PracticeSets({ practice }) {
   )
 }
 
-// The coach writes a day's practice: start from a template, edit each set, post it
+// The coach writes a day's practice: one set at a time. Each part has one-tap sets (each adds one
+// set, never a whole practice); a set is one line, tapped to change it.
+const DISTANCES = [25, 50, 100, 200, 400]
+const chipCls = on => `press min-h-[36px] px-3 rounded-full text-xs font-semibold border transition-colors ${on ? 'bg-neon text-on-neon border-neon' : 'bg-raised text-ink-2 border-line hover:border-line-strong'}`
+
+function Stepper({ value, onChange, min = 1, max = 99, label }) {
+  const n = Number(value) || min
+  return (
+    <div className="flex items-center gap-1" role="group" aria-label={label}>
+      <button type="button" onClick={() => onChange(Math.max(min, n - 1))} aria-label={`Fewer ${label.toLowerCase()}`} className="press w-9 h-9 rounded-xl bg-raised border border-line text-ink flex items-center justify-center"><Icon icon="mdi:minus" width={18} /></button>
+      <span className="w-8 text-center font-bold text-ink tabular-nums">{n}</span>
+      <button type="button" onClick={() => onChange(Math.min(max, n + 1))} aria-label={`More ${label.toLowerCase()}`} className="press w-9 h-9 rounded-xl bg-raised border border-line text-ink flex items-center justify-center"><Icon icon="mdi:plus" width={18} /></button>
+    </div>
+  )
+}
+
+// One set, opened for changes
+function SetEditor({ item, onChange, onDone }) {
+  const set = (k, v) => onChange({ ...item, [k]: v })
+  if (isDryland(item)) return (
+    <div className="space-y-3">
+      <input value={item.name} maxLength={40} list="dryland-moves" placeholder="Exercise, like Push-ups" aria-label="Exercise" onChange={e => set('name', e.target.value)} className={inputCls} />
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-xs text-muted w-12">Sets</span>
+        <Stepper value={item.reps} onChange={v => set('reps', v)} max={20} label="Sets" />
+        <input value={item.amount} maxLength={12} placeholder="12 or 30 s" aria-label="Reps or time" onChange={e => set('amount', e.target.value)} className={`${inputCls} w-28`} />
+      </div>
+      <Button size="sm" full variant="secondary" onClick={onDone}>Done</Button>
+    </div>
+  )
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-muted w-12">Reps</span>
+        <Stepper value={item.reps} onChange={v => set('reps', v)} label="Reps" />
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-xs text-muted w-12">{item.unit}</span>
+        {DISTANCES.map(d => <button key={d} type="button" onClick={() => set('distance', d)} aria-pressed={Number(item.distance) === d} className={chipCls(Number(item.distance) === d)}>{d}</button>)}
+        <input type="number" inputMode="numeric" min={25} step={25} value={item.distance} aria-label={`Distance in ${item.unit}`} onChange={e => set('distance', e.target.value)} className={`${inputCls} w-20`} />
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-xs text-muted w-12">Stroke</span>
+        {STROKES.map(st => <button key={st.id} type="button" onClick={() => set('stroke', st.id)} aria-pressed={item.stroke === st.id} aria-label={st.label} className={chipCls(item.stroke === st.id)}>{st.short}</button>)}
+      </div>
+      <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 8rem), 1fr))' }}>
+        <input inputMode="numeric" value={item.send_off} placeholder="Send-off, like 1:45" aria-label="Send-off" onChange={e => set('send_off', e.target.value.replace(/[^\d:]/g, '').slice(0, 5))} className={inputCls} />
+        <input value={item.note} maxLength={60} placeholder="Note: easy, drill, fast" aria-label="Note" onChange={e => set('note', e.target.value)} className={inputCls} />
+      </div>
+      <Button size="sm" full variant="secondary" onClick={onDone}>Done</Button>
+    </div>
+  )
+}
+
 function PracticeEditor({ teamId, date: firstDate, existing, onClose, onSaved }) {
   const u = useSwimUnits()
   const [date, setDate] = useState(firstDate)
   const [title, setTitle] = useState(existing?.title ?? '')
   const [items, setItems] = useState(existing?.items ?? [])
   const [notes, setNotes] = useState(existing?.notes ?? '')
+  const [open, setOpen] = useState(null) // index of the set being changed
+  const [otherDay, setOtherDay] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const t = practiceTotals(items)
-  const set = (n, k, v) => setItems(list => list.map((i, x) => (x === n ? { ...i, [k]: v } : i)))
+  const add = item => { setItems(list => [...list, item]); setErr('') }
+  const remove = n => { setItems(list => list.filter((_, x) => x !== n)); setOpen(null) }
 
   async function save() {
     setErr('')
@@ -320,89 +376,67 @@ function PracticeEditor({ teamId, date: firstDate, existing, onClose, onSaved })
   }
 
   return (
-    <Sheet title={existing ? 'Edit practice' : 'Post a practice'} onClose={onClose} footer={
+    <Sheet title={existing ? 'Edit practice' : date === todayKey() ? "Today's practice" : `Practice for ${dayName(date).toLowerCase()}`} onClose={onClose} footer={
       <div className="space-y-2">
         {err && <p role="alert" className="text-xs text-danger">{err}</p>}
         <Button full icon="mdi:send" onClick={save} disabled={busy}>{busy ? 'Posting…' : existing ? 'Save and tell the team' : 'Post to the team'}</Button>
+        <p className="text-xs text-muted text-center tabular-nums">{t.distance ? `${t.distance.toLocaleString()} ${t.unit}${t.seconds ? `, about ${Math.round(t.seconds / 60)} min` : ''} · ` : ''}Every swimmer gets a notification.</p>
       </div>
     }>
-      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 9rem), 1fr))' }}>
-        <label className="block">
-          <span className="text-xs text-muted">Name</span>
-          <input value={title} maxLength={60} onChange={e => setTitle(e.target.value)} placeholder="Aerobic base" className={`mt-1 ${inputCls}`} />
-        </label>
-        <label className="block">
-          <span className="text-xs text-muted">Day</span>
-          <input type="date" value={date} min={todayKey()} onChange={e => setDate(e.target.value)} disabled={!!existing} className={`mt-1 ${inputCls}`} />
-        </label>
-      </div>
-      {!items.length && (
-        <div>
-          <div className="text-xs text-muted mb-1.5">Start from</div>
-          <div className="flex flex-wrap gap-1.5">
-            {PRACTICE_TEMPLATES.map(tp => (
-              <button key={tp.title} type="button" onClick={() => { setItems(tp.build(u.dist)); setTitle(x => x || tp.title) }}
-                className="press min-h-[36px] px-3.5 rounded-full text-xs font-semibold border bg-raised text-ink-2 border-line hover:border-line-strong">{tp.title}</button>
-            ))}
-          </div>
+      <input value={title} maxLength={60} onChange={e => setTitle(e.target.value)} placeholder="Name it, like Aerobic base" aria-label="Practice name"
+        className="w-full bg-transparent border-0 border-b border-line focus:border-neon-stroke text-xl font-bold text-ink placeholder:text-placeholder px-0 py-2 outline-none" />
+      {!existing && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {[[todayKey(), 'Today'], [plusDays(1), 'Tomorrow']].map(([d, label]) => (
+            <button key={d} type="button" onClick={() => { setDate(d); setOtherDay(false) }} aria-pressed={date === d && !otherDay} className={chipCls(date === d && !otherDay)}>{label}</button>
+          ))}
+          {otherDay
+            ? <input type="date" value={date} min={todayKey()} autoFocus onChange={e => e.target.value && setDate(e.target.value)} aria-label="Day" className={`${inputCls} w-auto`} />
+            : <button type="button" onClick={() => setOtherDay(true)} className={chipCls(![todayKey(), plusDays(1)].includes(date))}>Other day</button>}
         </div>
       )}
-      {PRACTICE_PARTS.map(([part, label]) => (
-        <section key={part} aria-label={label} className="space-y-2">
-          <div className="text-sm font-semibold text-ink">{label}</div>
-          {part === 'dryland' && <p className="text-xs text-muted -mt-1">On land, before the warm-up: shoulders, core and legs for starts and turns.</p>}
-          {items.map((i, n) => i.part === part && (
-            <div key={n} className="rounded-xl border border-line p-2.5 space-y-2">
-              {isDryland(i) ? (
-                <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 4.5rem), 1fr))' }}>
-                  <label className="col-span-full"><span className="text-xs text-muted">Exercise</span>
-                    <input value={i.name} maxLength={40} list="dryland-moves" placeholder="Band pull-aparts" onChange={e => set(n, 'name', e.target.value)} className={`mt-0.5 ${inputCls}`} /></label>
-                  <label><span className="text-xs text-muted">Sets</span>
-                    <input type="number" inputMode="numeric" min={1} value={i.reps} onChange={e => set(n, 'reps', e.target.value)} className={`mt-0.5 ${inputCls}`} /></label>
-                  <label><span className="text-xs text-muted">Reps or time</span>
-                    <input value={i.amount} maxLength={12} placeholder="12 or 30 s" onChange={e => set(n, 'amount', e.target.value)} className={`mt-0.5 ${inputCls}`} /></label>
-                </div>
-              ) : (
-              <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 4.5rem), 1fr))' }}>
-                <label><span className="text-xs text-muted">Reps</span>
-                  <input type="number" inputMode="numeric" min={1} value={i.reps} onChange={e => set(n, 'reps', e.target.value)} className={`mt-0.5 ${inputCls}`} /></label>
-                <label><span className="text-xs text-muted">Each ({i.unit})</span>
-                  <input type="number" inputMode="numeric" step={25} min={25} value={i.distance} onChange={e => set(n, 'distance', e.target.value)} className={`mt-0.5 ${inputCls}`} /></label>
-                <label><span className="text-xs text-muted">Send-off</span>
-                  <input inputMode="numeric" value={i.send_off} placeholder="1:45" onChange={e => set(n, 'send_off', e.target.value.replace(/[^\d:]/g, '').slice(0, 5))} className={`mt-0.5 ${inputCls}`} /></label>
-                <label><span className="text-xs text-muted">Stroke</span>
-                  <select value={i.stroke} onChange={e => set(n, 'stroke', e.target.value)} className={`mt-0.5 ${inputCls}`}>
-                    {STROKES.map(st => <option key={st.id} value={st.id}>{st.label}</option>)}
-                  </select></label>
-              </div>
-              )}
-              <div className="flex gap-2">
-                <input value={i.note} maxLength={60} placeholder="Note: drill, effort, kick" aria-label="Note" onChange={e => set(n, 'note', e.target.value)} className={`${inputCls} grow`} />
-                <button type="button" onClick={() => setItems(list => list.filter((_, x) => x !== n))} aria-label="Remove this set"
-                  className="press w-10 min-h-[38px] rounded-xl border border-line text-muted hover:text-danger flex items-center justify-center flex-shrink-0"><Icon icon="mdi:close" width={18} /></button>
-              </div>
+
+      {PRACTICE_PARTS.map(([part, label]) => {
+        const here = items.map((i, n) => [i, n]).filter(([i]) => i.part === part)
+        const lines = new Set(here.map(([i]) => practiceLine(i)))
+        const ideas = practiceSuggestions(part, u.dist).filter(i => !lines.has(practiceLine(i))).slice(0, part === 'main' ? 5 : 4)
+        return (
+          <section key={part} aria-label={label} className="space-y-2">
+            <div className="flex items-baseline justify-between gap-2">
+              <h3 className="text-sm font-semibold text-ink">{label}</h3>
+              {part === 'dryland' && <span className="text-xs text-muted">On land, before the warm-up</span>}
             </div>
-          ))}
-          {part === 'dryland' && (
+            {here.length > 0 && (
+              <ul className="rounded-2xl border border-line divide-y divide-line">
+                {here.map(([i, n]) => (
+                  <li key={n} className="px-3 py-2">
+                    {open === n ? (
+                      <SetEditor item={i} onChange={next => setItems(list => list.map((x, k) => (k === n ? next : x)))} onDone={() => setOpen(null)} />
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <button type="button" onClick={() => setOpen(n)} className="press grow min-w-0 text-left min-h-[36px]">
+                          <span className="block text-sm font-semibold text-ink tabular-nums">{practiceLine(i) || 'New set'}</span>
+                          {i.note && <span className="block text-xs text-muted">{i.note}</span>}
+                        </button>
+                        <button type="button" onClick={() => remove(n)} aria-label="Remove this set" className="press w-9 h-9 rounded-full text-muted hover:text-danger flex items-center justify-center flex-shrink-0"><Icon icon="mdi:close" width={18} /></button>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
             <div className="flex flex-wrap gap-1.5">
-              {DRYLAND_MOVES.filter(([name]) => !items.some(i => isDryland(i) && i.name === name)).slice(0, 6).map(([name, amount]) => (
-                <button key={name} type="button" onClick={() => setItems(list => [...list, { ...blankItem('dryland'), name, amount }])}
-                  className="press min-h-[36px] px-3 rounded-full text-xs font-semibold border bg-raised text-ink-2 border-line hover:border-line-strong">+ {name}</button>
+              {ideas.map(i => (
+                <button key={practiceLine(i)} type="button" onClick={() => add(i)} className={chipCls(false)}>+ {isDryland(i) ? i.name : practiceLine(i)}</button>
               ))}
+              <button type="button" onClick={() => { add(blankItem(part, u.dist)); setOpen(items.length) }} className="press min-h-[36px] px-3 rounded-full text-xs font-semibold text-neon-ink">+ Your own</button>
             </div>
-          )}
-          <button type="button" onClick={() => setItems(list => [...list, blankItem(part, u.dist)])}
-            className="press w-full min-h-[40px] rounded-xl border border-dashed border-line-strong text-sm font-semibold text-ink-2 flex items-center justify-center gap-1.5">
-            <Icon icon="mdi:plus" width={18} />Add {label.toLowerCase()}
-          </button>
-        </section>
-      ))}
+          </section>
+        )
+      })}
+
+      <textarea value={notes} maxLength={500} rows={2} onChange={e => setNotes(e.target.value)} placeholder="A note for the team, like Bring fins" aria-label="Notes for the team" className={`${inputCls} resize-none`} />
       <datalist id="dryland-moves">{DRYLAND_MOVES.map(([name]) => <option key={name} value={name} />)}</datalist>
-      <label className="block">
-        <span className="text-xs text-muted">Notes for the team</span>
-        <textarea value={notes} maxLength={500} rows={2} onChange={e => setNotes(e.target.value)} placeholder="Bring fins. Focus on turns." className={`mt-1 ${inputCls} resize-none`} />
-      </label>
-      <p className="text-xs text-muted tabular-nums">{t.distance.toLocaleString()} {u.dist} total{t.seconds ? `, about ${Math.round(t.seconds / 60)} min` : ''}. Posting sends every swimmer a notification.</p>
     </Sheet>
   )
 }
