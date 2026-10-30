@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Icon } from '@iconify/react'
 import { Button, BackLink } from '../components/ui/index.js'
+import PlanBuilding from '../components/PlanBuilding.jsx'
 import { calculateNutritionTargets, GOAL_LABELS, GOAL_ICONS, HEALTH_OPTS, DIET_OPTS, chipsFrom } from '../lib/nutrition.js'
 import { saveFitnessProfile, saveNutritionTarget, generatePlan } from '../lib/fitnessApi.js'
 import { saveGoals } from '../lib/api.js'
@@ -381,11 +382,7 @@ function ReviewStep({ data, nutritionPreview, onGenerate, generating, error, onB
         </button>
       )}
 
-      {generating && isPro && (
-        <p className="text-center text-xs text-muted -mt-2">
-          Writing your plan. This takes about 15–30 seconds.
-        </p>
-      )}
+      <PlanBuilding open={generating && isPro} />
     </div>
   )
 }

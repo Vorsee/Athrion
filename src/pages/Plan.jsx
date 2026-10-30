@@ -21,6 +21,7 @@ import { goalsLabel } from '../lib/goalPick.js'
 import { localDateKey, todayKey } from '../lib/data.js'
 import { sampleFor } from '../lib/sampleFor.js'
 import ProLock from '../components/ProLock.jsx'
+import PlanBuilding from '../components/PlanBuilding.jsx'
 import { useUnit } from '../lib/units.js'
 import { coachedWeek, swimsAsHistory, dayTargets, startableDay, weeklyReview } from '../lib/coaching.js'
 import { liftProgress } from '../lib/liftGoals.js'
@@ -76,7 +77,7 @@ function NoPlan({ onRegenerate, generating, genError }) {
       <Icon icon="mdi:clipboard-text-outline" width={48} className="mx-auto text-muted" />
       <div className="font-bold text-xl text-ink">No active plan</div>
       <p className="text-sm text-muted max-w-xs">
-        Your preferences were saved but the plan generation didn't finish. Tap below to try again — it takes about 15–30 seconds.
+        Your answers are saved, but the plan wasn't finished. Try again: it takes about a minute.
       </p>
 
       {genError && <InlineError className="w-full text-left">{genError}</InlineError>}
@@ -90,9 +91,7 @@ function NoPlan({ onRegenerate, generating, genError }) {
         ) : 'Generate my plan'}
       </Button>
 
-      {generating && (
-        <p className="text-xs text-muted">Writing your plan...</p>
-      )}
+      <PlanBuilding open={generating} />
     </div>
   )
 }
@@ -624,6 +623,7 @@ function PlanPage({ onGoToWorkout, onStartWorkout, onOpenSwim, profile, onProfil
   const [showCheckin, setShowCheckin] = useState(false)
   const [showGoal, setShowGoal]     = useState(false)
   const [generating, setGenerating] = useState(false)
+  const [genMode, setGenMode] = useState('new') // 'adapt' while the weekly update runs
   const [genError, setGenError]     = useState('')
   const [goalData, reloadGoal]      = useGoalData()
   const [showWeight, setShowWeight] = useState(false)
@@ -675,6 +675,7 @@ function PlanPage({ onGoToWorkout, onStartWorkout, onOpenSwim, profile, onProfil
   // Rebuild the plan; with a goal spec ({ goal, targetLb, pace, plan } from GoalSheet) set that goal first
   async function handleRegenerate(spec, mode = 'new') {
     setShowGoal(false)
+    setGenMode(mode)
     setGenerating(true)
     setGenError('')
     try {
@@ -788,7 +789,7 @@ function PlanPage({ onGoToWorkout, onStartWorkout, onOpenSwim, profile, onProfil
         <h1 className="font-bold text-xl text-ink">Personal trainer</h1>
         <IconButton icon="mdi:dots-horizontal" label="Change goal or rebuild plan" onClick={() => setShowGoal(true)} disabled={generating} className="-mr-1" />
       </div>
-      {generating && <p role="status" className="text-sm font-semibold text-neon-ink -mt-2">Rebuilding your plan…</p>}
+      <PlanBuilding open={generating} adapting={genMode === 'adapt'} />
       {genError && <InlineError>{genError}</InlineError>}
 
       {progress && <GoalCard fp={goalData.fp} profile={profile} weights={goalData.weights} progress={progress} history={goalData.history} animate

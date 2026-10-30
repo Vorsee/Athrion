@@ -38,3 +38,23 @@ describe('computeEarnedBadges', () => {
     for (const id of computeEarnedBadges({ history: h, weighIns: 99, photos: 9 })) expect(ids.has(id)).toBe(true)
   })
 })
+
+describe('swim badges', () => {
+  const swim = (date, stroke, distance_m, seconds) => ({ kind: 'swim', date, created_at: `${date}T10:00:00Z`, stroke, distance_m, seconds })
+  it('awards the first lap, a mile, distance totals and a faster pace', () => {
+    const b = computeEarnedBadges({ swims: [swim('2026-10-01', 'free', 1500, 1800), swim('2026-10-08', 'free', 200, 220)] })
+    expect(b.has('swim_first')).toBe(true)
+    expect(b.has('swim_mile')).toBe(true)
+    expect(b.has('swim_pr')).toBe(true) // 1:50 /100 after 2:00 /100
+    expect(b.has('swim_10k')).toBe(false)
+  })
+  it('needs all five strokes for Medley Master, and 50 m for a faster pace', () => {
+    const five = ['free', 'back', 'breast', 'fly', 'im'].map((s, i) => swim(`2026-10-0${i + 1}`, s, 100, 120))
+    expect(computeEarnedBadges({ swims: five }).has('swim_strokes')).toBe(true)
+    const short = [swim('2026-10-01', 'free', 100, 120), swim('2026-10-02', 'free', 25, 15)]
+    expect(computeEarnedBadges({ swims: short }).has('swim_pr')).toBe(false)
+  })
+  it('gives no swim badges without swims', () => {
+    expect([...computeEarnedBadges({ history: [] })].some(id => id.startsWith('swim_'))).toBe(false)
+  })
+})

@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useSyncExternalStore } from 'react'
 import { Icon } from '@iconify/react'
 import { useBackHandler } from '../lib/shell.js'
 import { Button, Card, SectionTitle, Segmented, EmptyState, SkeletonRows, InlineError, Fact, InfoButton, ListRow, IconButton } from '../components/ui/index.js'
-import { fetchCardio, saveCardio, deleteCardio } from '../lib/progressApi.js'
+import { fetchCardio, saveCardio, deleteCardio, fetchBadges, awardBadges } from '../lib/progressApi.js'
+import { BADGES, computeEarnedBadges } from '../lib/badges.js'
 import { cardioUnits, parseDuration, fmtDuration, fmtDistance, paceSecs } from '../lib/cardio.js'
 import {
   STROKES, DISTANCE_BANDS, PR_MIN_M, strokeLabel, strokeStats, strokeBoard, daysAgo, swimInviteLink, clearSwimInvite,
@@ -1138,7 +1139,23 @@ export default function Swim({ intent, onIntentDone, isPro, onUpgrade }) {
   const [invite, setInvite] = useState(intent?.invite ?? null)
   const landed = useRef(false)
 
-  const loadSwims = () => fetchCardio(500).then(l => setSwims(l.filter(x => x.kind === 'swim'))).catch(() => setSwims([]))
+  // Swim badges are earned the moment a swim is logged (the rest on Progress)
+  const [newBadges, setNewBadges] = useState([])
+  const earnedRef = useRef(null)
+  async function checkBadges(list) {
+    try {
+      earnedRef.current ??= new Set((await fetchBadges()).map(b => b.badge_id))
+      const fresh = [...computeEarnedBadges({ swims: list })].filter(id => id.startsWith('swim_') && !earnedRef.current.has(id))
+      if (!fresh.length) return
+      await awardBadges(fresh)
+      fresh.forEach(id => earnedRef.current.add(id))
+      setNewBadges(BADGES.filter(b => fresh.includes(b.id)))
+    } catch { /* badges can wait for Progress */ }
+  }
+  const loadSwims = () => fetchCardio(500).then(l => {
+    const list = l.filter(x => x.kind === 'swim')
+    setSwims(list); checkBadges(list)
+  }).catch(() => setSwims([]))
   async function loadTeam() {
     try {
       const [coached, mine, myPhoto, coach, isAdmin] = await Promise.all([
@@ -1182,6 +1199,19 @@ export default function Swim({ intent, onIntentDone, isPro, onUpgrade }) {
   return (
     <div className="space-y-4 py-4 slide-up">
       <h1 className="font-bold text-xl text-ink">Swim</h1>
+      {newBadges.length > 0 && (
+        <div role="status" className="pop-in flex items-center gap-3 rounded-2xl bg-neon text-on-neon px-4 py-3">
+          <span className="relative flex-shrink-0 w-9 h-9 flex items-center justify-center" aria-hidden="true">
+            <span className="ring-out absolute inset-0 rounded-full border-2 border-on-neon/60" />
+            <Icon icon={newBadges[0].icon} width={26} />
+          </span>
+          <span className="grow min-w-0">
+            <span className="block font-bold leading-tight">Badge earned: {newBadges.map(b => b.name).join(', ')}</span>
+            <span className="block text-xs font-medium opacity-80">{newBadges[0].desc}</span>
+          </span>
+          <button type="button" onClick={() => setNewBadges([])} aria-label="Close" className="press w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"><Icon icon="mdi:close" width={20} /></button>
+        </div>
+      )}
       <Segmented options={TABS.map(([id, label]) => [id, id === 'team' && waiting ? `${label} (${waiting})` : label])} value={tab} onChange={setTab} label="Swim" />
 
       {tab === 'me' && team?.mine?.status === 'active' && <TeamPractice teamId={team.mine.id} compact onOpen={() => setTab('team')} />}

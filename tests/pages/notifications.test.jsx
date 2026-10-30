@@ -5,6 +5,8 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { sb } from '../helpers/supabaseMock.js'
 import { BADGES } from '../../src/lib/badges.js'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import NotificationsSheet, { timeAgo } from '../../src/components/NotificationsSheet.jsx'
 import { syncOpenWorkout, clearOpenWorkout } from '../../src/lib/notifications.js'
 
@@ -70,8 +72,10 @@ describe('open workout mirror', () => {
 })
 
 describe('database badge names', () => {
-  it('011 names every badge the same way the app does', () => {
-    const sql = sqlSection('011_notifications')
+  it('the latest badge_notify (028, else 011) names every badge the same way the app does', () => {
+    // 028 is a file until it's applied, then a section of schema.sql
+    const file = join(__dirname, '../../supabase/028_more_badges.sql')
+    const sql = existsSync(file) ? readFileSync(file, 'utf8') : sqlSection('028_more_badges')
     for (const b of BADGES) expect(sql).toMatch(new RegExp(`WHEN '${b.id}'\\s+THEN '${b.name}'`))
   })
 })

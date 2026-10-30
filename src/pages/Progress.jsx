@@ -6,7 +6,7 @@ import { fetchWorkoutHistory, saveProfileWeight } from '../lib/api.js'
 import {
   fetchMeasurements, saveMeasurement, deleteMeasurement,
   fetchProgressPhotos, uploadProgressPhoto, deleteProgressPhoto,
-  fetchBadges, awardBadges, fetchCheckinWeights,
+  fetchBadges, awardBadges, fetchCheckinWeights, fetchCardio,
 } from '../lib/progressApi.js'
 import { weeklyStreak } from '../lib/progress.js'
 import { useUnit } from '../lib/units.js'
@@ -33,7 +33,7 @@ const num = v => (v === '' || v == null ? null : Number(v))
 // ─────────────────────────────────────────────────────────────────────────────
 // Overview: streak + badges
 // ─────────────────────────────────────────────────────────────────────────────
-function Overview({ history, badges }) {
+function Overview({ history, badges, fresh = new Set() }) {
   const streak = weeklyStreak(history)
   const thisWeek = history.filter(h => Date.now() - new Date(h.created_at) < 7 * 86400000).length
   const earnedIds = new Set(badges.map(b => b.badge_id))
@@ -60,17 +60,26 @@ function Overview({ history, badges }) {
             </ul>
           </InfoButton>
         </>}>Badges</SectionTitle>
-        <div className="grid grid-cols-3 gap-2">
-          {BADGES.map(b => {
-            const earned = earnedIds.has(b.id)
-            return (
-              <div key={b.id} className={`rounded-xl p-2.5 text-center border ${earned ? 'border-neon-stroke/30 bg-neon-tint' : 'border-line border-dashed'}`}>
-                <Icon icon={earned ? b.icon : 'mdi:lock-outline'} width={26} className={`mx-auto ${earned ? 'text-neon-ink' : 'text-muted'}`} />
-                <div className={`text-xs font-semibold mt-1 leading-tight ${earned ? 'text-ink' : 'text-ink-2'}`}>{b.name}</div>
-              </div>
-            )
-          })}
-        </div>
+        {/* Training and swim badges; earned first. Ones earned on this visit pop in, marked New */}
+        {[['Training', BADGES.filter(b => !b.id.startsWith('swim_'))], ['Swim', BADGES.filter(b => b.id.startsWith('swim_'))]].map(([label, list]) => (
+          <div key={label} className="mt-3 first:mt-0">
+            <div className="text-xs font-semibold text-muted mb-1.5">{label} · {list.filter(b => earnedIds.has(b.id)).length}/{list.length}</div>
+            <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 5.5rem), 1fr))' }}>
+              {[...list].sort((a, b) => earnedIds.has(b.id) - earnedIds.has(a.id)).map((b, i) => {
+                const earned = earnedIds.has(b.id)
+                const isNew = fresh.has(b.id)
+                return (
+                  <div key={b.id} title={b.desc} style={isNew ? { animationDelay: `${150 + i * 80}ms` } : undefined}
+                    className={`relative rounded-xl p-2.5 text-center border ${isNew ? 'pop-in ' : ''}${earned ? 'border-neon-stroke/30 bg-neon-tint' : 'border-line border-dashed'}`}>
+                    {isNew && <span className="absolute -top-1.5 right-1.5 text-2xs font-bold text-on-neon bg-neon rounded-full px-1.5">New</span>}
+                    <Icon icon={earned ? b.icon : 'mdi:lock-outline'} width={26} className={`mx-auto ${earned ? 'text-neon-ink' : 'text-muted'}`} />
+                    <div className={`text-xs font-semibold mt-1 leading-tight ${earned ? 'text-ink' : 'text-ink-2'}`}>{b.name}</div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))}
       </Card>
     </div>
   )
@@ -307,16 +316,19 @@ export default function Progress({ profile, onProfileChange }) {
   const [checkinWeights, setCheckinWeights] = useState([])
   const [photos, setPhotos] = useState([])
   const [badges, setBadges] = useState([])
+  const [fresh, setFresh] = useState(() => new Set()) // earned on this visit
   const [loading, setLoading] = useState(true)
 
   async function load() {
-    const [h, m, cw, p, earnedRows] = await Promise.all([
+    const [h, m, cw, p, earnedRows, cardio] = await Promise.all([
       fetchWorkoutHistory().catch(() => []),
       fetchMeasurements().catch(() => []),
       fetchCheckinWeights().catch(() => []),
       fetchProgressPhotos().catch(() => []),
       fetchBadges().catch(() => []),
+      fetchCardio(1000).catch(() => []),
     ])
+    const swims = (cardio ?? []).filter(l => l.kind === 'swim')
     setHistory(h); setMeasurements(m); setCheckinWeights(cw); setPhotos(p)
     syncProfileWeight(m)
 
@@ -324,8 +336,9 @@ export default function Progress({ profile, onProfileChange }) {
     let b = earnedRows
     const have = new Set(b.map(x => x.badge_id))
     const weighIns = new Set([...m.filter(x => x.weight_lb != null).map(x => x.date), ...cw.map(x => x.date)]).size
-    const fresh = [...computeEarnedBadges({ history: h, weighIns, photos: p.length })].filter(id => !have.has(id))
+    const fresh = [...computeEarnedBadges({ history: h, weighIns, photos: p.length, swims })].filter(id => !have.has(id))
     if (fresh.length) {
+      setFresh(new Set(fresh))
       await awardBadges(fresh).catch(() => {})
       b = [...b, ...fresh.map(badge_id => ({ badge_id, earned_at: new Date().toISOString() }))]
     }
@@ -354,7 +367,7 @@ export default function Progress({ profile, onProfileChange }) {
           <SkeletonRows rows={2} label="Loading your progress" />
         </div>
       ) : tab === 'overview' ? (
-        <Overview history={history} badges={badges} />
+        <Overview history={history} badges={badges} fresh={fresh} />
       ) : (
         <>
           <Body measurements={measurements} checkinWeights={checkinWeights} onSaved={load} latestDate={latestDate} onProfileChange={onProfileChange} />
