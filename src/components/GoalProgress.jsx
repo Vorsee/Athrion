@@ -319,7 +319,9 @@ export function ResultsCard({ fp, weights, progress, history }) {
 }
 
 // Pick a goal and, for weight goals, the target and pace. onSave({ goal, targetLb, pace, plan })
-export function GoalSheet({ fp, profile, history = [], onClose, onSave, saving, error, rebuilds }) {
+// rebuilds: Pro, saving rebuilds the plan. upsell: free, the main button saves and then offers Pro
+// for a plan built for the goal (onSave(spec, { upgrade: true })); saving only the goal stays one tap.
+export function GoalSheet({ fp, profile, history = [], onClose, onSave, saving, error, rebuilds, upsell }) {
   const { fromLb } = useUnit()
   const [lifts, setLifts] = useState(() => fp?.goal_lifts ?? [])
   const [goals, setGoals] = useState(() => [fp?.primary_goal ?? 'general_fitness', ...(fp?.secondary_goals ?? [])].slice(0, MAX_GOALS))
@@ -333,11 +335,23 @@ export function GoalSheet({ fp, profile, history = [], onClose, onSave, saving, 
   const ready = !!goal && (!isWeightGoal(goal) || !!wt?.plan) && liftsOk
 
   return (
-    <Sheet title="Your goals" onClose={onClose} footer={
-      <Button full onClick={() => onSave({ goal, secondaryGoals, targetLb: wt?.targetLb ?? null, pace: wt ? pace : null, plan: wt?.plan ?? null, lifts: liftGoal ? lifts : [] })} disabled={!ready || saving}>
-        {saving ? 'Saving…' : rebuilds ? 'Save and rebuild my plan' : 'Save goal'}
-      </Button>
-    }>
+    <Sheet title="Your goals" onClose={onClose} footer={(() => {
+      const spec = { goal, secondaryGoals, targetLb: wt?.targetLb ?? null, pace: wt ? pace : null, plan: wt?.plan ?? null, lifts: liftGoal ? lifts : [] }
+      return upsell ? (
+        <div className="space-y-1">
+          <Button full icon="mdi:star-four-points-outline" onClick={() => onSave(spec, { upgrade: true })} disabled={!ready || saving}>
+            {saving ? 'Saving…' : 'Build my plan for this goal'}
+          </Button>
+          <button type="button" onClick={() => onSave(spec)} disabled={!ready || saving}
+            className="press w-full min-h-[44px] text-sm font-semibold text-ink-2 hover:text-ink disabled:opacity-50">Save goal only</button>
+          <p className="text-xs text-muted text-center">The plan is built for you on Pro. Your goal and calorie targets are free.</p>
+        </div>
+      ) : (
+        <Button full onClick={() => onSave(spec)} disabled={!ready || saving}>
+          {saving ? 'Saving…' : rebuilds ? 'Save and rebuild my plan' : 'Save goal'}
+        </Button>
+      )
+    })()}>
       <p className="text-xs text-muted">Pick one, or two that go together. {rebuilds ? 'Your daily targets and plan are rebuilt for them; takes about a minute.' : 'Your daily calorie and protein targets follow them.'}</p>
       <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 9rem), 1fr))' }}>
         {Object.entries(GOAL_LABELS).map(([id, label]) => {

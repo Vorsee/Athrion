@@ -23,7 +23,7 @@ export const PRO_FEATURES = [
   { icon: 'mdi:swim', title: 'Pool workouts and stroke charts', body: 'Swim sessions with drills and send-offs in your plan, and your pace for every stroke over time.' },
   { icon: 'mdi:silverware-fork-knife', title: 'An AI meal plan for your week', body: '7 days of meals for your targets, diet and tastes, with a shopping list.' },
   { icon: 'mdi:target', title: 'Calorie targets that follow your real weight', body: 'Adjusted every week from your weigh-ins and meals.' },
-  { icon: 'mdi:camera-outline', title: 'Log a meal from a photo', body: 'Snap your plate and get calories and macros in seconds.' },
+  { icon: 'mdi:camera-outline', title: 'Unlimited meal photo scans', body: 'Snap your plate and get calories and macros in seconds. Free accounts get one a day.' },
   { icon: 'mdi:dumbbell', title: 'Unlimited saved workouts', body: 'Free accounts can save 3.' },
 ]
 

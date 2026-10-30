@@ -574,7 +574,7 @@ function FreePlan({ onUpgrade, onStartSetup, profile, onProfileChange, intent, o
   const days = fp?.preferred_training_days?.length ? fp.preferred_training_days : DAYS.slice(0, fp?.workout_days_per_week ?? 3)
   const progress = data && planProgress({ schedule: days.map(day => ({ day, type: 'workout' })), history: data.history, start: fp?.goal_start_date ?? (fp?.created_at && localDateKey(fp.created_at)), weeks: 8 })
 
-  async function saveGoal(spec) {
+  async function saveGoal(spec, { upgrade = false } = {}) {
     setSaving(true); setErr('')
     try {
       const payload = { ...dbProfileToPayload(fp), ...goalFields(spec, fp, profile) }
@@ -588,6 +588,8 @@ function FreePlan({ onUpgrade, onStartSetup, profile, onProfileChange, intent, o
         saveGoals({ calorie_goal: nt.calorieTarget, protein_goal: nt.proteinGrams, carb_goal: nt.carbGrams }),
       ])
       setSheet(null); await reload(); onProfileChange?.()
+      // Build my plan: the goal is saved, now the Pro options
+      if (upgrade) onUpgrade?.()
     } catch (e) { setErr(e.message || 'Could not save') } finally { setSaving(false) }
   }
 
@@ -608,7 +610,7 @@ function FreePlan({ onUpgrade, onStartSetup, profile, onProfileChange, intent, o
         </Card>
       )}
       <LockedPlan fp={fp} onUpgrade={onUpgrade} />
-      {sheet === 'goal' && <GoalSheet fp={fp} profile={profile} history={data?.history} onClose={() => setSheet(null)} onSave={saveGoal} saving={saving} error={err} />}
+      {sheet === 'goal' && <GoalSheet fp={fp} profile={profile} history={data?.history} upsell={!!onUpgrade} onClose={() => setSheet(null)} onSave={saveGoal} saving={saving} error={err} />}
       {sheet === 'weight' && <WeightSheet onClose={() => setSheet(null)} saving={saving} error={err}
         onSave={async lb => { setSaving(true); setErr(''); try { await logWeight(lb, onProfileChange); setSheet(null); await reload() } catch (e) { setErr(e.message || 'Could not save') } finally { setSaving(false) } }} />}
     </div>
