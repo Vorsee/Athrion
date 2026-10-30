@@ -9,8 +9,9 @@ export const STROKES = [
 ]
 export const strokeLabel = id => STROKES.find(s => s.id === id)?.label ?? null
 
-// A pace only counts as a PR over at least one length of a short pool
-const PR_MIN_M = 25
+// A pace only counts as a PR over at least two lengths of a short pool, so one 25 m sprint
+// never stands as a PR (my_team_prs uses the same floor, 026)
+export const PR_MIN_M = 50
 
 // { [stroke]: { count, metres, last, pr, longest } } for every stroke, plus `all` for every swim
 export function strokeStats(swims) {
@@ -29,6 +30,9 @@ export function strokeStats(swims) {
   }
   return out
 }
+
+// How a coach sees a swimmer: the name they gave the team (026), else their @nickname
+export const swimmerName = r => r?.display_name?.trim() || (r?.nickname ? `@${r.nickname}` : 'Swimmer')
 
 // Leaderboard distances, so a 50 sprint is never ranked against a 400. In metres; the yard
 // distances (100 yd = 91 m, 500 yd = 457 m) land in the same groups.
@@ -112,36 +116,51 @@ export function clearSwimStart() {
 }
 
 // ── Team practices (025): the coach's sets for a day ────────────────────────
-// item: { part, reps, distance, unit ('m' | 'yd'), stroke, send_off ("1:45" or ""), note }
-export const PRACTICE_PARTS = [['warmup', 'Warm-up'], ['main', 'Main set'], ['cooldown', 'Cool-down']]
-export const blankItem = (part, unit = 'm') => ({ part, reps: part === 'main' ? 8 : 1, distance: part === 'main' ? 100 : 200, unit, stroke: 'free', send_off: '', note: '' })
+// Pool item: { part, reps, distance, unit ('m' | 'yd'), stroke, send_off ("1:45" or ""), note }
+// Dryland item (on land, before the warm-up): { part: 'dryland', name, reps (sets), amount ("12" or "30 s"), note }
+export const PRACTICE_PARTS = [['dryland', 'Dryland'], ['warmup', 'Warm-up'], ['main', 'Main set'], ['cooldown', 'Cool-down']]
+export const isDryland = i => i?.part === 'dryland'
+export const blankItem = (part, unit = 'm') => (part === 'dryland'
+  ? { part, name: '', reps: 2, amount: '12', note: '' }
+  : { part, reps: part === 'main' ? 8 : 1, distance: part === 'main' ? 100 : 200, unit, stroke: 'free', send_off: '', note: '' })
+// Common dryland moves for swimmers: shoulders, core, and legs for starts and turns
+export const DRYLAND_MOVES = [
+  ['Band pull-aparts', '15'], ['Band external rotation', '12'], ['Push-ups', '10'], ['Plank', '30 s'],
+  ['Dead bugs', '10'], ['Squat jumps', '8'], ['Streamline jumps', '8'], ['Arm circles', '30 s'],
+]
+const DRY = [['dryland', 2, 'Band pull-aparts', '15'], ['dryland', 2, 'Squat jumps', '8'], ['dryland', 2, 'Plank', '30 s']]
 
 // Starting points the coach can edit, in their pool unit
 export const PRACTICE_TEMPLATES = [
-  { title: 'Aerobic base', items: [['warmup', 1, 400, 'free', '', 'Easy, long strokes'], ['warmup', 4, 50, 'free', '1:00', 'Drill: catch-up'],
+  { title: 'Aerobic base', items: [...DRY, ['warmup', 1, 400, 'free', '', 'Easy, long strokes'], ['warmup', 4, 50, 'free', '1:00', 'Drill: catch-up'],
     ['main', 5, 200, 'free', '3:10', 'Steady, same time every 200'], ['main', 4, 100, 'back', '1:50', ''], ['cooldown', 1, 200, 'free', '', 'Easy']] },
-  { title: 'Sprint', items: [['warmup', 1, 300, 'free', '', 'Easy'], ['warmup', 6, 25, 'free', '0:40', 'Build to fast'],
+  { title: 'Sprint', items: [...DRY, ['warmup', 1, 300, 'free', '', 'Easy'], ['warmup', 6, 25, 'free', '0:40', 'Build to fast'],
     ['main', 8, 50, 'free', '1:30', 'All out, full recovery'], ['main', 4, 25, 'fly', '0:45', 'Fast'], ['cooldown', 1, 200, 'back', '', 'Easy']] },
-  { title: 'Technique', items: [['warmup', 1, 300, 'free', '', 'Easy'], ['main', 6, 50, 'free', '1:05', 'Fingertip drag'],
+  { title: 'Technique', items: [...DRY, ['warmup', 1, 300, 'free', '', 'Easy'], ['main', 6, 50, 'free', '1:05', 'Fingertip drag'],
     ['main', 6, 50, 'breast', '1:15', 'Two kicks, one pull'], ['main', 4, 100, 'im', '2:00', 'Smooth turns'], ['cooldown', 1, 200, 'free', '', 'Easy']] },
-].map(t => ({ title: t.title, build: unit => t.items.map(([part, reps, distance, stroke, send_off, note]) => ({ part, reps, distance, unit, stroke, send_off, note })) }))
+].map(t => ({ title: t.title, build: unit => t.items.map(([part, reps, distance, stroke, send_off, note]) => (part === 'dryland'
+  ? { part, reps, name: distance, amount: stroke, note: '' }
+  : { part, reps, distance, unit, stroke, send_off, note })) }))
 
 const secsOf = t => { const m = /^(\d+):(\d{2})$/.exec(t ?? ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null }
-// Total distance (in the practice's unit) and, when every set has a send-off, the time it takes
+// Total distance (in the practice's unit) and, when every pool set has a send-off, the time it
+// takes. Dryland is on land, so it adds no distance.
 export function practiceTotals(items = []) {
-  const distance = items.reduce((a, i) => a + (Number(i.reps) || 0) * (Number(i.distance) || 0), 0)
-  const timed = items.every(i => secsOf(i.send_off))
-  const seconds = timed ? items.reduce((a, i) => a + (Number(i.reps) || 0) * secsOf(i.send_off), 0) : null
-  return { distance, seconds, unit: items[0]?.unit ?? 'm' }
+  const pool = items.filter(i => !isDryland(i))
+  const distance = pool.reduce((a, i) => a + (Number(i.reps) || 0) * (Number(i.distance) || 0), 0)
+  const timed = pool.length > 0 && pool.every(i => secsOf(i.send_off))
+  const seconds = timed ? pool.reduce((a, i) => a + (Number(i.reps) || 0) * secsOf(i.send_off), 0) : null
+  return { distance, seconds, unit: pool[0]?.unit ?? 'm' }
 }
-// "8 × 100 free on 1:45" or "400 back"
+// "8 × 100 m freestyle on 1:45", "400 m backstroke", or on land "2 × 15 band pull-aparts"
 export function practiceLine(i) {
+  if (isDryland(i)) return `${Number(i.reps) > 1 ? `${i.reps} × ` : ''}${i.amount ? `${i.amount} ` : ''}${(i.name ?? '').toLowerCase()}`.trim()
   const s = STROKES.find(x => x.id === i.stroke)?.label.toLowerCase() ?? ''
-  return `${Number(i.reps) > 1 ? `${i.reps} × ` : ''}${i.distance} ${s}${i.send_off ? ` on ${i.send_off}` : ''}`
+  return `${Number(i.reps) > 1 ? `${i.reps} × ` : ''}${Number(i.distance).toLocaleString()} ${i.unit ?? 'm'} ${s}${i.send_off ? ` on ${i.send_off}` : ''}`
 }
 // The stroke most of the practice is swum in, for logging it as one swim
 export function mainStroke(items = []) {
   const by = {}
-  for (const i of items) by[i.stroke] = (by[i.stroke] ?? 0) + (Number(i.reps) || 0) * (Number(i.distance) || 0)
+  for (const i of items.filter(x => !isDryland(x))) by[i.stroke] = (by[i.stroke] ?? 0) + (Number(i.reps) || 0) * (Number(i.distance) || 0)
   return Object.entries(by).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'free'
 }

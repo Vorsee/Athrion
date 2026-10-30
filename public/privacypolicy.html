@@ -81,7 +81,7 @@
     <li><strong>Progress:</strong> weekly check-ins (weight, energy, sleep, hunger, soreness, stress, notes), body measurements, progress photos, and daily steps, sleep, resting heart rate and active energy that you enter or sync.</li>
     <li><strong>Social:</strong> your nickname, friend requests and friends, whether you appear on the public leaderboard, and the rooms and sets you log in Train together.</li>
     <li><strong>Coach shop:</strong> the coach workouts and plans you get or buy, and when.</li>
-    <li><strong>Swim teams:</strong> the team you join or ask to join, and the swimmer photo you add. If you coach a team: its name, who is on it, and the practices you post to it.</li>
+    <li><strong>Swim teams:</strong> the team you join or ask to join, the name you give your coach, and the swimmer photo you add. If you coach a team: its name, who is on it, and the practices you post to it.</li>
     <li><strong>Reviews:</strong> the star rating, text and name you post in Rate ATHRION or on athrion.app. For a review sent from the website without an account, we also keep a one-way hash of your internet address, only to limit how many reviews one visitor can send; we can't turn it back into the address.</li>
     <li><strong>If you apply to be a coach:</strong> your coach name, photo, qualifications, bio, what you coach, links you add, and the workouts, plans, tips and videos you publish. We use your application to decide whether to approve you.</li>
     <li><strong>Settings:</strong> reminder times, time zone, notification preferences and theme.</li>
@@ -117,7 +117,7 @@
   <ul>
     <li><strong>Plan generation:</strong> when you build or update a plan, we send your body stats, fitness profile (including any injuries, limitations or medical notes you entered), recent training, check-ins and health averages, and, if swimming is one of your goals, your best pace for each stroke. We don't send your name or email.</li>
     <li><strong>Meal plan:</strong> when you build a meal plan, we send your calorie and macro targets, your diet choice (for example vegan, halal or fasting) and the foods you said you like or want left out. The plan is saved to your account until you build a new one or delete your account.</li>
-    <li><strong>Meal photo scan:</strong> the photo you choose is sent to estimate its nutrition. We don't store the photo; only the food entries you save are kept.</li>
+    <li><strong>Meal photo scan:</strong> the photo you choose is sent to estimate its nutrition. We don't store the photo; only the food entries you save are kept. On a free account we keep a count of scans per day, to allow one a day.</li>
   </ul>
   <p>Under its commercial terms, Anthropic doesn't use API data to train its models and keeps it only for a limited time for safety and abuse monitoring. AI output can be wrong. It is general fitness guidance, not medical advice (see our <a href="/terms.html#health">Terms of use</a>).</p>
 
@@ -130,7 +130,7 @@
         <tr><td>Supabase</td><td>Database, sign-in, file storage, background functions</td><td>All the data described above</td></tr>
         <tr><td>Vercel</td><td>Hosting the website and payment routes</td><td>Technical data; payment requests</td></tr>
         <tr><td>Stripe</td><td>Payments and subscriptions</td><td>Email, payment details you enter with Stripe, subscription, coach shop purchases; for coaches, their payout account</td></tr>
-        <tr><td>Anthropic</td><td>AI plan and meal plan generation and meal photo analysis (Pro)</td><td>The data listed in section 3</td></tr>
+        <tr><td>Anthropic</td><td>AI plan and meal plan generation and meal photo analysis</td><td>The data listed in section 3</td></tr>
         <tr><td>Apple, Google, Mozilla push services</td><td>Delivering notifications to your device</td><td>Notification text and your device's push address</td></tr>
         <tr><td>Open Food Facts</td><td>Looking up a scanned barcode</td><td>The barcode number and your IP address</td></tr>
         <tr><td>jsDelivr, ExerciseDB</td><td>Serving exercise images</td><td>Your IP address, as with any image on the web</td></tr>
@@ -147,7 +147,7 @@
     <li><strong>Everyone leaderboard:</strong> your nickname, points, level and medals, unless you turn off "Show me on Everyone".</li>
     <li><strong>Train together rooms:</strong> people in the same room see your display name and the sets you log there.</li>
     <li><strong>Coaches:</strong> an approved coach's name, photo, qualifications, bio, links and published listings are shown to everyone signed in. Their tips and videos are only shown to people who have that workout. Coaches see how often each item sold, never who bought it.</li>
-    <li><strong>Swim teams:</strong> when you join a coach's swim team (with their invite link, or when they accept your request), that coach sees your nickname, your swimmer photo and the swims you log (stroke, distance, time, date and notes), until you leave the team or they remove you. Your coach's photo is shown to you. People searching for teams see a team's name, its coach's nickname and how many swimmers it has.</li>
+    <li><strong>Swim teams:</strong> when you join a coach's swim team (with their invite link, or when they accept your request), that coach sees your nickname, the name you give the team (if you add one), your swimmer photo and the swims you log (stroke, distance, time, date and notes), until you leave the team or they remove you. Your coach's photo is shown to you. People searching for teams see a team's name, its coach's nickname and how many swimmers it has.</li>
     <li><strong>Reviews:</strong> a review you post in Rate ATHRION, with its stars and the name you chose, is shown publicly on athrion.app until you delete it. A review sent from the website without an account is shown once we approve it; email us to have it removed.</li>
   </ul>
   <p>Except as listed above, your email, body stats, food log, photos, measurements and health data are never shown to other users.</p>
@@ -186,7 +186,7 @@
     <li><strong>Delete it:</strong> delete individual entries in the app, or delete your whole account in Profile → Your data → Delete account. This also ends any subscription.</li>
     <li><strong>Notifications:</strong> turn each type on or off in Profile → Notifications, or in your device settings.</li>
     <li><strong>Leaderboard:</strong> turn off "Show me on Everyone" in Train together.</li>
-    <li><strong>Swim team:</strong> leave the team in Swim → Team; your coach then stops seeing your swims and photo.</li>
+    <li><strong>Swim team:</strong> change or clear the name your coach sees in Swim → Team, or leave the team there; your coach then stops seeing your name, swims and photo.</li>
     <li><strong>Review:</strong> change or delete it in Profile → Rate ATHRION.</li>
     <li><strong>Health access:</strong> revoke it at any time in Apple Health or Health Connect settings.</li>
   </ul>

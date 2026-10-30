@@ -64,3 +64,27 @@ describe('strokeBoard', () => {
     expect(strokeBoard(prs, roster, 'back')).toEqual([])
   })
 })
+
+describe('swim polish (panel run 6)', () => {
+  it('needs 50 m for a PR, so one 25 m sprint never stands as one', async () => {
+    const s = strokeStats([swim('a', 'free', '2026-10-20', 25, 12), swim('b', 'free', '2026-10-21', 100, 80)])
+    expect(s.free.pr.id).toBe('b')
+  })
+  it('shows practice sets with their unit and dryland on its own line, adding no distance', async () => {
+    const { practiceLine, practiceTotals, mainStroke, PRACTICE_PARTS } = await import('../../src/lib/swim.js')
+    expect(PRACTICE_PARTS[0][0]).toBe('dryland') // before the warm-up
+    expect(practiceLine({ part: 'warmup', reps: 1, distance: 400, unit: 'm', stroke: 'free' })).toBe('400 m freestyle')
+    expect(practiceLine({ part: 'main', reps: 8, distance: 100, unit: 'yd', stroke: 'back', send_off: '1:45' })).toBe('8 × 100 yd backstroke on 1:45')
+    const dry = { part: 'dryland', name: 'Band pull-aparts', reps: 2, amount: '15' }
+    expect(practiceLine(dry)).toBe('2 × 15 band pull-aparts')
+    const items = [dry, { part: 'main', reps: 4, distance: 1000, unit: 'm', stroke: 'fly', send_off: '' }]
+    expect(practiceTotals(items).distance).toBe(4000)
+    expect(mainStroke(items)).toBe('fly')
+  })
+  it('names a swimmer the way they asked their coach to see them', async () => {
+    const { swimmerName } = await import('../../src/lib/swim.js')
+    expect(swimmerName({ display_name: 'Ana Ruiz', nickname: 'ana_swims' })).toBe('Ana Ruiz')
+    expect(swimmerName({ display_name: '  ', nickname: 'ana_swims' })).toBe('@ana_swims')
+    expect(swimmerName({})).toBe('Swimmer')
+  })
+})

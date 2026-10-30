@@ -67,6 +67,14 @@ export async function searchTeams(q) {
 export const joinTeam = async ({ team = null, code = null }) =>
   must(await supabase.rpc('join_swim_team', { p_team: team, p_code: code }))
 
+// The name the swimmer's coach sees (026); '' clears it
+export const setTeamName = async name => must(await supabase.rpc('set_swim_team_name', { p_name: name }))
+// The account's own name, to suggest as the name the coach sees
+export async function accountName() {
+  const { data } = await supabase.auth.getUser()
+  return data?.user?.user_metadata?.full_name?.trim() ?? ''
+}
+
 // ── Practices (025) ──────────────────────────────────────────────────────────
 // A team's practices from a date on, soonest first. Before 025 runs: none, and ready is false.
 export async function fetchPractices(teamId, from) {

@@ -131,7 +131,7 @@ export function coachedWeek({ plan, history = [], goalStartDate = null, today = 
 function bests(logs) {
   const out = {}
   for (const h of logs) for (const s of h.sets ?? []) {
-    if (!s?.ex) continue
+    if (!s?.ex || s.warmup) continue
     const w = Number(s.weight) || 0, r = Number(s.reps) || 0
     const b = out[s.ex]
     if (!b || w > b.weight || (w === b.weight && r > b.reps)) out[s.ex] = { weight: w, reps: r }
@@ -160,26 +160,24 @@ export function weeklyReview({ progress, history = [], goal = null, liftPct = nu
   const plannedSoFar = progress.thisWeek.filter(d => d.planned && d.date < todayKey).length
   const missed = progress.thisWeek.filter(d => d.planned && !d.done && d.date < todayKey).length
 
-  if (planned && done >= planned) wentWell.push(`Every planned workout done: ${done} of ${planned}.`)
-  else if (done > 0) wentWell.push(`${done} of ${planned} workouts done this week.`)
+  if (planned && done >= planned) wentWell.push(`Every workout done: ${done} of ${planned}.`)
+  else if (done > 0) wentWell.push(`${done} of ${planned} workouts done.`)
 
   const prev = bests(before), now = bests(week)
   const prs = Object.entries(now).filter(([ex, b]) => prev[ex] && b.weight > 0 && (b.weight > prev[ex].weight || (b.weight === prev[ex].weight && b.reps > prev[ex].reps)))
   if (prs.length) {
     const [ex, b] = prs[0]
-    wentWell.push(`New best on ${ex}: ${fromLb(b.weight, unit)} ${unit} × ${b.reps}${prs.length > 1 ? `, and ${prs.length - 1} more` : ''}.`)
+    wentWell.unshift(`New best on ${ex}: ${fromLb(b.weight, unit)} ${unit} × ${b.reps}${prs.length > 1 ? `, and ${prs.length - 1} more` : ''}.`)
   }
   const v = vol(week), lv = vol(lastWeek)
-  if (v && lv && v > lv * 1.05 && !deload) wentWell.push(`You lifted ${Math.round((v / lv - 1) * 100)}% more than last week.`)
+  if (v && lv && v > lv * 1.05 && !deload) wentWell.push(`${Math.round((v / lv - 1) * 100)}% more lifted than last week.`)
 
-  if (goal?.onTrack === true) wentWell.push('Your weight is moving at the pace you set.')
-  if (goal?.onTrack === false) change.push(goal.leftLb > 0
-    ? 'Weight is behind the pace you set: log every meal for a week and keep the calories at your target before changing anything else.'
-    : 'Weigh in this week so the goal ring is up to date.')
-  if (missed) change.push(`${missed} planned ${missed === 1 ? 'workout was' : 'workouts were'} missed. Shorter sessions you can keep beat long ones you skip: rebuild the plan with fewer days if this keeps happening.`)
-  if (!prs.length && week.length >= 2 && !deload) change.push('No new bests this week. Use the targets on each exercise: one more rep, or the next weight when every set reaches the top of the range.')
-  if (deload) change.push('This is a lighter week: one set less and about 80% of your working weight. Go back to full weights next week.')
-  if (!week.length && !missed) change.push('Your first workout of the week is coming up. Start it from Today.')
+  if (goal?.onTrack === true) wentWell.push('Weight is moving at your pace.')
+  if (goal?.onTrack === false) change.push(goal.leftLb > 0 ? 'Behind pace: log every meal this week.' : 'Weigh in so the ring is up to date.')
+  if (missed) change.push(`${missed} ${missed === 1 ? 'workout' : 'workouts'} missed. Short sessions beat skipped ones.`)
+  if (!prs.length && week.length >= 2 && !deload) change.push('Beat one target next session: a rep or a little weight.')
+  if (deload) change.push('Lighter week: one set less, about 80% weight.')
+  if (!week.length && !missed) change.push('First workout of the week is next. Start it from Today.')
 
   const behind = goal?.onTrack === false || (plannedSoFar >= 2 && missed > plannedSoFar / 2)
   const status = goal?.onTrack == null && liftPct == null && plannedSoFar === 0 ? 'early' : behind ? 'behind' : 'on_track'

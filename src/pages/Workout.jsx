@@ -40,7 +40,7 @@ function matchPlanExercises(planExercises) {
 
 const SESSION_SCREENS = ['training', 'rest', 'exercise-picker']
 
-export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgrade, onOpenPage, onOpenGroup, onOpenGuide, resumeTick = 0 }) {
+export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgrade, onOpenPage, onOpenGroup, onOpenGuide, onQuick, resumeTick = 0 }) {
   const { unit, toLb } = useUnit()
   const [screen, setScreen]                   = useState('home')
   const [activeExercises, setActiveExercises] = useState([])
@@ -298,9 +298,11 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
     setConfirmEnd(false)
     clearPersistedWorkout()
     const duration = Math.round((Date.now() - startTime) / 60000)
-    const volume = loggedSets.reduce((a, s) => a + s.weight * s.reps, 0)
+    // Warm-up sets are logged but never count toward volume or records
+    const working = loggedSets.filter(s => !s.warmup)
+    const volume = working.reduce((a, s) => a + s.weight * s.reps, 0)
     // Compare against history before this session is added to it
-    setSessionPRs(findNewPRs(loggedSets, history, unit))
+    setSessionPRs(findNewPRs(working, history, unit))
     setSessionBadges([])
     // Nothing worth saving (no sets, or a few seconds): no "Workout complete", just back home
     if (!(loggedSets.length > 0 && (duration >= 2 || volume >= 10))) {
@@ -355,7 +357,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
 
   // Stop this exercise now: what was logged counts as done, the rest are skipped
   function handleFinishExercise() {
-    const done = loggedSets.filter(s => s.ex === activeExercises[exIdx]?.name).length
+    const done = loggedSets.filter(s => s.ex === activeExercises[exIdx]?.name && !s.warmup).length
     goToNextExercise(changeSetCount(done))
   }
 
@@ -371,10 +373,10 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
   function handleDeleteSet(i) {
     const ex = loggedSets[i].ex
     let n = 0
-    const next = loggedSets.filter((_, j) => j !== i).map(s => (s.ex === ex ? { ...s, set: ++n } : s))
+    const next = loggedSets.filter((_, j) => j !== i).map(s => (s.ex === ex && !s.warmup ? { ...s, set: ++n } : s))
     setLoggedSets(next)
     const curName = activeExercises[exIdx]?.name
-    const nextSetIdx = ex === curName ? n : setIdx
+    const nextSetIdx = ex === curName && !loggedSets[i].warmup ? n : setIdx
     setSetIdx(nextSetIdx)
     persistWorkout({ loggedSets: next, setIdx: nextSetIdx })
   }
@@ -388,6 +390,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       customWorkouts={customWorkouts}
       planWorkout={planWorkout}
       planSchedule={planSchedule}
+      onQuick={onQuick}
       onStart={startWorkout}
       onPlanStart={startPlanWorkout}
       onFreeStart={startFreeWorkout}
@@ -485,15 +488,24 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       onEditSet={handleEditSet} onDeleteSet={handleDeleteSet}
       reps={reps} setReps={setReps}
       freeWorkout={freeWorkout}
-      onLog={stopwatchSecs => {
+      onLog={(stopwatchSecs, { warmup = false, rpe = null } = {}) => {
         const w = toLb(parseFloat(weight) || 0) // typed in the person's unit, stored in lb
         const ex = activeExercises[exIdx]
         const timedMove = exerciseMode(ex) === 'time'
         // Timed moves: the reps box holds seconds (to the hundredth), or the stopwatch just stopped hands them over
         const r = stopwatchSecs ?? (timedMove ? roundSecs(reps) : parseInt(reps) || 0)
+        const extra = { ...(rpe && { rpe }) }
         const set = timedMove
-          ? { ex: ex.name, set: setIdx + 1, weight: w, reps: 0, secs: r }
-          : { ex: ex.name, set: setIdx + 1, weight: w, reps: r }
+          ? { ex: ex.name, set: setIdx + 1, weight: w, reps: 0, secs: r, ...extra }
+          : { ex: ex.name, set: setIdx + 1, weight: w, reps: r, ...extra }
+        // A warm-up set is kept with the workout but isn't one of the working sets: no rest timer,
+        // the set count stays, and the boxes keep the weight to build from
+        if (warmup) {
+          const newLog = [...loggedSets, { ...set, set: 0, warmup: true }]
+          setLoggedSets(newLog)
+          persistWorkout({ loggedSets: newLog })
+          return
+        }
         const newLog = [...loggedSets, set]
         setLoggedSets(newLog)
         const thisRest = restPerExercise[exIdx] ?? restDuration
@@ -577,6 +589,13 @@ function ActiveHeader({ startTime, onMinimise, onEnd }) {
   )
 }
 
+// A stable pick for the day: the same workout all day, a different one on most days
+function dayPick(key, n) {
+  let h = 0
+  for (const c of key) h = (h * 31 + c.charCodeAt(0)) >>> 0
+  return h % n
+}
+
 function upcomingWorkoutDays(schedule) {
   const order = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
   return (schedule ?? [])
@@ -594,13 +613,18 @@ function starterSession(done) {
   return { title: s.title, starter: true, workout: { exercises: s.exercises.map(e => ({ name: e.name, sets: e.sets, reps: e.reps, restSeconds: restSecs(e.rest) })) } }
 }
 
-function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade, onOpenPage, onOpenGroup, onOpenGuide, pendingCount = 0, onRetryPending }) {
+function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade, onOpenPage, onOpenGroup, onOpenGuide, onQuick, pendingCount = 0, onRetryPending }) {
   const { fmtVolume } = useUnit()
   const [selectedSession, setSelectedSession] = useState(null)
 
   // AI plan (full dayData) takes priority; fall back to custom rotation, then default
   const rotation = [...customWorkouts].reverse()
-  const rotationIdx = rotation.length > 0 ? history.length % rotation.length : 0
+  // Free accounts train their own workouts: none yet, and Today asks them to make the first one;
+  // with two or three saved, a different one comes up by the day (the same all day). Pro without
+  // a plan takes turns through them.
+  const free = !isPro && !planSchedule
+  const needsFirst = free && rotation.length === 0
+  const rotationIdx = rotation.length === 0 ? 0 : free ? dayPick(todayKey(), rotation.length) : history.length % rotation.length
   const todayCustom = rotation.length > 0 ? rotation[rotationIdx] : null
   const fallbackExs = todayCustom
     ? (todayCustom.exercises || []).map(n => EXERCISES.find(e => e.name === n)).filter(Boolean)
@@ -612,7 +636,7 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
   const isRestDay = !!todayPlan && todayPlan.type !== 'workout'
   const otherDays = isRestDay ? upcomingWorkoutDays(planSchedule) : []
   const [pickedDay, setPickedDay] = useState(null)
-  const starter = !planWorkout && !planSchedule && !todayCustom ? starterSession(history.length) : null
+  const starter = !free && !planWorkout && !planSchedule && !todayCustom ? starterSession(history.length) : null
   const fullWorkout = isRestDay ? (pickedDay ?? otherDays[0] ?? null) : planWorkout ?? starter
   // Short on time: a 30 or 20 minute version of the same workout
   const [short, setShort] = useState(null)
@@ -654,7 +678,7 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
           <div className="flex items-start justify-between gap-3 mb-4">
             <div className="min-w-0">
               <div className="text-sm font-semibold text-neon-ink mb-1">Today's training · {TODAY_FULL}</div>
-              <div className="font-bold text-[2rem] xs:text-[2.25rem] text-ink leading-[1.1] tracking-tight break-words">{isRestDay ? todayPlan.title : shownWorkout ? planName : fallbackName}</div>
+              <div className="font-bold text-[2rem] xs:text-[2.25rem] text-ink leading-[1.1] tracking-tight break-words">{needsFirst ? 'Your first workout' : isRestDay ? todayPlan.title : shownWorkout ? planName : fallbackName}</div>
               {starter && (
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   <Fact icon="mdi:sprout-outline">Starter plan</Fact>
@@ -682,6 +706,12 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
             )}
           </div>
 
+          {needsFirst ? (
+            <div className="space-y-4">
+              <p className="text-sm text-ink-2">Pick the exercises you like. Your workout shows here every time you train, ready to start in one tap.</p>
+              <Button full icon="mdi:plus" className="h-14 text-base" onClick={onCreateNew}>Create your first workout</Button>
+            </div>
+          ) : <>
           {isRestDay && (
             <div className="mb-4">
               {otherDays.length > 0 && (
@@ -747,8 +777,22 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
             </Button>
             )
           )}
+          </>}
           <Button variant="ghost" full icon="mdi:plus" onClick={onFreeStart} className="mt-2">Free workout</Button>
       </Card>
+      )}
+
+      {/* Quick actions: where people go most from here, one tap each */}
+      {onQuick && (
+        <nav aria-label="Quick actions" className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 4.5rem), 1fr))' }}>
+          {[['food', 'Log food', 'mdi:food-apple-outline'], ['weight', 'Weigh in', 'mdi:scale-bathroom'], ['swim', 'Log a swim', 'mdi:swim'], ['mealplan', 'Meal plan', 'mdi:silverware-fork-knife']].map(([kind, label, icon]) => (
+            <button key={kind} type="button" onClick={() => onQuick(kind)}
+              className="press min-h-[4.25rem] rounded-2xl bg-surface border border-line hover:border-neon-stroke/40 px-2 py-2.5 flex flex-col items-center justify-center gap-1.5 text-center transition-colors">
+              <Icon icon={icon} width={22} className="text-neon-ink" aria-hidden="true" />
+              <span className="text-xs font-semibold text-ink leading-tight">{label}</span>
+            </button>
+          ))}
+        </nav>
       )}
 
       {/* ── Train together: a headline feature, so it gets its own neon card. The big button opens
@@ -791,7 +835,9 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
         </>}>My workouts</SectionTitle>
 
         {customWorkouts.length === 0 ? (
-          <Button variant="secondary" full icon="mdi:plus" onClick={onCreateNew}>Create your first workout</Button>
+          needsFirst
+            ? <p className="text-sm text-muted">Workouts you save show here. The one above starts your list.</p>
+            : <Button variant="secondary" full icon="mdi:plus" onClick={onCreateNew}>Create your first workout</Button>
         ) : (
           <div className="space-y-2">
             {customWorkouts.map(w => {
@@ -1002,7 +1048,10 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
   const totalSets = setsFor(exIdx)
   const thisExSets = loggedSets.map((s, i) => ({ ...s, i })).filter(s => s.ex === ex.name)
   const progress = freeWorkout ? null : (setsDone / setsTotal) * 100
-  const prev = loggedSets.filter(s => s.ex === ex.name).slice(-1)[0]
+  const prev = loggedSets.filter(s => s.ex === ex.name && !s.warmup).slice(-1)[0]
+  const [warmup, setWarmup] = useState(false) // the next set logged is a warm-up
+  const [rpe, setRpe] = useState(null) // how hard it was, 6-10 (optional)
+  useEffect(() => { setRpe(null) }, [ex.name, setIdx])
   const pastSessions = historyFor(exerciseHistory, ex.name) // also under another name for the same lift
   const lastSession = pastSessions[pastSessions.length - 1]
   const records = pastSessions.length ? getRecords(pastSessions) : null
@@ -1064,6 +1113,7 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
           {ex.reps && <Fact icon={timed ? 'mdi:timer-outline' : 'mdi:target'}>{timed ? `Hold ${ex.reps.replace(/\s*s$/, ' s')}` : `${ex.reps} reps`}</Fact>}
           {records?.maxSecs > 0 ? <Fact icon="mdi:trophy-outline">Best {fmtSecs(records.maxSecs)}</Fact>
             : records?.maxWeight > 0 && <Fact icon="mdi:trophy-outline">PR {fmt(records.maxWeight)} × {records.maxWeightReps}</Fact>}
+          {records?.bestE1rm > 0 && !timed && <Fact icon="mdi:arm-flex-outline">1RM about {fmt(Math.round(records.bestE1rm))}</Fact>}
         </div>
         <div className="flex gap-1.5 mt-4" aria-hidden="true">
           {Array.from({ length: totalSets }, (_, i) => (
@@ -1112,13 +1162,39 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
             </div>
           </div>
         )}
+        {mode !== 'time' && !warmup && (
+          <div className="mb-3">
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <span className="text-xs text-muted">How hard was it? <span className="text-placeholder">(optional)</span></span>
+              <InfoButton title="Effort (RPE)">
+                <div className="space-y-2 text-sm text-ink-2">
+                  <p>RPE is how hard a set felt, out of 10. 10 means you couldn't do one more rep. 8 means you had about 2 left. 6 is easy.</p>
+                  <p>Most working sets should land around 7 to 9. It's saved with the set, so you can see how a weight felt next time.</p>
+                </div>
+              </InfoButton>
+            </div>
+            <div className="grid grid-cols-5 gap-1.5" role="group" aria-label="Effort, RPE">
+              {[6, 7, 8, 9, 10].map(n => (
+                <button key={n} type="button" onClick={() => setRpe(r => (r === n ? null : n))} aria-pressed={rpe === n}
+                  className={`press min-h-[40px] rounded-xl border text-sm font-semibold tabular-nums transition-colors ${rpe === n ? 'bg-neon text-on-neon border-neon' : 'bg-raised text-ink-2 border-line'}`}>{n}</button>
+              ))}
+            </div>
+          </div>
+        )}
         {/* Logging mid-hold stops the clock and logs the exact time */}
-        <Button full icon="mdi:check" onClick={() => onLog(holding ? stopHold.current?.() : undefined)}
-          disabled={mode === 'time' && !holding && !(parseFloat(reps) > 0)}>Log set {setIdx + 1}</Button>
+        <Button full icon={warmup ? 'mdi:fire' : 'mdi:check'} onClick={() => { onLog(holding ? stopHold.current?.() : undefined, { warmup, rpe }); setWarmup(false) }}
+          disabled={mode === 'time' && !holding && !(parseFloat(reps) > 0)}>{warmup ? 'Log warm-up set' : `Log set ${setIdx + 1}`}</Button>
+        {mode !== 'time' && (
+          <button type="button" onClick={() => setWarmup(w => !w)} aria-pressed={warmup}
+            className={`press w-full mt-2 min-h-[40px] rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 ${warmup ? 'text-neon-ink' : 'text-muted hover:text-ink'}`}>
+            <Icon icon={warmup ? 'mdi:checkbox-marked-outline' : 'mdi:checkbox-blank-outline'} width={18} aria-hidden="true" />
+            This is a warm-up set
+          </button>
+        )}
         <div className="flex gap-2 mt-3">
           <Button variant="secondary" size="sm" icon="mdi:plus" className="flex-1" onClick={onAddSet}>Add a set</Button>
           <Button variant="secondary" size="sm" iconRight="mdi:skip-next" className="flex-1" onClick={onFinishExercise}>
-            {thisExSets.length ? (freeWorkout ? 'Next exercise' : 'Finish exercise') : 'Skip exercise'}
+            {thisExSets.some(x => !x.warmup) ? (freeWorkout ? 'Next exercise' : 'Finish exercise') : 'Skip exercise'}
           </Button>
         </div>
       </Card>
@@ -1305,7 +1381,7 @@ function LoggedSets({ sets, onEdit, onDelete }) {
 
   return (
     <Card>
-      <SectionTitle action={<Fact icon="mdi:check">{sets.length}</Fact>}>Logged sets</SectionTitle>
+      <SectionTitle action={<Fact icon="mdi:check">{sets.filter(s => !s.warmup).length}</Fact>}>Logged sets</SectionTitle>
       <ul className="divide-y divide-line">
         {sets.map(s => (
           <li key={s.i} className="py-2">
@@ -1324,13 +1400,17 @@ function LoggedSets({ sets, onEdit, onDelete }) {
               </form>
             ) : (
               <div className="flex items-center gap-2">
-                <span className="w-7 h-7 rounded-full bg-neon text-on-neon text-xs font-bold flex items-center justify-center flex-shrink-0" aria-label={`Set ${s.set}`}>{s.set}</span>
-                <span className="flex-1 text-base font-bold text-ink tabular-nums">{setText(s, fmt)}</span>
-                <button aria-label={`Edit set ${s.set}`} onClick={() => { setDraft({ weight: String(fromLb(s.weight)), reps: String(isTimedSet(s) ? s.secs : s.reps), timed: isTimedSet(s) }); setEditing(s.i) }}
+                {s.warmup
+                  ? <span className="w-7 h-7 rounded-full border border-line-strong text-muted text-xs font-bold flex items-center justify-center flex-shrink-0" aria-label="Warm-up set">W</span>
+                  : <span className="w-7 h-7 rounded-full bg-neon text-on-neon text-xs font-bold flex items-center justify-center flex-shrink-0" aria-label={`Set ${s.set}`}>{s.set}</span>}
+                <span className={`flex-1 text-base font-bold tabular-nums ${s.warmup ? 'text-ink-2' : 'text-ink'}`}>
+                  {setText(s, fmt)}{s.rpe ? <span className="ml-2 text-xs font-semibold text-muted">RPE {s.rpe}</span> : null}
+                </span>
+                <button aria-label={s.warmup ? 'Edit warm-up set' : `Edit set ${s.set}`} onClick={() => { setDraft({ weight: String(fromLb(s.weight)), reps: String(isTimedSet(s) ? s.secs : s.reps), timed: isTimedSet(s) }); setEditing(s.i) }}
                   className="press w-11 h-11 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-raised">
                   <Icon icon="mdi:pencil-outline" width={18} />
                 </button>
-                <button aria-label={`Delete set ${s.set}`} onClick={() => onDelete(s.i)}
+                <button aria-label={s.warmup ? 'Delete warm-up set' : `Delete set ${s.set}`} onClick={() => onDelete(s.i)}
                   className="press w-11 h-11 rounded-full flex items-center justify-center text-muted hover:text-danger hover:bg-raised">
                   <Icon icon="mdi:trash-can-outline" width={18} />
                 </button>
@@ -1478,7 +1558,7 @@ function RestScreen({ exercises, restDuration, exIdx, setIdx, totalSets, onAdvan
 function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, freeWorkout, activeExercises, onSaveWorkout, saveStatus, onRetrySave }) {
   const { fmt, fmtVolume } = useUnit()
   const duration = Math.round((Date.now() - startTime) / 60000)
-  const volume   = loggedSets.reduce((a, s) => a + s.weight * s.reps, 0)
+  const volume   = loggedSets.filter(s => !s.warmup).reduce((a, s) => a + s.weight * s.reps, 0)
 
   // Unique exercises in the exact order they were first performed
   const uniqueExNames = []
@@ -1514,7 +1594,7 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
         </InlineError>
       )}
 
-      <StatTiles className="w-full text-left" items={[['Minutes', duration], ['Volume', fmtVolume(volume)], ['Sets', loggedSets.length]]} />
+      <StatTiles className="w-full text-left" items={[['Minutes', duration], ['Volume', fmtVolume(volume)], ['Sets', loggedSets.filter(s => !s.warmup).length]]} />
 
       {badges.length > 0 && (
         <Card pad="lg" tone="neon" className="w-full text-left">

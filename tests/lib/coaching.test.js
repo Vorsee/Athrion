@@ -55,3 +55,25 @@ describe('the coached week', () => {
     expect(coachedWeek({ plan: planRow, goalStartDate: '2026-09-21', today }).deload).toBe(true)
   })
 })
+
+describe('the personal coaching tip', () => {
+  it('tells a beginner to start light and that the targets build up', async () => {
+    const { personalTip } = await import('../../supabase/functions/generate-fitness-plan/plan.ts')
+    const t = personalTip({ experienceLevel: 'beginner', primaryGoal: 'build_muscle', workoutDaysPerWeek: 3 })
+    expect(t.title).toBe('Start light, then build')
+    expect(t.body).toMatch(/3 or 4 more times/)
+    expect(t.body).toMatch(/starting small is the plan/)
+    const i = personalTip({ experienceLevel: 'intermediate', primaryGoal: 'lose_weight', injuries: 'left knee' })
+    expect(i.body).toMatch(/Weigh in once a week/)
+    expect(i.body).toMatch(/left knee/)
+  })
+  it('is part of the backup plan', async () => {
+    const { makeFallbackPlan } = await import('../../supabase/functions/generate-fitness-plan/plan.ts')
+    const p = makeFallbackPlan({ primaryGoal: 'swimming', experienceLevel: 'advanced', workoutDaysPerWeek: 4, workoutLocation: 'gym' }, { calorieTarget: 2400, proteinGrams: 150, carbGrams: 250, fatGrams: 70 })
+    expect(p.coachingTip.title).toBeTruthy()
+    // Pool days start on land, before the warm-up
+    const pool = p.weeklySchedule.find(d => d.sport === 'swim')
+    expect(pool.workout.exercises[0].name).toMatch(/^Dryland: /)
+    expect(pool.workout.exercises.findIndex(e => /^Warm-up/.test(e.name))).toBeGreaterThan(0)
+  })
+})

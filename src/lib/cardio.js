@@ -39,7 +39,7 @@ export const paceSecs = (log, u) => (log.seconds / log.distance_m) * u.paceM
 
 export function fmtDistance(m, u) {
   const v = u.fromM(Number(m))
-  return u.dist === 'km' || u.dist === 'mi' ? `${(Math.round(v * 100) / 100).toFixed(2)} ${u.dist}` : `${Math.round(v)} ${u.dist}`
+  return u.dist === 'km' || u.dist === 'mi' ? `${(Math.round(v * 100) / 100).toFixed(2)} ${u.dist}` : `${Math.round(v).toLocaleString()} ${u.dist}`
 }
 
 // This week's totals (Monday start) and all-time bests for one kind

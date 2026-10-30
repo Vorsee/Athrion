@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { sb, USER } from '../helpers/supabaseMock.js'
 import { planRow, restTodayPlan, withWorkoutOn, profile, fitnessProfile } from '../helpers/fixtures.js'
 import { LEGAL_VERSION } from '../../src/lib/legal.js'
+import { todayKey } from '../../src/lib/data.js'
 
 vi.mock('../../src/lib/supabase.js', () => ({ supabase: sb.supabase }))
 vi.mock('@iconify/react', () => ({ Icon: () => null }))
@@ -68,7 +69,10 @@ describe('Plan', () => {
     expect(screen.getByText('Today')).toBeInTheDocument()
     await userEvent.click(screen.getByText('Train anyway'))
     expect(go).toHaveBeenCalled()
-    expect(screen.getByText('Daily targets')).toBeInTheDocument()
+    // Only what Pro pays for: the trainer's tip, no calorie card (Food has it) and no safety notes
+    expect(screen.getByText('Personal trainer')).toBeInTheDocument()
+    expect(screen.getByText('Personal coaching tip')).toBeInTheDocument()
+    expect(screen.queryByText('Daily targets')).toBeNull()
   })
   it('starts today\'s workout directly from the plan', async () => {
     sb.set('fitness_plans', { data: withWorkoutOn('Friday'), error: null })
@@ -145,7 +149,8 @@ describe('Calories', () => {
     expect(screen.getByText('Save targets')).toBeEnabled()
     expect(screen.getByText(/Fat fills the rest/)).toBeInTheDocument()
   })
-  it('lets free users log food; the AI photo scanner asks for Pro', async () => {
+  it('lets free users log food; the AI photo scanner is one a day, then asks for Pro', async () => {
+    localStorage.setItem('athrion_free_scan', todayKey()) // today's free scan is used
     sb.set('nutrition_targets', { data: null, error: null })
     sb.set('calorie_logs', q => sb.op(q, 'upsert') ? { data: { id: 'c1' }, error: null } : { data: sb.op(q, 'eq') ? null : [], error: null })
     const onUpgrade = vi.fn()
@@ -154,8 +159,10 @@ describe('Calories', () => {
     await addFood('Oats', 300)
     await waitFor(() => expect(upserts()).toHaveLength(1))
     expect(screen.getByText('Scan barcode')).toBeInTheDocument()
+    expect(screen.getByText('Used today · unlimited on Pro')).toBeInTheDocument()
     await userEvent.click(screen.getByText('Snap a meal'))
     expect(onUpgrade).toHaveBeenCalled()
+    localStorage.removeItem('athrion_free_scan')
   })
 })
 

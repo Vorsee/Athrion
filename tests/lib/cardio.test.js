@@ -13,7 +13,7 @@ describe('cardio', () => {
     expect(fmtDistance(5000, cardioUnits('run', 'lb'))).toBe('3.11 mi')
     const swim = { distance_m: 1500, seconds: 1800 }
     expect(fmtDuration(paceSecs(swim, cardioUnits('swim', 'kg')))).toBe('2:00')
-    expect(fmtDistance(1500, cardioUnits('swim', 'lb'))).toBe('1640 yd')
+    expect(fmtDistance(1500, cardioUnits('swim', 'lb'))).toBe('1,640 yd')
     expect(cardioUnits('run', 'kg').toM(5)).toBe(5000)
   })
   it('totals this week from Monday and finds the bests', () => {

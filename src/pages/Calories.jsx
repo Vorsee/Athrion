@@ -6,7 +6,6 @@ import { fetchTodayCalorieLog, saveTodayCalorieLog, fetchCalorieLogs, saveGoals 
 import { resolveGoals } from '../lib/goals.js'
 import { MIN_CALORIES, DIET_OPTS, chipsFrom } from '../lib/nutrition.js'
 import { fetchLatestNutritionTarget, fetchFitnessProfile, saveDiet } from '../lib/fitnessApi.js'
-import MealPlan from '../components/MealPlan.jsx'
 import AiMealPlan from '../components/AiMealPlan.jsx'
 import AdaptiveNutritionCard from '../components/AdaptiveNutritionCard.jsx'
 import BarcodeScanner from '../components/BarcodeScanner.jsx'
@@ -35,11 +34,17 @@ function getCurrentMeal() {
 const EMPTY_FORM = { name: '', kcal: '', protein: '', carbs: '', fat: '' }
 
 // Example day shown behind the Pro lock; never saved
-// Free: manual logging, barcode scanning and goals. Pro: the AI photo scanner
+// Free: manual logging, barcode scanning, goals and one AI photo scan a day. Pro: unlimited photo scans, the AI meal plan
 // (also enforced in the analyze-meal Edge Function) and plan-based adaptive targets.
 export default function Calories(props) {
   return <CaloriesPage {...props} />
 }
+
+// Free accounts: one AI photo scan a day (the server counts it too, 026). Kept here so the tile can
+// say whether today's is used before anyone tries.
+const SCAN_KEY = 'athrion_free_scan'
+const scanUsedToday = () => { try { return localStorage.getItem(SCAN_KEY) === todayKey() } catch { return false } }
+const markScanUsed = () => { try { localStorage.setItem(SCAN_KEY, todayKey()) } catch {} }
 
 function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentHandled }) {
   const [foods, setFoods]             = useState([])
@@ -58,16 +63,19 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
   const [localGoals, setLocalGoals]   = useState(null)
   const [planNutrition, setPlanNutrition] = useState(null)
   const [scanning, setScanning]       = useState(false)
+  const [aiLimit, setAiLimit]         = useState(false) // the error is the free daily limit: offer Pro
   const [diet, setDiet]               = useState([]) // from the plan questions or the meal plan's chips
   const hasFp = useRef(false)
   const fileRef = useRef()
   const [logFood, setLogFood]         = useState(false)
   useHeaderAction('mdi:plus', 'Log food', () => setLogFood(true))
 
-  // Opened from the You sheet's Nutrition targets
+  // Opened from the You sheet's Nutrition targets, or Train's quick actions
   useEffect(() => {
-    if (intent !== 'goals') return
-    setEditingGoals(true)
+    if (!intent) return
+    if (intent === 'goals') setEditingGoals(true)
+    else if (intent === 'log') { setTab('today'); setLogFood(true) }
+    else if (intent === 'plan') setTab('plan')
     onIntentHandled?.()
   }, [intent])
 
@@ -75,7 +83,7 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
   function logBy(kind) {
     setLogFood(false)
     if (kind === 'photo') {
-      if (!isPro) return onUpgrade?.()
+      if (!isPro && scanUsedToday()) return onUpgrade?.()
       if (fileRef.current) return fileRef.current.click()
       setTab('today') // the photo input lives on the Today view
       return requestAnimationFrame(() => fileRef.current?.click())
@@ -149,7 +157,7 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
   }
 
   async function analyzeImage(file) {
-    setAiState('loading'); setAiResult(null); setAiError(null)
+    setAiState('loading'); setAiResult(null); setAiError(null); setAiLimit(false)
     const base64 = await new Promise(res => {
       const r = new FileReader()
       r.onload = () => res(r.result.split(',')[1])
@@ -171,7 +179,11 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
         }
       )
       const data = await resp.json()
-      if (!resp.ok) { setAiError(data.error?.message || `Error ${resp.status}`); setAiState('error'); return }
+      if (!resp.ok) {
+        if (data.error?.code === 'daily_limit') markScanUsed()
+        setAiError(data.error?.message || `Error ${resp.status}`); setAiLimit(['daily_limit', 'pro'].includes(data.error?.code)); setAiState('error'); return
+      }
+      if (!isPro) markScanUsed()
       const text = data.content?.map(c => c.text || '').join('') || ''
       const result = JSON.parse(text.replace(/```json|```/g, '').trim())
       setAiResult(result); setAiState('result')
@@ -247,16 +259,24 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
             onLog={(meal, items) => saveFoods([...foods, ...items])} />
         ) : (
           <div className="space-y-3">
-            <Card className="flex flex-wrap items-center gap-3">
-              <Icon icon="mdi:auto-fix" width={26} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
-              <div className="grow basis-0 min-w-[10rem]">
-                <div className="text-sm font-bold text-ink">A week of meals made for you <span className="ml-1 text-xs font-semibold text-on-neon bg-neon rounded-md px-1.5 py-0.5">Pro</span></div>
-                <p className="text-xs text-muted">7 days built by AI from the foods you like, your diet and cooking time, with a shopping list.</p>
+            {/* The meal plan is Pro; free accounts see what it gives */}
+            <Card hero className="space-y-4">
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-on-neon bg-neon rounded-full px-2.5 py-1">
+                <Icon icon="mdi:star-four-points-outline" width={14} aria-hidden="true" />ATHRION Pro
+              </span>
+              <div>
+                <h2 className="font-bold text-2xl text-ink leading-tight tracking-tight">A week of meals made for you</h2>
+                <p className="text-sm text-ink-2 mt-1">Sized to your {goals.calories.toLocaleString()} kcal and {goals.protein} g of protein a day.</p>
               </div>
-              {onUpgrade && <Button size="sm" onClick={onUpgrade}>Get Pro</Button>}
+              <ul className="space-y-2">
+                {['7 days built from the foods you like and your diet', 'Steps for every meal, within your cooking time', 'A shopping list for the week', 'Log a meal to today in one tap'].map(p => (
+                  <li key={p} className="flex items-start gap-2.5 text-sm text-ink">
+                    <Icon icon="mdi:check-circle-outline" width={18} className="text-neon-ink flex-shrink-0 mt-px" aria-hidden="true" />{p}
+                  </li>
+                ))}
+              </ul>
+              {onUpgrade && <Button full onClick={onUpgrade}>Get Pro</Button>}
             </Card>
-            <MealPlan calories={goals.calories} protein={goals.protein} diet={diet} onDietChange={changeDiet}
-              onLog={(meal, items) => saveFoods([...foods, ...items])} />
           </div>
         )
       ) : tab === 'today' ? (
@@ -265,13 +285,13 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
           <div>
             <div className="grid grid-cols-2 gap-2">
               <button type="button"
-                onClick={() => (isPro ? fileRef.current?.click() : onUpgrade?.())}
+                onClick={() => (isPro || !scanUsedToday() ? fileRef.current?.click() : onUpgrade?.())}
                 onDragOver={e => e.preventDefault()}
-                onDrop={e => { e.preventDefault(); isPro ? analyzeImage(e.dataTransfer.files[0]) : onUpgrade?.() }}
+                onDrop={e => { e.preventDefault(); isPro || !scanUsedToday() ? analyzeImage(e.dataTransfer.files[0]) : onUpgrade?.() }}
                 className="press relative flex flex-col items-start gap-2 bg-surface border border-line hover:border-neon-stroke/40 rounded-2xl p-4 text-left transition-colors">
                 <Icon icon="mdi:camera-outline" width={26} className="text-neon-ink" aria-hidden="true" />
                 <span className="text-sm font-semibold text-ink">Snap a meal</span>
-                {!isPro && <span className="absolute top-3 right-3"><Fact>Pro</Fact></span>}
+                {!isPro && <span className="text-xs text-muted -mt-1">{scanUsedToday() ? 'Used today · unlimited on Pro' : '1 free scan today'}</span>}
               </button>
               <button type="button" onClick={() => setScanning(true)}
                 className="press flex flex-col items-start gap-2 bg-surface border border-line hover:border-neon-stroke/40 rounded-2xl p-4 text-left transition-colors">
@@ -292,8 +312,9 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
               </div>
             )}
             {aiState === 'error' && (
-              <div className="mt-3 p-3 bg-danger/12 border border-danger/20 rounded-xl text-sm text-danger">
+              <div className={`mt-3 p-3 rounded-xl text-sm ${aiLimit ? 'bg-neon-tint border border-neon-stroke/25 text-ink' : 'bg-danger/12 border border-danger/20 text-danger'}`}>
                 {aiError || 'Could not analyze image. Try again or add manually.'}
+                {aiLimit && onUpgrade && <div className="mt-2"><Button size="sm" onClick={onUpgrade}>Get Pro</Button></div>}
               </div>
             )}
             {aiState === 'result' && aiResult && (
@@ -445,7 +466,7 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
       {logFood && (
         <Sheet title="Log food" onClose={() => setLogFood(false)} bodyClassName="space-y-1 -mx-2">
           <ListRow icon="mdi:camera-outline" tile="neon-ink" title="Photo" chevron onClick={() => logBy('photo')}
-            trailing={!isPro && <Fact>Pro</Fact>} />
+            trailing={!isPro && <span className="text-xs text-muted">{scanUsedToday() ? 'Pro' : '1 free today'}</span>} />
           <ListRow icon="mdi:barcode-scan" tile="info" title="Barcode" chevron onClick={() => logBy('barcode')} />
           <ListRow icon="mdi:pencil-outline" tile="lilac" title="Type it in" chevron onClick={() => logBy('manual')}
             meta={MEALS.find(m => m.id === getCurrentMeal())?.label} />

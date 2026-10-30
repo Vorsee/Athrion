@@ -43,7 +43,8 @@ Rules:
 - Legs are muscles too: unless an injury rules it out, every plan with 3 or more training days trains the lower body (quads, hamstrings, glutes, calves) at least as often as the upper body, with at least one full leg day or a squat or lunge and a hip hinge in most sessions. Never write an upper-body-only week.
 - Cardio has a place in every plan except mobility: at least one cardio session a week (a short cardio day such as "Easy Cardio" on a rest day, or 10-20 minutes at the end of a session), written as exercises with a duration in reps, for example "Incline Walk" with reps "20-30 min".
 - Use plain, common exercise names people know and that match a normal gym app library: "Squat", "Bench Press", "Romanian Deadlift", "Lunge", "Leg Press", "Lat Pulldown", "Standing Calf Raise", "Incline Walk", "Stationary Bike". Avoid made-up or brand names.
-- Every day has a sport: "gym" for land training and rest days, "swim" for pool sessions. Pool sessions only when swimming is a goal. In a pool session each exercise is one set of repeats: name says the part and the stroke ("Warm-up: easy freestyle", "Drill: catch-up freestyle", "Main set: freestyle", "Kick: flutter kick with board", "Cool-down: easy backstroke"), sets is the number of repeats, reps is the distance and send-off ("100 m on 1:50", or "400 m easy" for a single swim), restSeconds is 0, equipment is "Pool"; warmup and cooldown are short dryland steps (arm circles, band pull-aparts, stretching).
+- Every day has a sport: "gym" for land training and rest days, "swim" for pool sessions. Pool sessions only when swimming is a goal. In a pool session each exercise is one set of repeats: name says the part and the stroke ("Warm-up: easy freestyle", "Drill: catch-up freestyle", "Main set: freestyle", "Kick: flutter kick with board", "Cool-down: easy backstroke"), sets is the number of repeats, reps is the distance and send-off ("100 m on 1:50", or "400 m easy" for a single swim), restSeconds is 0, equipment is "Pool". Every pool session starts with a short dryland block before the warm-up: 2-3 exercises named "Dryland: ..." (band pull-aparts, external rotation, squat or streamline jumps, plank, dead bugs), 2 sets each, reps like "15" or "30 s", equipment "Bodyweight" or "Band"; warmup and cooldown are short mobility steps (arm circles, stretching).
+- coachingTip is a personal note from you as their trainer, written to them ("you"), from their stats: experience, goal, days, session length, injuries and, on a weekly update, recentProgress. title is 3-6 words; body is 2-3 short sentences. A beginner hears to start light (weights they could lift 3-4 more times, form first), that the targets go up a little every week, and that starting small is the plan, not a step back. Others get the one thing that matters most for them this week. Plain words, no exclamation marks.
 - weeklySchedule has exactly 7 entries, Monday through Sunday, in order.`
 
 function str() { return { type: 'string' } }
@@ -101,6 +102,7 @@ export const PLAN_SCHEMA = obj({
   safety: obj({
     warnings: strArr(), professionalAdviceRecommended: { type: 'boolean' }, exercisesToAvoid: strArr(),
   }),
+  coachingTip: obj({ title: str(), body: str() }),
 })
 
 const ADAPT_INSTRUCTIONS = `This is a weekly update of an existing plan. Use recentProgress to adapt it:
@@ -467,19 +469,26 @@ export function swimSessions(fp: any) {
   const set = (name: string, sets: number, reps: string, tip: string, easier: string, harder: string) => ({
     name, sets, reps, restSeconds: 0, intensityNote: '', formTip: tip, easierVersion: easier, harderVersion: harder, equipment: 'Pool',
   })
+  // On land before getting in: shoulders, core and legs for starts and turns
+  const dry = (name: string, reps: string, tip: string, easier: string, harder: string) => ({ ...set(name, 2, reps, tip, easier, harder), equipment: 'Bodyweight' })
+  const dryland = [
+    dry('Dryland: band pull-aparts', '15', 'Squeeze the shoulder blades, arms straight', 'Lighter band', 'Pause 2 s at the back'),
+    dry('Dryland: squat jumps', '8', 'Land softly, arms swing up into a streamline', 'Bodyweight squats', 'Hold a streamline the whole time'),
+    dry('Dryland: plank', '30 s', 'Ribs down, squeeze the glutes', 'Knees down', 'Lift one foot'),
+  ]
   const warm = set('Warm-up: easy freestyle', 1, `${metres(300)} m easy`, 'Long and relaxed, breathe every 3 strokes', 'Mix in backstroke', 'Add 4 x 25 build')
   const cool = set('Cool-down: easy backstroke', 1, `${metres(150)} m easy`, 'Slow, long strokes', 'Any stroke', 'Add 100 easy freestyle')
   return [
-    { title: 'Swim: Technique', exercises: [warm,
+    { title: 'Swim: Technique', exercises: [...dryland, warm,
       set('Drill: catch-up freestyle', n(6), on(50, 20), 'One hand waits in front until the other arrives', 'Use fins', 'Fingertip drag instead'),
       set('Kick: flutter kick with board', n(4), on(50, 25), 'Kick from the hips, small fast kicks', 'Fins on', 'No board, streamline'),
       set('Main set: freestyle', n(6), on(100), 'Hold the same time on every repeat', 'Swim 50s instead', 'Take 5 s off the send-off'),
       set('Drill: breaststroke pull with flutter kick', n(4), on(50, 25), 'Pull, breathe, glide', 'Fins on', 'Full breaststroke'), cool] },
-    { title: 'Swim: Aerobic', exercises: [warm,
+    { title: 'Swim: Aerobic', exercises: [...dryland, warm,
       set('Main set: freestyle', n(4), on(200, 20), 'Steady pace you could hold for an hour', 'Swim 100s', 'Negative split each 200'),
       set('Pull: freestyle with pull buoy', n(4), on(100), 'Long reach, high elbow', 'Fewer repeats', 'Add paddles'),
       set('Main set: backstroke', n(4), on(50, 20), 'Head still, hips up', 'Kick only', 'Faster send-off'), cool] },
-    { title: 'Swim: Speed', exercises: [warm,
+    { title: 'Swim: Speed', exercises: [...dryland, warm,
       set('Drill: 6-kick switch freestyle', n(4), on(50, 25), 'Rotate fully onto your side', 'Fins on', 'Fewer kicks'),
       set('Main set: fast freestyle', n(8), on(25, 30), 'Fast but smooth, full recovery between', 'Fewer repeats', 'Butterfly every 4th'),
       set('Main set: medley', n(4), on(100, 25), 'Fly, back, breast, free: 25 each', 'Freestyle instead of fly', 'Faster send-off'), cool] },
@@ -487,7 +496,7 @@ export function swimSessions(fp: any) {
 }
 const swimDay = (s: any) => ({
   type: 'workout', sport: 'swim', title: s.title, sessionMode: 'solo', durationMinutes: 45,
-  workout: { warmup: [{ name: 'Arm circles and band pull-aparts', duration: '3 min', instructions: 'Loosen the shoulders before you get in.' }],
+  workout: { warmup: [{ name: 'Arm circles', duration: '2 min', instructions: 'Loosen the shoulders before the dryland set.' }],
     exercises: s.exercises, cooldown: [{ name: 'Shoulder and lat stretch', duration: '3 min', instructions: 'Hold each side 30 s.' }] },
   recoveryNotes: 'Log it on the Swim tab when you get out.',
 })
@@ -618,6 +627,33 @@ export function makeFallbackPlan(fp: any, nt: any): any {
       professionalAdviceRecommended: false,
       exercisesToAvoid: avoid,
     },
+    coachingTip: personalTip(fp),
+  }
+}
+
+// The trainer's note on Plan when the AI didn't write one (the backup plan, and plans made before
+// coachingTip existed): from the person's level, goal and week
+export function personalTip(fp: any): { title: string, body: string } {
+  const days = Number(fp?.workoutDaysPerWeek) || 3
+  const goals = [fp?.primaryGoal, ...(fp?.secondaryGoals ?? [])]
+  const hurt = String(fp?.injuries ?? '').trim()
+  const goalLine = goals.includes('lose_weight') ? 'Weigh in once a week, same time of day, and let the trend guide you, not one day.'
+    : goals.includes('gain_weight') ? 'Eat to your calories every day, even rest days: that is where the weight comes from.'
+    : goals.includes('swimming') ? 'Do the short dryland block before every swim: strong shoulders keep you in the water.'
+    : goals.some((g: string) => ['build_muscle', 'improve_strength'].includes(g)) ? 'Hit your protein every day: it is what turns the work into muscle.'
+    : 'Showing up on your planned days matters more than any single session.'
+  const hurtLine = hurt ? ` Work around your ${hurt.length > 40 ? 'injury' : hurt}: if a move hurts, use the easier version.` : ''
+  if (fp?.experienceLevel === 'beginner' || !fp?.experienceLevel) return {
+    title: 'Start light, then build',
+    body: `For your first two weeks, pick weights you could lift 3 or 4 more times and finish every session feeling you had more in you. Your targets go up a little each week, so starting small is the plan, not a step back.${hurtLine}`,
+  }
+  if (fp.experienceLevel === 'advanced') return {
+    title: 'Earn every jump in weight',
+    body: `Add weight only when every set reaches the top of the range with clean reps. ${days >= 5 ? 'Five or more days is a lot of work: keep the lighter week when it comes. ' : ''}${goalLine}${hurtLine}`,
+  }
+  return {
+    title: 'Beat last time by one rep',
+    body: `Each session, aim for one more rep or a little more weight than last time, and leave a rep or two in the tank on the last set. ${goalLine}${hurtLine}`,
   }
 }
 

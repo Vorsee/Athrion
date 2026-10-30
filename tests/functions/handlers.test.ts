@@ -203,12 +203,33 @@ describe('analyze-meal', () => {
     expect(res.status).toBe(200)
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content[0].source.media_type).toBe('image/png')
   })
-  it('requires Pro, a supported image type and a size under 5 MB', async () => {
+  it('gives a free account one scan a day, and gives it back when the scan fails', async () => {
+    proUser('free')
+    const h = await load('analyze-meal')
+    const rpc = sb.supabase.rpc as any
+    // Today's scan is free: claimed, then the photo goes to Claude
+    rpc.mockImplementation(async (fn: string) => ({ data: fn === 'claim_meal_scan' ? true : null, error: null }))
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ content: [] }))))
+    expect((await h(post(photo, auth))).status).toBe(200)
+    // Used: 429 with a code the app turns into a Get Pro offer
+    rpc.mockImplementation(async () => ({ data: false, error: null }))
+    const used = await h(post(photo, auth))
+    expect(used.status).toBe(429)
+    expect((await used.json()).error.code).toBe('daily_limit')
+    // The AI call fails: the scan is handed back
+    rpc.mockImplementation(async (fn: string) => ({ data: fn === 'claim_meal_scan' ? true : null, error: null }))
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })))
+    expect((await h(post(photo, auth))).status).toBe(502)
+    expect(rpc).toHaveBeenCalledWith('release_meal_scan')
+    // Before 026 (no claim function): Pro-only, as before
+    rpc.mockImplementation(async () => ({ data: null, error: { message: 'missing' } }))
+    expect((await h(post(photo, auth))).status).toBe(403)
+    vi.unstubAllGlobals()
+  })
+  it('requires a supported image type and a size under 5 MB', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
     const h = await load('analyze-meal')
-    proUser('free')
-    expect((await h(post(photo, auth))).status).toBe(403)
     proUser()
     expect((await h(post({ base64: 'aGk=', mediaType: 'application/pdf' }, auth))).status).toBe(400)
     expect((await h(post({ base64: 'a'.repeat(7_000_001), mediaType: 'image/jpeg' }, auth))).status).toBe(413)

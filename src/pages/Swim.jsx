@@ -7,11 +7,11 @@ import { cardioUnits, parseDuration, fmtDuration, fmtDistance, paceSecs } from '
 import {
   STROKES, DISTANCE_BANDS, strokeLabel, strokeStats, strokeBoard, daysAgo, swimInviteLink, clearSwimInvite,
   readPoolUnit, setPoolUnit, subscribePoolUnit, intervalSet,
-  PRACTICE_PARTS, PRACTICE_TEMPLATES, blankItem, practiceTotals, practiceLine, mainStroke,
+  swimmerName, PRACTICE_PARTS, PRACTICE_TEMPLATES, DRYLAND_MOVES, isDryland, blankItem, practiceTotals, practiceLine, mainStroke,
 } from '../lib/swim.js'
 import {
   photoUrls, fetchMyPhoto, uploadMyPhoto, fetchCoachedTeam, saveTeam, newTeamCode, fetchRoster, fetchSwimmerSwims,
-  respondToSwimmer, fetchTeamPrs, fetchMyTeam, teamByCode, leaveTeam, searchTeams, joinTeam,
+  respondToSwimmer, fetchTeamPrs, fetchMyTeam, teamByCode, leaveTeam, searchTeams, joinTeam, setTeamName, accountName,
   fetchPractices, savePractice, deletePractice,
 } from '../lib/swimApi.js'
 import Sheet from '../components/Sheet.jsx'
@@ -260,7 +260,7 @@ function MySwims({ swims, onChanged, isPro, onUpgrade }) {
         <StrokeGrid swims={swims} selected={filter} onSelect={pick} />
       </section>
 
-      <LogSwim stroke={stroke} setStroke={setStroke} onSaved={onChanged} />
+      <div id="log-swim" className="scroll-mt-20"><LogSwim stroke={stroke} setStroke={setStroke} onSaved={onChanged} /></div>
 
       <StrokeProgress swims={swims} isPro={isPro} onUpgrade={onUpgrade} />
 
@@ -330,8 +330,10 @@ function PracticeEditor({ teamId, date: firstDate, existing, onClose, onSaved })
   async function save() {
     setErr('')
     if (!title.trim()) return setErr('Give the practice a name, like Aerobic base')
-    const clean = items.filter(i => Number(i.reps) > 0 && Number(i.distance) > 0)
-      .map(i => ({ ...i, reps: Math.min(99, Math.round(Number(i.reps))), distance: Math.min(5000, Math.round(Number(i.distance))), send_off: /^\d{1,2}:\d{2}$/.test(i.send_off) ? i.send_off : '', note: (i.note ?? '').slice(0, 60) }))
+    const clean = items.filter(i => Number(i.reps) > 0 && (isDryland(i) ? i.name?.trim() : Number(i.distance) > 0))
+      .map(i => (isDryland(i)
+        ? { part: 'dryland', name: i.name.trim().slice(0, 40), reps: Math.min(20, Math.round(Number(i.reps))), amount: (i.amount ?? '').trim().slice(0, 12), note: (i.note ?? '').slice(0, 60) }
+        : { ...i, reps: Math.min(99, Math.round(Number(i.reps))), distance: Math.min(5000, Math.round(Number(i.distance))), send_off: /^\d{1,2}:\d{2}$/.test(i.send_off) ? i.send_off : '', note: (i.note ?? '').slice(0, 60) }))
     if (!clean.length) return setErr('Add at least one set')
     setBusy(true)
     try { await savePractice({ teamId, date, title, items: clean, notes }); onSaved() } catch (x) { setErr(x.message); setBusy(false) }
@@ -368,8 +370,19 @@ function PracticeEditor({ teamId, date: firstDate, existing, onClose, onSaved })
       {PRACTICE_PARTS.map(([part, label]) => (
         <section key={part} aria-label={label} className="space-y-2">
           <div className="text-sm font-semibold text-ink">{label}</div>
+          {part === 'dryland' && <p className="text-xs text-muted -mt-1">On land, before the warm-up: shoulders, core and legs for starts and turns.</p>}
           {items.map((i, n) => i.part === part && (
             <div key={n} className="rounded-xl border border-line p-2.5 space-y-2">
+              {isDryland(i) ? (
+                <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 4.5rem), 1fr))' }}>
+                  <label className="col-span-full"><span className="text-xs text-muted">Exercise</span>
+                    <input value={i.name} maxLength={40} list="dryland-moves" placeholder="Band pull-aparts" onChange={e => set(n, 'name', e.target.value)} className={`mt-0.5 ${inputCls}`} /></label>
+                  <label><span className="text-xs text-muted">Sets</span>
+                    <input type="number" inputMode="numeric" min={1} value={i.reps} onChange={e => set(n, 'reps', e.target.value)} className={`mt-0.5 ${inputCls}`} /></label>
+                  <label><span className="text-xs text-muted">Reps or time</span>
+                    <input value={i.amount} maxLength={12} placeholder="12 or 30 s" onChange={e => set(n, 'amount', e.target.value)} className={`mt-0.5 ${inputCls}`} /></label>
+                </div>
+              ) : (
               <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 4.5rem), 1fr))' }}>
                 <label><span className="text-xs text-muted">Reps</span>
                   <input type="number" inputMode="numeric" min={1} value={i.reps} onChange={e => set(n, 'reps', e.target.value)} className={`mt-0.5 ${inputCls}`} /></label>
@@ -382,6 +395,7 @@ function PracticeEditor({ teamId, date: firstDate, existing, onClose, onSaved })
                     {STROKES.map(st => <option key={st.id} value={st.id}>{st.label}</option>)}
                   </select></label>
               </div>
+              )}
               <div className="flex gap-2">
                 <input value={i.note} maxLength={60} placeholder="Note: drill, effort, kick" aria-label="Note" onChange={e => set(n, 'note', e.target.value)} className={`${inputCls} grow`} />
                 <button type="button" onClick={() => setItems(list => list.filter((_, x) => x !== n))} aria-label="Remove this set"
@@ -389,12 +403,21 @@ function PracticeEditor({ teamId, date: firstDate, existing, onClose, onSaved })
               </div>
             </div>
           ))}
+          {part === 'dryland' && (
+            <div className="flex flex-wrap gap-1.5">
+              {DRYLAND_MOVES.filter(([name]) => !items.some(i => isDryland(i) && i.name === name)).slice(0, 6).map(([name, amount]) => (
+                <button key={name} type="button" onClick={() => setItems(list => [...list, { ...blankItem('dryland'), name, amount }])}
+                  className="press min-h-[36px] px-3 rounded-full text-xs font-semibold border bg-raised text-ink-2 border-line hover:border-line-strong">+ {name}</button>
+              ))}
+            </div>
+          )}
           <button type="button" onClick={() => setItems(list => [...list, blankItem(part, u.dist)])}
             className="press w-full min-h-[40px] rounded-xl border border-dashed border-line-strong text-sm font-semibold text-ink-2 flex items-center justify-center gap-1.5">
             <Icon icon="mdi:plus" width={18} />Add {label.toLowerCase()}
           </button>
         </section>
       ))}
+      <datalist id="dryland-moves">{DRYLAND_MOVES.map(([name]) => <option key={name} value={name} />)}</datalist>
       <label className="block">
         <span className="text-xs text-muted">Notes for the team</span>
         <textarea value={notes} maxLength={500} rows={2} onChange={e => setNotes(e.target.value)} placeholder="Bring fins. Focus on turns." className={`mt-1 ${inputCls} resize-none`} />
@@ -545,12 +568,19 @@ function InviteCard({ code, onJoined, onDismiss }) {
   const [team, setTeam] = useState(undefined)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const [name, setName] = useState('')
   useEffect(() => { teamByCode(code).then(setTeam).catch(() => setTeam(null)) }, [code])
+  useEffect(() => { accountName().then(n => setName(x => x || n)).catch(() => {}) }, [])
   if (team === undefined) return <SkeletonRows rows={1} label="Loading the invite" />
 
   async function join() {
     setBusy(true); setErr('')
-    try { await joinTeam({ code }); clearSwimInvite(); onJoined() } catch (e) { setErr(e.message) } finally { setBusy(false) }
+    try {
+      await joinTeam({ code })
+      // Before 026 the name can't be saved; joining still works
+      if (name.trim()) await setTeamName(name.trim()).catch(() => {})
+      clearSwimInvite(); onJoined()
+    } catch (e) { setErr(e.message) } finally { setBusy(false) }
   }
   return (
     <Card hero className="space-y-3">
@@ -561,7 +591,11 @@ function InviteCard({ code, onJoined, onDismiss }) {
             <div className="text-xl font-bold text-ink break-words">{team.name}</div>
             {team.coach_nickname && <div className="text-sm text-muted">Coach @{team.coach_nickname}</div>}
           </div>
-          <p className="text-xs text-muted">Your coach will see your photo and your swims. Nothing else.</p>
+          <label className="block">
+            <span className="text-xs text-muted">Your name for the coach</span>
+            <input value={name} maxLength={40} onChange={e => setName(e.target.value)} placeholder="First and last name" autoComplete="name" className={`mt-1 ${inputCls}`} />
+          </label>
+          <p className="text-xs text-muted">Your coach will see this name, your photo and your swims. Nothing else.</p>
           <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 8rem), 1fr))' }}>
             <Button onClick={join} disabled={busy} icon="mdi:account-plus-outline">{busy ? 'Joining...' : 'Join the team'}</Button>
             <Button variant="secondary" onClick={() => { clearSwimInvite(); onDismiss() }}>Not now</Button>
@@ -701,11 +735,11 @@ function StartTeam({ coach, onCoachChange, onStarted }) {
   }
 
   const head = {
-    null: ['Coach a team', 'Apply as a coach. Once an admin approves you, start a team and invite your swimmers.', 'Become a coach'],
+    null: ['Coach a team, free', 'Roster, practices with dryland, leaderboards and every swimmer\'s swims, at no cost. Apply, and once an admin approves you, start a team and invite your swimmers.', 'Become a coach'],
     pending: ['Application sent', 'An admin is reviewing it. You get a notification when it is done, then you can start your team.', 'Edit application'],
     rejected: ['Not approved yet', coach?.review_note ? `Why: ${coach.review_note}` : 'Update your application and send it again.', 'Update and apply again'],
     suspended: ['Coaching paused', 'Email athrionsportapp@gmail.com to find out more.', null],
-    approved: ['You are an approved coach', 'Start your team, then invite swimmers with a link.', 'Start my team'],
+    approved: ['You are an approved coach', 'Start your team, then invite swimmers with a link. Coach tools are free.', 'Start my team'],
   }[status] ?? ['Coach a team', '', null]
 
   return (
@@ -738,6 +772,16 @@ function StartTeam({ coach, onCoachChange, onStarted }) {
 function MyTeamCard({ team, coachUrl, onLeft }) {
   const [busy, setBusy] = useState(false)
   const pending = team.status === 'pending'
+  // The name the coach sees (026: my_name). Before 026 the field isn't there and this stays hidden.
+  const hasNames = 'my_name' in team
+  const [name, setName] = useState(team.my_name ?? '')
+  const [saved, setSaved] = useState(team.my_name ?? '')
+  const [nameErr, setNameErr] = useState('')
+  useEffect(() => { if (hasNames && !team.my_name) accountName().then(n => setName(x => x || n)).catch(() => {}) }, [hasNames, team.my_name])
+  async function saveName(e) {
+    e.preventDefault(); setNameErr('')
+    try { await setTeamName(name.trim()); setSaved(name.trim()) } catch (x) { setNameErr(x.message) }
+  }
   async function leave() {
     if (!pending && !window.confirm(`Leave ${team.name}? Your coach stops seeing your swims.`)) return
     setBusy(true)
@@ -753,8 +797,18 @@ function MyTeamCard({ team, coachUrl, onLeft }) {
           {team.coach_nickname && <div className="text-sm text-muted">Coach @{team.coach_nickname}</div>}
         </div>
       </div>
+      {hasNames && (
+        <form onSubmit={saveName} className="space-y-1">
+          <label htmlFor="team-name" className="text-xs text-muted">{saved ? 'Your coach sees you as' : 'Add your name so your coach knows who you are'}</label>
+          <div className="flex gap-2">
+            <input id="team-name" value={name} maxLength={40} onChange={e => setName(e.target.value)} placeholder="First and last name" autoComplete="name" className={`${inputCls} grow min-w-0`} />
+            <Button size="sm" variant={name.trim() === saved ? 'secondary' : 'primary'} type="submit" disabled={name.trim() === saved}>{name.trim() === saved && saved ? 'Saved' : 'Save'}</Button>
+          </div>
+          {nameErr && <p role="alert" className="text-xs text-danger">{nameErr}</p>}
+        </form>
+      )}
       <p className="text-xs text-muted">
-        {pending ? 'Waiting for the coach to accept. You can keep logging swims meanwhile.' : 'Your coach sees your photo and your swims, stroke by stroke.'}
+        {pending ? 'Waiting for the coach to accept. You can keep logging swims meanwhile.' : 'Your coach sees your name, photo and swims, stroke by stroke.'}
       </p>
       <Button size="sm" variant="secondary" onClick={leave} disabled={busy}>{pending ? 'Cancel request' : 'Leave team'}</Button>
     </Card>
@@ -828,8 +882,8 @@ function CoachView({ team, roster, prs, urls, onChanged, onOpenSwimmer }) {
           <div className="space-y-2">
             {requests.map(r => (
               <div key={r.user_id} className="bg-surface border border-line rounded-2xl px-3 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
-                <Photo url={urls[r.photo_path]} name={r.nickname} size={44} />
-                <span className="grow basis-0 min-w-[6rem] text-sm font-semibold text-ink break-words">@{r.nickname ?? 'swimmer'}</span>
+                <Photo url={urls[r.photo_path]} name={r.display_name || r.nickname} size={44} />
+                <span className="grow basis-0 min-w-[6rem] text-sm font-semibold text-ink break-words">{swimmerName(r)}</span>
                 <span className="flex gap-2 ml-auto">
                   <Button size="sm" onClick={() => respond(r, true)} disabled={busy === r.user_id}>Accept</Button>
                   <Button size="sm" variant="secondary" onClick={() => respond(r, false)} disabled={busy === r.user_id}>Decline</Button>
@@ -847,8 +901,8 @@ function CoachView({ team, roster, prs, urls, onChanged, onOpenSwimmer }) {
             {swimmers.map(r => (
               <button key={r.user_id} type="button" onClick={() => onOpenSwimmer(r)}
                 className="press bg-surface border border-line hover:border-line-strong rounded-2xl p-3 flex flex-col items-center text-center gap-2">
-                <Photo url={urls[r.photo_path]} name={r.nickname} size={64} />
-                <span className="text-[0.8125rem] font-semibold text-ink [overflow-wrap:anywhere] leading-tight">@{r.nickname ?? 'swimmer'}</span>
+                <Photo url={urls[r.photo_path]} name={r.display_name || r.nickname} size={64} />
+                <span className="text-[0.8125rem] font-semibold text-ink [overflow-wrap:anywhere] leading-tight">{swimmerName(r)}</span>
                 {r.last_swim ? <>
                   <span className="text-sm font-bold text-neon-ink tabular-nums leading-none">{fmtDistance(r.metres_30d ?? 0, u)}</span>
                   <span className="text-xs text-muted leading-tight">{r.swims_30d ?? 0} {r.swims_30d === 1 ? 'swim' : 'swims'} in 30 days · {daysAgo(r.last_swim)}</span>
@@ -891,9 +945,9 @@ function Leaderboard({ prs, roster, urls, onOpenSwimmer }) {
               <button type="button" onClick={() => onOpenSwimmer(p.swimmer)}
                 className="press w-full text-left flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5">
                 <span className={`w-7 text-center text-sm font-bold tabular-nums flex-shrink-0 ${p.place === 1 ? 'text-neon-ink' : 'text-muted'}`}>{p.place}</span>
-                <Photo url={urls[p.swimmer.photo_path]} name={p.swimmer.nickname} size={40} />
+                <Photo url={urls[p.swimmer.photo_path]} name={p.swimmer.display_name || p.swimmer.nickname} size={40} />
                 <span className="grow basis-0 min-w-[6rem]">
-                  <span className="block text-sm font-semibold text-ink [overflow-wrap:anywhere]">@{p.swimmer.nickname ?? 'swimmer'}</span>
+                  <span className="block text-sm font-semibold text-ink [overflow-wrap:anywhere]">{swimmerName(p.swimmer)}</span>
                   <span className="block text-xs text-muted tabular-nums">{fmtDistance(p.distance_m, u)} in {fmtDuration(p.seconds)} · {fmtDate(p.date)}</span>
                 </span>
                 <span className="ml-auto text-right">
@@ -920,7 +974,7 @@ function SwimmerPage({ swimmer, url, onRemoved }) {
   useEffect(load, [swimmer.user_id])
 
   async function remove() {
-    if (!window.confirm(`Remove @${swimmer.nickname} from your team?`)) return
+    if (!window.confirm(`Remove ${swimmerName(swimmer)} from your team?`)) return
     await respondToSwimmer(swimmer.user_id, false)
     onRemoved()
   }
@@ -929,9 +983,10 @@ function SwimmerPage({ swimmer, url, onRemoved }) {
   return (
     <div className="space-y-5 py-4 slide-up">
       <div className="flex flex-wrap items-center gap-4">
-        <Photo url={url} name={swimmer.nickname} size={88} />
+        <Photo url={url} name={swimmer.display_name || swimmer.nickname} size={88} />
         <div className="grow basis-0 min-w-[8rem]">
-          <h1 className="font-bold text-2xl text-ink leading-tight break-all">@{swimmer.nickname ?? 'swimmer'}</h1>
+          <h1 className="font-bold text-2xl text-ink leading-tight [overflow-wrap:anywhere]">{swimmerName(swimmer)}</h1>
+          {swimmer.display_name && swimmer.nickname && <div className="text-sm text-muted">@{swimmer.nickname}</div>}
           <div className="flex flex-wrap gap-1.5 mt-2">
             <Fact icon="mdi:calendar-month-outline">{swimmer.swims_30d} swims in 30 days</Fact>
             {Number(swimmer.metres_30d) > 0 && <Fact icon="mdi:swim">{fmtDistance(swimmer.metres_30d, u)}</Fact>}
@@ -1030,10 +1085,15 @@ export default function Swim({ intent, onIntentDone, isPro, onUpgrade }) {
     if (!intent) return
     if (intent.invite) setInvite(intent.invite)
     if (intent.invite || intent.tab === 'team') { setTab('team'); setSwimmer(null); loadTeam() }
+    // From Train's quick actions: straight to the log form
+    if (intent.log) {
+      setTab('me'); setSwimmer(null)
+      setTimeout(() => { const el = document.getElementById('log-swim'); el?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); el?.querySelector('input')?.focus({ preventScroll: true }) }, 350)
+    }
     onIntentDone?.()
   }, [intent])
 
-  useBackHandler(!!swimmer, () => setSwimmer(null), 'Swim', swimmer ? `@${swimmer.nickname ?? 'swimmer'}` : '')
+  useBackHandler(!!swimmer, () => setSwimmer(null), 'Swim', swimmer ? swimmerName(swimmer) : '')
   useBackHandler(applications, () => setApplications(false), 'Swim', 'Applications')
 
   if (applications) return <Applications />

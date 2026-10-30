@@ -9,6 +9,7 @@ import {
   fetchFitnessProfile, saveFitnessProfile, saveNutritionTarget, generatePlan,
   dbProfileToPayload, dbNutritionToPayload, updatePlanData,
 } from '../lib/fitnessApi.js'
+import { personalTip } from '../../supabase/functions/generate-fitness-plan/plan.ts'
 import { saveGoals, saveProfileWeight, fetchWorkoutHistory } from '../lib/api.js'
 import { fetchMeasurements, fetchCheckinWeights, saveMeasurement, fetchCardio } from '../lib/progressApi.js'
 import { strokeLabel } from '../lib/swim.js'
@@ -219,30 +220,6 @@ function goalFields({ goal, secondaryGoals = [], targetLb, pace, plan, lifts = [
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Nutrition Targets Card
-// ─────────────────────────────────────────────────────────────────────────────
-function NutritionCard({ planNutrition, dbNutrition }) {
-  const n = planNutrition ?? dbNutrition
-  if (!n) return null
-  // The latest saved target wins: adaptive updates change it without a new plan
-  const cals = dbNutrition?.calorie_target ?? n.dailyCalories
-  const protein = dbNutrition?.protein_grams ?? n.proteinGrams
-  const carbs = dbNutrition?.carb_grams ?? n.carbGrams
-  const fat = dbNutrition?.fat_grams ?? n.fatGrams
-  const hydration = n.hydrationAdvice ?? n.hydration_advice
-
-  return (
-    <Card>
-      <SectionTitle action={hydration && <InfoButton title="Hydration">{<p className="text-sm text-ink-2">{hydration}</p>}</InfoButton>}>
-        Daily targets
-      </SectionTitle>
-      <BigNumber value={cals} unit="kcal" />
-      <StatTiles className="mt-3" items={[['Protein', `${protein}g`], ['Carbs', `${carbs}g`], ['Fat', `${fat}g`]]} />
-    </Card>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Weekly adaptation
 // ─────────────────────────────────────────────────────────────────────────────
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -389,27 +366,6 @@ function NoteBlock({ icon, title, children }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Safety Card
-// ─────────────────────────────────────────────────────────────────────────────
-// Kept visible, as one tap: the count shows there is something to read
-function SafetyCard({ safety }) {
-  const [open, setOpen] = useState(false)
-  const items = [...(safety?.warnings ?? []), ...(safety?.exercisesToAvoid?.length ? [`Avoid: ${safety.exercisesToAvoid.join(', ')}`] : [])]
-  if (!items.length) return null
-  return (
-    <>
-      <ActionRow tone="warn" icon="mdi:alert-outline" title={`Safety notes · ${items.length}`} onClick={() => setOpen(true)} />
-      {open && (
-        <Sheet title="Safety notes" onClose={() => setOpen(false)}>
-          <ul className="space-y-2">{items.map((w, i) => <li key={i} className="text-sm text-ink-2">{w}</li>)}</ul>
-          {safety.professionalAdviceRecommended && <p className="text-sm font-semibold text-warn">Get professional guidance before starting.</p>}
-        </Sheet>
-      )}
-    </>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Check-in Modal
 // ─────────────────────────────────────────────────────────────────────────────
 const SLIDER_FIELDS = [
@@ -502,52 +458,62 @@ function CheckinModal({ planId, onClose, onSaved, onProfileChange }) {
 // Sundays (and Mondays, for the week just gone) it's the weekly review.
 // ─────────────────────────────────────────────────────────────────────────────
 function CoachCard({ review, moves, deload, week }) {
-  const day = new Date().getDay()
-  const title = day === 0 ? 'Your weekly review' : "Coach's note"
+  // One line on where the week stands, the best thing and the one thing to change. The rest of the
+  // review opens on tap (open by default on Sunday, when it's the weekly review).
+  const sunday = new Date().getDay() === 0
+  const [open, setOpen] = useState(sunday)
+  const behind = review.status === 'behind'
+  const win = review.wentWell[0], fix = review.change[0]
+  const more = [...review.wentWell.slice(1).map(t => ['mdi:check', t]), ...review.change.slice(1).map(t => ['mdi:arrow-right', t])]
   return (
     <Card className="space-y-3">
-      <SectionTitle action={<InfoButton title="How your coach works">
-        <div className="space-y-2 text-sm text-ink-2">
-          <p>Each exercise shows next session's target from your log: one more rep, or the next weight once every set reaches the top of the range. Workout fills it in for you.</p>
-          <p>Missed a workout? It moves to the next free day this week. Every 5th week is lighter: one set less and about 80% of your working weight.</p>
-          <p>On Sunday this card is your weekly review.</p>
+      <div className="flex items-center gap-2.5">
+        <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${behind ? 'bg-warn' : 'bg-neon-stroke'}`} aria-hidden="true" />
+        <div className="grow min-w-0">
+          <div className="text-xs text-muted">{sunday ? 'Your weekly review' : "Coach's note"}{deload ? ` · Week ${week}, lighter` : ''}</div>
+          <div className="font-semibold text-ink leading-tight">{review.headline}</div>
         </div>
-      </InfoButton>}>{title}</SectionTitle>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className={`inline-flex text-xs font-semibold px-2 py-0.5 rounded-md ${review.status === 'behind' ? 'bg-warn/15 text-warn' : 'bg-neon/15 text-neon-ink'}`}>
-          {review.status === 'behind' ? 'Behind' : review.status === 'early' ? 'This week' : 'On track'}
-        </span>
-        <span className="text-sm font-semibold text-ink">{review.headline}</span>
+        <InfoButton title="How your coach works">
+          <div className="space-y-2 text-sm text-ink-2">
+            <p>Each exercise shows next session's target from your log: one more rep, or the next weight once every set reaches the top of the range. Workout fills it in for you.</p>
+            <p>Missed a workout? It moves to the next free day this week. Every 5th week is lighter: one set less and about 80% of your working weight.</p>
+          </div>
+        </InfoButton>
       </div>
-      {deload && (
-        <div className="flex gap-2.5 rounded-xl bg-raised border border-line px-3 py-2.5 text-sm text-ink-2">
-          <Icon icon="mdi:battery-charging-medium" width={20} className="text-neon-ink flex-shrink-0 mt-0.5" aria-hidden="true" />
-          <span><span className="font-semibold text-ink">Week {week} is a lighter week.</span> One set less per exercise and about 80% of your working weight. The targets below already include it.</span>
-        </div>
-      )}
-      {moves.length > 0 && (
-        <ul className="space-y-1.5">
+      {(win || fix || moves.length > 0) && (
+        <ul className="space-y-1.5 text-sm">
+          {win && <li className="flex gap-2 text-ink"><Icon icon={/^New best/.test(win) ? 'mdi:trophy-outline' : 'mdi:check'} width={18} className="text-neon-ink flex-shrink-0 mt-px pop-in" aria-hidden="true" />{win}</li>}
+          {fix && <li className="flex gap-2 text-ink-2"><Icon icon="mdi:arrow-right" width={18} className="text-muted flex-shrink-0 mt-px" aria-hidden="true" />{fix}</li>}
           {moves.map(m => (
-            <li key={m.from} className="flex gap-2.5 text-sm text-ink-2">
-              <Icon icon="mdi:calendar-arrow-right" width={18} className="text-neon-ink flex-shrink-0 mt-0.5" aria-hidden="true" />
-              <span>{m.title} was missed on {m.from}. {m.to ? <>It's now on <span className="font-semibold text-ink">{m.to}</span>.</> : 'No free day is left this week, so carry on with the plan.'}</span>
+            <li key={m.from} className="flex gap-2 text-ink-2"><Icon icon="mdi:calendar-arrow-right" width={18} className="text-muted flex-shrink-0 mt-px" aria-hidden="true" />
+              {m.to ? <span>{m.title} moved to <span className="font-semibold text-ink">{m.to}</span></span> : <span>{m.title} missed, no free day left</span>}
             </li>
           ))}
         </ul>
       )}
-      {[['What went well', 'mdi:check-circle-outline', review.wentWell], ['What to change', 'mdi:arrow-right-circle-outline', review.change]].map(([label, icon, items]) => items.length > 0 && (
-        <div key={label}>
-          <div className="text-xs font-semibold text-muted mb-1">{label}</div>
-          <ul className="space-y-1.5">
-            {items.map(t => (
-              <li key={t} className="flex gap-2.5 text-sm text-ink-2">
-                <Icon icon={icon} width={18} className="text-neon-ink flex-shrink-0 mt-0.5" aria-hidden="true" /><span>{t}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+      {more.length > 0 && (open ? (
+        <ul className="space-y-1.5 text-sm text-ink-2 border-t border-line pt-3">
+          {more.map(([icon, t]) => <li key={t} className="flex gap-2"><Icon icon={icon} width={18} className="text-muted flex-shrink-0 mt-px" aria-hidden="true" />{t}</li>)}
+        </ul>
+      ) : (
+        <button type="button" onClick={() => setOpen(true)} className="press text-sm font-semibold text-neon-ink min-h-[36px]">Full review</button>
       ))}
     </Card>
+  )
+}
+
+// The trainer's personal tip: written by the AI with the plan (coachingTip), else from the
+// person's level and goal (personalTip in plan.ts)
+function TipCard({ tip }) {
+  if (!tip?.body) return null
+  return (
+    <section aria-label="Personal coaching tip" className="rounded-2xl border border-neon-stroke/30 bg-neon-tint p-5 space-y-2">
+      <div className="text-xs font-semibold text-neon-ink flex items-center gap-1.5">
+        <Icon icon="mdi:account-voice" width={16} aria-hidden="true" />Personal coaching tip
+      </div>
+      <h2 className="font-bold text-xl text-ink leading-snug tracking-tight">{tip.title}</h2>
+      <p className="text-[0.9375rem] text-ink-2 leading-relaxed">{tip.body}</p>
+    </section>
   )
 }
 
@@ -595,9 +561,11 @@ export default function Plan({ isPro, onUpgrade, ...props }) {
 }
 
 // Free: the person's own goal and results on top, the sample plan behind the lock below
-function FreePlan({ onUpgrade, onStartSetup, profile, onProfileChange }) {
+function FreePlan({ onUpgrade, onStartSetup, profile, onProfileChange, intent, onIntentDone }) {
   const [data, reload] = useGoalData()
   const [sheet, setSheet] = useState(null) // 'goal' | 'weight'
+  // From Train's quick actions: Weigh in
+  useEffect(() => { if (intent === 'weight') { setSheet('weight'); onIntentDone?.() } }, [intent])
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
   const fp = data?.fp
@@ -625,9 +593,11 @@ function FreePlan({ onUpgrade, onStartSetup, profile, onProfileChange }) {
 
   return (
     <div className="space-y-4 pt-2">
+      <h1 className="font-bold text-xl text-ink">Personal trainer</h1>
       {fp ? (
         <>
           <GoalCard fp={fp} profile={profile} weights={data.weights} progress={progress} history={data.history} onEditGoal={() => setSheet('goal')} onLogWeight={() => setSheet('weight')} />
+          <TipCard tip={personalTip(dbProfileToPayload(fp))} />
           <ResultsCard fp={fp} weights={data.weights} progress={progress} history={data.history} />
         </>
       ) : data && onStartSetup && (
@@ -645,7 +615,7 @@ function FreePlan({ onUpgrade, onStartSetup, profile, onProfileChange }) {
   )
 }
 
-function PlanPage({ onGoToWorkout, onStartWorkout, onOpenSwim, profile, onProfileChange }) {
+function PlanPage({ onGoToWorkout, onStartWorkout, onOpenSwim, profile, onProfileChange, intent, onIntentDone }) {
   const { unit } = useUnit()
   const [plan, setPlan]             = useState(undefined) // undefined=loading
   const [nutrition, setNutrition]   = useState(null)
@@ -657,6 +627,7 @@ function PlanPage({ onGoToWorkout, onStartWorkout, onOpenSwim, profile, onProfil
   const [genError, setGenError]     = useState('')
   const [goalData, reloadGoal]      = useGoalData()
   const [showWeight, setShowWeight] = useState(false)
+  useEffect(() => { if (intent === 'weight') { setShowWeight(true); onIntentDone?.() } }, [intent])
   const [weightBusy, setWeightBusy] = useState(false)
   const [weightErr, setWeightErr]   = useState('')
 
@@ -780,9 +751,6 @@ function PlanPage({ onGoToWorkout, onStartWorkout, onOpenSwim, profile, onProfil
 
   const planData = plan.plan_data ?? {}
   const planSchedule = planData.weeklySchedule ?? []
-  const summary = planData.summary ?? {}
-  const goalLabel = GOAL_LABELS[plan.primary_goal] ?? plan.primary_goal
-  const goalIcon = GOAL_ICONS[plan.primary_goal] ?? 'mdi:target'
 
   // The coaching: missed workouts moved to free days, a lighter week every 5th, targets per exercise
   const coached = goalData && coachedWeek({ plan, history: goalData.history, goalStartDate: goalData.fp?.goal_start_date })
@@ -816,39 +784,29 @@ function PlanPage({ onGoToWorkout, onStartWorkout, onOpenSwim, profile, onProfil
 
   return (
     <div className="space-y-4 pt-2">
-      {/* Plan header: name, key facts, one menu for rebuilding */}
-      <PageHeader icon={goalIcon} title={summary.planName ?? goalLabel}
-        action={<IconButton icon="mdi:dots-horizontal" label="Change goal or rebuild plan" onClick={() => setShowGoal(true)} disabled={generating} className="-mr-1" />}
-        facts={<>
-          <Fact icon="mdi:calendar-range">{summary.durationWeeks ?? plan.duration_weeks} weeks</Fact>
-          <Fact icon="mdi:calendar-check-outline">{workoutDays(plan.plan_data, plan)} days a week</Fact>
-          <Fact icon="mdi:target">{goalData?.fp?.secondary_goals?.length ? goalsLabel([plan.primary_goal, ...goalData.fp.secondary_goals]) : goalLabel}</Fact>
-        </>}>
-        {generating && <p role="status" className="text-sm font-semibold text-neon-ink mt-2">Rebuilding your plan…</p>}
-        {genError && <InlineError className="mt-2">{genError}</InlineError>}
-      </PageHeader>
+      {/* Personal trainer: the goal, today, the coach, the week. Nothing else */}
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="font-bold text-xl text-ink">Personal trainer</h1>
+        <IconButton icon="mdi:dots-horizontal" label="Change goal or rebuild plan" onClick={() => setShowGoal(true)} disabled={generating} className="-mr-1" />
+      </div>
+      {generating && <p role="status" className="text-sm font-semibold text-neon-ink -mt-2">Rebuilding your plan…</p>}
+      {genError && <InlineError>{genError}</InlineError>}
 
-      {/* The goal: ring, dates, where it stands, this week */}
-      {progress && <GoalCard fp={goalData.fp} profile={profile} weights={goalData.weights} progress={progress} history={goalData.history}
+      {progress && <GoalCard fp={goalData.fp} profile={profile} weights={goalData.weights} progress={progress} history={goalData.history} animate
         onEditGoal={() => setShowGoal(true)} onLogWeight={() => setShowWeight(true)} />}
+
+      <TipCard tip={planData.coachingTip ?? (goalData?.fp ? personalTip(dbProfileToPayload(goalData.fp)) : null)} />
 
       <TodayRow dayData={todayData} onGoToWorkout={onGoToWorkout} onStartWorkout={onStartWorkout && startDay} onOpenSwim={onOpenSwim} />
 
       {review && <CoachCard review={review} moves={moves} deload={deload} week={progress.week} />}
 
+      <WeeklySchedule schedule={schedule} onSwap={handleSwap} targetsFor={targetsFor} />
+
       <AdaptCard plan={plan} checkin={checkin} checkinFresh={checkinFresh} generating={generating}
         onAdapt={() => handleRegenerate(undefined, 'adapt')} onCheckin={() => setShowCheckin(true)} />
 
       {progress && <ResultsCard fp={goalData.fp} weights={goalData.weights} progress={progress} history={goalData.history} />}
-
-      {/* Nutrition */}
-      <NutritionCard planNutrition={planData.nutrition} dbNutrition={nutrition} />
-
-      {/* Weekly schedule */}
-      <WeeklySchedule schedule={schedule} onSwap={handleSwap} targetsFor={targetsFor} />
-
-      {planData.safety && <SafetyCard safety={planData.safety} />}
-      <CoachNotes advice={planData.advice} progression={planData.progression} />
 
       {showGoal && (
         <GoalSheet fp={goalData?.fp} profile={profile} history={goalData?.history} rebuilds onClose={() => setShowGoal(false)} onSave={spec => handleRegenerate(spec)} />

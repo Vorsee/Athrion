@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Only signed-in Pro users may spend AI credits
+    // Signed-in users only: Pro is unlimited, free accounts get one scan a day (026)
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) return json({ error: { message: 'Unauthorized' } }, 401)
     const supabase = createClient(
@@ -33,7 +33,6 @@ Deno.serve(async (req) => {
     // Pro: a Stripe subscription, or a free month won on the leaderboard
     const { data: sub } = await supabase.from('subscriptions').select('*').eq('user_id', user.id).maybeSingle()
     const pro = sub?.status === 'pro' || (sub?.comp_pro_until && new Date(sub.comp_pro_until) > new Date())
-    if (!pro) return json({ error: { message: 'The AI food scanner is a Pro feature.' } }, 403)
 
     let body: any
     try { body = await req.json() } catch { return json({ error: { message: 'Invalid JSON body' } }, 400) }
@@ -41,6 +40,16 @@ Deno.serve(async (req) => {
     if (typeof base64 !== 'string' || !base64) return json({ error: { message: 'Missing image' } }, 400)
     if (!MEDIA_TYPES.has(mediaType)) return json({ error: { message: 'Use a JPEG, PNG, WebP or GIF photo.' } }, 400)
     if (base64.length > MAX_BASE64_LENGTH) return json({ error: { message: 'Photo is too large (5 MB max).' } }, 413)
+
+    // A free account takes today's scan only once the photo is checked, and gets it back if the
+    // AI call fails. Before 026 runs the function is missing, and the scanner stays Pro-only.
+    let claimed = false
+    if (!pro) {
+      const { data: ok, error: claimErr } = await supabase.rpc('claim_meal_scan')
+      if (claimErr) return json({ error: { message: 'The AI food scanner is a Pro feature.', code: 'pro' } }, 403)
+      if (!ok) return json({ error: { message: 'You used today\'s free photo scan. Get Pro for unlimited scans, or add this meal by hand or barcode.', code: 'daily_limit' } }, 429)
+      claimed = true
+    }
 
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -63,6 +72,7 @@ Deno.serve(async (req) => {
     })
 
     const data = await resp.json()
+    if (!resp.ok && claimed) await supabase.rpc('release_meal_scan')
     return json(data, resp.ok ? 200 : 502)
   } catch (e) {
     return json({ error: { message: (e as Error).message } }, 500)

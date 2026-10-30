@@ -10,7 +10,7 @@ const EXPORT_TABLES = [
   'user_profiles', 'fitness_profiles', 'fitness_plans', 'nutrition_targets', 'progress_checkins',
   'workout_logs', 'custom_workouts', 'calorie_logs', 'body_measurements', 'daily_health',
   'progress_photos', 'user_badges', 'reminder_settings', 'social_profiles', 'monthly_scores',
-  'notifications', 'subscriptions', 'cardio_logs', 'swim_profiles', 'swim_team_members', 'app_reviews', 'meal_plans',
+  'notifications', 'subscriptions', 'cardio_logs', 'swim_profiles', 'swim_team_members', 'app_reviews', 'meal_plans', 'meal_scans',
 ]
 // Tables keyed by another column, or (coach_profiles) only readable column by column
 const EXPORT_OTHER = [

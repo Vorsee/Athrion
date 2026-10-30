@@ -1,4 +1,5 @@
-// Per-exercise progress built from workout_logs.sets ({ ex, set, weight, reps }, plus secs for timed sets).
+// Per-exercise progress built from workout_logs.sets ({ ex, set, weight, reps }, plus secs for timed sets,
+// rpe when rated, and warmup: true for warm-up sets, which are left out).
 // Weights are lb; unit only changes the wording and the size of a weight jump.
 import { fromLb, toLb, fmtWeight } from './units.js'
 import { fmtSecs } from './sets.js'
@@ -22,7 +23,7 @@ export function buildExerciseHistory(history) {
   for (const session of sessions) {
     const grouped = {}
     for (const s of session.sets || []) {
-      if (!s?.ex) continue
+      if (!s?.ex || s.warmup) continue // warm-up sets never set records or targets
       ;(grouped[s.ex] ??= []).push(toSet(s))
     }
     for (const [name, sets] of Object.entries(grouped)) {
@@ -101,7 +102,7 @@ export function parseRepRange(reps) {
 export function findNewPRs(loggedSets, history, unit = 'lb') {
   const before = buildExerciseHistory(history)
   const grouped = {}
-  for (const s of loggedSets || []) (grouped[s.ex] ??= []).push(toSet(s))
+  for (const s of loggedSets || []) if (!s.warmup) (grouped[s.ex] ??= []).push(toSet(s))
 
   const prs = []
   for (const [name, sets] of Object.entries(grouped)) {

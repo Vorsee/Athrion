@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { Button, Card, SectionTitle, StatTiles, InfoButton, InlineError } from './ui/index.js'
 import Sheet from './Sheet.jsx'
@@ -16,10 +16,17 @@ const daysUntil = key => (key ? Math.ceil((new Date(`${key}T12:00:00`) - new Dat
 
 // A ring that fills with pct (0-1); whatever's inside sits in the middle. expected (0-1, optional)
 // marks where the person should be by today, so ahead or behind shows on the ring itself.
-export function ProgressRing({ pct, expected = null, size = 136, stroke = 12, label, children }) {
+export function ProgressRing({ pct, expected = null, size = 136, stroke = 12, label, animate = false, children }) {
   const r = (size - stroke) / 2
   const c = 2 * Math.PI * r
   const clamp = v => Math.max(0, Math.min(1, v))
+  // Animated: the fill starts empty and sweeps to its value once the card is on screen
+  const [shown, setShown] = useState(animate ? 0 : pct)
+  useEffect(() => {
+    if (!animate) return setShown(pct)
+    const id = requestAnimationFrame(() => requestAnimationFrame(() => setShown(pct)))
+    return () => cancelAnimationFrame(id)
+  }, [pct, animate])
   // The marker sits on the track, clockwise from the top like the fill
   const at = expected == null ? null : clamp(expected) * 2 * Math.PI
   return (
@@ -28,8 +35,8 @@ export function ProgressRing({ pct, expected = null, size = 136, stroke = 12, la
         <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
           <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeWidth={stroke} className="text-raised" />
           <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round"
-            strokeDasharray={c} strokeDashoffset={c * (1 - clamp(pct))}
-            className="text-neon-stroke transition-[stroke-dashoffset] duration-700 motion-reduce:transition-none" />
+            strokeDasharray={c} strokeDashoffset={c * (1 - clamp(shown))}
+            className={`text-neon-stroke transition-[stroke-dashoffset] ${animate ? 'duration-[1400ms]' : 'duration-700'} ease-out motion-reduce:transition-none`} />
         </g>
         {at != null && (
           <circle cx={size / 2 + r * Math.sin(at)} cy={size / 2 - r * Math.cos(at)} r={stroke / 2 - 1.5}
@@ -39,6 +46,43 @@ export function ProgressRing({ pct, expected = null, size = 136, stroke = 12, la
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center">{children}</div>
     </div>
   )
+}
+
+// A number that counts up to its value (Pro), or just the value
+function useCountUp(target, animate, ms = 1200) {
+  const [v, setV] = useState(animate ? 0 : target)
+  useEffect(() => {
+    if (!animate || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return setV(target)
+    let raf, t0
+    const step = t => {
+      t0 ??= t
+      const k = Math.min(1, (t - t0) / ms)
+      setV(Math.round(target * (1 - (1 - k) ** 3)))
+      if (k < 1) raf = requestAnimationFrame(step)
+    }
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+  }, [target, animate, ms])
+  return v
+}
+
+// Milestones on the way to a goal: a quarter, half, three quarters, there. Each one is announced
+// once (kept on this device per goal start), the first time Plan opens after it's reached.
+const MILESTONES = [[1, 'Goal reached'], [0.75, 'Three quarters of the way'], [0.5, 'Halfway there'], [0.25, 'A quarter of the way']]
+function useMilestone(pct, goalKey, on) {
+  const [hit, setHit] = useState(null)
+  useEffect(() => {
+    if (!on || !goalKey) return
+    const m = MILESTONES.find(([at]) => pct >= at)
+    if (!m) return
+    const key = `athrion_milestone_${goalKey}`
+    try {
+      if (Number(localStorage.getItem(key) ?? 0) >= m[0]) return
+      localStorage.setItem(key, String(m[0]))
+    } catch { return }
+    setHit(m[1])
+  }, [pct, goalKey, on])
+  return hit
 }
 
 // Label and figure rows beside the ring
@@ -56,15 +100,16 @@ function Figures({ rows }) {
 }
 
 // Monday to Sunday: done, planned, rest; today outlined
-export function WeekStrip({ days }) {
+export function WeekStrip({ days, animate = false }) {
   return (
     <ol className="grid grid-cols-7 gap-1" aria-label="This week">
-      {days.map(d => {
+      {days.map((d, i) => {
         const state = d.done ? 'done' : d.planned ? (d.date < todayKey() ? 'missed' : 'planned') : 'rest'
         return (
           <li key={d.day} className="flex flex-col items-center gap-1" aria-label={`${d.day}: ${state === 'done' ? 'trained' : state === 'missed' ? 'missed' : state === 'planned' ? `planned${d.title ? `, ${d.title}` : ''}` : 'rest'}`}>
             <span className={`text-xs ${d.today ? 'font-bold text-ink' : 'text-muted'}`} aria-hidden="true">{d.day[0]}</span>
-            <span aria-hidden="true" className={`w-8 h-8 max-w-full rounded-full flex items-center justify-center border-2 ${
+            <span aria-hidden="true" style={animate && state === 'done' ? { animationDelay: `${300 + i * 90}ms` } : undefined}
+              className={`${animate && state === 'done' ? 'pop-in ' : ''}w-8 h-8 max-w-full rounded-full flex items-center justify-center border-2 ${
               state === 'done' ? 'bg-neon border-neon text-on-neon'
                 : state === 'missed' ? 'border-danger/40 text-danger/70'
                 : state === 'planned' ? 'border-neon-stroke/50 text-neon-ink'
@@ -82,7 +127,7 @@ export function WeekStrip({ days }) {
  * The goal at the top of Plan: a ring, the dates, where things stand, this week.
  * fp: fitness_profiles row; weights: merged weigh-ins oldest first; progress: planProgress()
  */
-export function GoalCard({ fp, profile, weights, progress, history = [], onEditGoal, onLogWeight }) {
+export function GoalCard({ fp, profile, weights, progress, history = [], onEditGoal, onLogWeight, animate = false }) {
   const { unit, fromLb } = useUnit()
   const goal = fp?.primary_goal
   const weightGoal = isWeightGoal(goal) && fp?.target_weight_lb
@@ -95,7 +140,8 @@ export function GoalCard({ fp, profile, weights, progress, history = [], onEditG
   const liftGoal = allGoals.some(hasLiftGoal)
   // Building muscle or strength: lift targets, when set, show under the ring; without a weight goal the ring measures them
   const lifts = liftGoal ? liftProgress(fp?.goal_lifts, history, fp?.goal_start_date) : null
-  const endKey = weightGoal ? fp.goal_target_date : progress.endDate
+  // The goal's own date when it has one (the timeline shows the same), else the plan's last day
+  const endKey = fp?.goal_target_date ?? progress.endDate
   const left = daysUntil(endKey)
   const pct = g ? g.pct : lifts ? lifts.pct : progress.pct
   const dir = directionOf(goal)
@@ -105,6 +151,8 @@ export function GoalCard({ fp, profile, weights, progress, history = [], onEditG
   const expected = g?.expectedLb != null ? (g.expectedLb - g.startLb) / (g.targetLb - g.startLb) : null
   const status = g?.onTrack != null && g.leftLb > 0 ? (g.onTrack ? 'on' : 'behind') : null
   const when = left == null ? null : left > 0 ? `${left} days left` : g && g.leftLb > 0 ? 'Target date passed' : 'Done'
+  const shownPct = useCountUp(Math.round(pct * 100), animate)
+  const milestone = useMilestone(pct, fp?.goal_start_date ?? progress.startDate, animate)
 
   return (
     <Card hero className="space-y-5">
@@ -127,11 +175,24 @@ export function GoalCard({ fp, profile, weights, progress, history = [], onEditG
         )}
       </div>
 
+      {milestone && (
+        <div role="status" className="pop-in relative overflow-hidden flex items-center gap-3 rounded-2xl bg-neon text-on-neon px-4 py-3">
+          <span className="relative flex-shrink-0 w-9 h-9 flex items-center justify-center" aria-hidden="true">
+            <span className="ring-out absolute inset-0 rounded-full border-2 border-on-neon/60" />
+            <Icon icon="mdi:trophy-outline" width={26} />
+          </span>
+          <span className="min-w-0">
+            <span className="block font-bold leading-tight">{milestone}</span>
+            <span className="block text-xs font-medium opacity-80">{Math.round(pct * 100)}% of your goal done. Keep going.</span>
+          </span>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-x-5 gap-y-4">
         <div className="flex flex-col items-center gap-2">
-          <ProgressRing pct={pct} expected={expected}
+          <ProgressRing pct={pct} expected={expected} animate={animate}
             label={g ? `${Math.round(pct * 100)}% of the way to ${w(g.targetLb)}${expected != null ? `; the pace you set puts you at ${Math.round(expected * 100)}% today` : ''}` : lifts ? `${Math.round(pct * 100)}% of the way to your lift targets` : `${progress.done} of ${progress.planned} planned workouts done`}>
-            <span className="font-bold text-[2.25rem] text-ink tabular-nums leading-none tracking-tight">{Math.round(pct * 100)}<span className="text-xl">%</span></span>
+            <span className="font-bold text-[2.25rem] text-ink tabular-nums leading-none tracking-tight">{shownPct}<span className="text-xl">%</span></span>
             <span className="text-xs text-muted mt-1">{g || lifts ? 'to goal' : 'workouts done'}</span>
           </ProgressRing>
           {expected != null && (
@@ -164,7 +225,7 @@ export function GoalCard({ fp, profile, weights, progress, history = [], onEditG
                 </span>
               </div>
               <div className="mt-1.5 h-2 rounded-full bg-raised overflow-hidden" aria-hidden="true">
-                <div className="h-full rounded-full bg-neon transition-[width] duration-700" style={{ width: `${Math.round(l.pct * 100)}%` }} />
+                <div className={`h-full rounded-full bg-neon transition-[width] duration-700 ${animate ? 'grow-x' : ''}`} style={{ width: `${Math.round(l.pct * 100)}%` }} />
               </div>
               <div className="text-xs text-muted mt-1 tabular-nums">
                 {l.pct >= 1 ? 'Target reached' : `${fromLb(Math.max(0, l.targetLb - l.currentLb))} ${unit} to go`} · started at {fromLb(l.startLb)} {unit}
@@ -179,7 +240,7 @@ export function GoalCard({ fp, profile, weights, progress, history = [], onEditG
           <span className="text-sm font-semibold text-ink">This week</span>
           <span className="text-xs text-muted tabular-nums">{progress.weekDone} of {progress.weekPlanned} workouts</span>
         </div>
-        <WeekStrip days={progress.thisWeek} />
+        <WeekStrip days={progress.thisWeek} animate={animate} />
       </div>
 
       <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 8rem), 1fr))' }}>

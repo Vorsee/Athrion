@@ -99,7 +99,8 @@ export default function App() {
   const [editingProfile, setEditingProfile] = useState(false)
   const [checkout, setCheckout] = useState({ open: false, busy: false, error: '' })
   const [planSetup, setPlanSetup] = useState(false) // free user answering the plan questions
-  const [foodIntent, setFoodIntent] = useState(null) // 'goals': open the targets editor on Food
+  const [foodIntent, setFoodIntent] = useState(null) // 'goals' | 'log' | 'plan': open that on Food
+  const [planIntent, setPlanIntent] = useState(null) // 'weight': open the weigh-in on Plan
   const [shopIntent, setShopIntent] = useState(null) // { product, paid } or { coach }: open it on the Coaches tab
   const [resumeTick, setResumeTick] = useState(0)    // bumped when the session bar is tapped
   const minimised = useMinimisedSession()
@@ -376,8 +377,15 @@ export default function App() {
     </Suspense>
   )
 
+  // Train's quick actions: the places people go most, one tap each
+  function quickAction(kind) {
+    if (kind === 'food' || kind === 'mealplan') { setFoodIntent(kind === 'food' ? 'log' : 'plan'); navigate('calories') }
+    else if (kind === 'weight') { setPlanIntent('weight'); navigate('plan') }
+    else if (kind === 'swim') { setSwimIntent({ log: true }); navigate('swim') }
+  }
+
   const pageProps = {
-    workout: { pendingWorkout, onClearPending: () => setPendingWorkout(null), isPro, onUpgrade: goUpgrade, onOpenPage: navigate, onOpenGroup: tab => setGroupIntent({ tab }), onOpenGuide: openGuide, resumeTick },
+    workout: { pendingWorkout, onClearPending: () => setPendingWorkout(null), isPro, onUpgrade: goUpgrade, onOpenPage: navigate, onOpenGroup: tab => setGroupIntent({ tab }), onOpenGuide: openGuide, resumeTick, onQuick: quickAction },
     library: { onStartWorkout: handleStartFromLibrary },
     shop: { onStartPlanDay: handleStartPlanDay, onOpenCoach: () => navigate('coach'), shopIntent, onShopIntentDone: () => setShopIntent(null) },
     coach: { onOpenShop: () => navigate('shop') },
@@ -385,7 +393,7 @@ export default function App() {
     group: { session, intent: groupIntent, onIntentDone: () => setGroupIntent(null) },
     swim: { intent: swimIntent, onIntentDone: () => setSwimIntent(null), isPro, onUpgrade: goUpgrade },
     progress: { profile, onProfileChange: refreshProfile },
-    plan: { isPro, onUpgrade: goUpgrade, onStartSetup: () => setPlanSetup(true), onGoToWorkout: () => navigate('workout'), onStartWorkout: handleStartPlanDay, onOpenSwim: () => navigate('swim'), profile, onProfileChange: () => { refreshProfile(); refreshFitnessProfile() } },
+    plan: { isPro, onUpgrade: goUpgrade, intent: planIntent, onIntentDone: () => setPlanIntent(null), onStartSetup: () => setPlanSetup(true), onGoToWorkout: () => navigate('workout'), onStartWorkout: handleStartPlanDay, onOpenSwim: () => navigate('swim'), profile, onProfileChange: () => { refreshProfile(); refreshFitnessProfile() } },
   }
 
   const PageComponent = (!isAdmin && ADMIN_PAGES.includes(page) ? null : PAGES[page]) ?? Workout
