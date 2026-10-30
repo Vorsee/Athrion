@@ -96,11 +96,20 @@ describe('meal plan', () => {
   })
 })
 
-import { shortName } from '../../src/lib/reviews.js'
+import { shortName, reviewProblem } from '../../src/lib/reviews.js'
 describe('reviews', () => {
   it('shows a first name and last initial by default', () => {
     expect(shortName('Sam Tester')).toBe('Sam T.')
     expect(shortName('Leo')).toBe('Leo')
     expect(shortName('  ')).toBe('')
+  })
+})
+
+describe('review form', () => {
+  it('says what is missing instead of doing nothing', () => {
+    expect(reviewProblem({ name: 'Sam', rating: 0, body: 'Really good app' })).toBe('Tap the stars to pick a rating')
+    expect(reviewProblem({ name: 'Sam', rating: 5, body: 'Great app' })).toBe('Write 1 more character (10 at least)')
+    expect(reviewProblem({ name: ' ', rating: 5, body: 'Really good app' })).toBe('Add your name')
+    expect(reviewProblem({ name: 'Sam', rating: 5, body: 'Really good app' })).toBeNull()
   })
 })

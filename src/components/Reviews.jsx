@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { Button, InlineError } from './ui/index.js'
-import { fetchReviews, fetchReviewSummary, fetchMyReview, saveMyReview, deleteMyReview, fetchAllReviews, setReviewHidden, sendPublicReview, shortName } from '../lib/reviews.js'
+import { fetchReviews, fetchReviewSummary, fetchMyReview, saveMyReview, deleteMyReview, fetchAllReviews, setReviewHidden, sendPublicReview, shortName, reviewProblem } from '../lib/reviews.js'
 import { fetchIsAdmin } from '../lib/coachApi.js'
 
 const fmtDate = iso => new Date(iso).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
@@ -37,14 +37,15 @@ const FIELD = 'mt-1 w-full bg-raised border border-line rounded-xl px-3 py-2 tex
 
 // The landing page form: anyone can write one; it shows after an admin approves it
 function PublicReviewForm({ onClose }) {
-  const [f, setF] = useState({ name: '', rating: 0, body: '', website: '' })
+  const [f, setFields] = useState({ name: '', rating: 0, body: '', website: '' })
+  const setF = u => { setFields(u); setErr('') }
   const [state, setState] = useState('idle') // idle | sending | sent
   const [err, setErr] = useState('')
-  const ok = f.name.trim() && f.rating && f.body.trim().length >= 10
+  const problem = reviewProblem(f)
 
   async function send(e) {
     e.preventDefault()
-    if (!ok) return
+    if (problem) return setErr(problem)
     setState('sending'); setErr('')
     try { await sendPublicReview(f); setState('sent') } catch (x) { setErr(x.message); setState('idle') }
   }
@@ -79,9 +80,9 @@ function PublicReviewForm({ onClose }) {
       <label className="sr-only" aria-hidden="true">Website
         <input tabIndex={-1} autoComplete="off" value={f.website} onChange={e => setF(v => ({ ...v, website: e.target.value }))} />
       </label>
-      {err && <InlineError>{err}</InlineError>}
+      {err ? <InlineError>{err}</InlineError> : problem && f.body && <p className="text-xs text-muted">{problem}</p>}
       <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 8rem), 1fr))' }}>
-        <Button type="submit" icon="mdi:send-outline" disabled={!ok || state === 'sending'}>{state === 'sending' ? 'Sending…' : 'Send review'}</Button>
+        <Button type="submit" icon="mdi:send-outline" disabled={state === 'sending'}>{state === 'sending' ? 'Sending…' : 'Send review'}</Button>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
       </div>
     </form>
@@ -155,8 +156,9 @@ export function ReviewScreen({ session, onBack }) {
     fetchIsAdmin().then(a => { setAdmin(a); if (a) fetchAllReviews().then(setAll).catch(() => {}) }).catch(() => {})
   }, [])
 
-  const ok = name.trim().length >= 1 && rating >= 1 && body.trim().length >= 10
+  const problem = reviewProblem({ name, rating, body })
   async function save() {
+    if (problem) return setErr(problem)
     setBusy(true); setErr('')
     try { await saveMyReview({ name, rating, body }); setSaved(true); setMine(await fetchMyReview()) }
     catch (e) { setErr(e.message || 'Could not save') } finally { setBusy(false) }
@@ -187,23 +189,24 @@ export function ReviewScreen({ session, onBack }) {
           <p className="text-sm text-muted">Your review shows on athrion.app with the name below. You can change or delete it any time.</p>
           <fieldset>
             <legend className="text-sm font-semibold text-ink mb-1.5">Your rating</legend>
-            <StarPicker value={rating} onChange={setRating} />
+            <StarPicker value={rating} onChange={v => { setRating(v); setSaved(false); setErr('') }} />
           </fieldset>
           <label className="block">
             <span className="text-sm font-semibold text-ink">Your review</span>
-            <textarea value={body} maxLength={600} onChange={e => { setBody(e.target.value); setSaved(false) }} rows={4}
+            <textarea value={body} maxLength={600} onChange={e => { setBody(e.target.value); setSaved(false); setErr('') }} rows={4}
               placeholder="What do you like, and what could be better?"
               className="mt-1 w-full bg-raised border border-line rounded-xl px-3 py-2 text-sm text-ink placeholder:text-placeholder focus:outline-none focus:border-neon-stroke/40 resize-none" />
             <span className="block text-xs text-muted text-right tabular-nums">{body.length}/600</span>
           </label>
           <label className="block">
             <span className="text-sm font-semibold text-ink">Shown as</span>
-            <input value={name} maxLength={40} onChange={e => { setName(e.target.value); setSaved(false) }}
+            <input value={name} maxLength={40} onChange={e => { setName(e.target.value); setSaved(false); setErr('') }}
               className="mt-1 w-full bg-raised border border-line rounded-xl px-3 py-2 text-sm text-ink focus:outline-none focus:border-neon-stroke/40" />
           </label>
           {mine?.hidden && <p className="text-xs text-warn">Your review was hidden for breaking the terms. Email athrionsportapp@gmail.com about it.</p>}
           {err && <InlineError>{err}</InlineError>}
-          <Button full icon={saved ? 'mdi:check' : 'mdi:send-outline'} onClick={save} disabled={!ok || busy || saved}>
+          {!err && problem && body && <p className="text-xs text-muted">{problem}</p>}
+          <Button full icon={saved ? 'mdi:check' : 'mdi:send-outline'} onClick={save} disabled={busy || saved}>
             {busy ? 'Saving…' : saved ? 'Saved' : mine ? 'Update review' : 'Post review'}
           </Button>
           {mine && <button onClick={remove} className="press w-full min-h-[44px] text-sm font-semibold text-muted hover:text-danger">Delete my review</button>}

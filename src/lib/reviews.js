@@ -58,6 +58,16 @@ export async function sendPublicReview({ name, rating, body, website = '' }) {
   if (!res.ok) throw new Error(data.error || "Couldn't send your review. Try again.")
 }
 
+// What still stops a review from going out, in words (null when it's ready). The button stays
+// on, so tapping it says what's missing instead of doing nothing.
+export function reviewProblem({ name, rating, body }) {
+  if (!(rating >= 1)) return 'Tap the stars to pick a rating'
+  const left = 10 - body.trim().length
+  if (left > 0) return `Write ${left} more ${left === 1 ? 'character' : 'characters'} (10 at least)`
+  if (!name.trim()) return 'Add your name'
+  return null
+}
+
 // "Sam Tester" → "Sam T."
 export function shortName(full) {
   const parts = (full || '').trim().split(/\s+/).filter(Boolean)
