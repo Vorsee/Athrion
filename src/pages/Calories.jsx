@@ -70,12 +70,10 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
   const [logFood, setLogFood]         = useState(false)
   useHeaderAction('mdi:plus', 'Log food', () => setLogFood(true))
 
-  // Opened from the You sheet's Nutrition targets, or Train's quick actions
+  // Opened from the You sheet's Nutrition targets
   useEffect(() => {
-    if (!intent) return
-    if (intent === 'goals') setEditingGoals(true)
-    else if (intent === 'log') { setTab('today'); setLogFood(true) }
-    else if (intent === 'plan') setTab('plan')
+    if (intent !== 'goals') return
+    setEditingGoals(true)
     onIntentHandled?.()
   }, [intent])
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { cancelSubscription, resumeSubscription, fetchSubscriptionDetails } from '../lib/stripe.js'
 import { signOut } from '../lib/session.js'
@@ -10,6 +10,7 @@ import { tok } from '../lib/tokens.js'
 import Sheet from './Sheet.jsx'
 import { Button, Segmented, ListRow, Card, Tag, Skeleton, InlineError } from './ui/index.js'
 import ReminderSettings from './ReminderSettings.jsx'
+const Progress = lazy(() => import('../pages/Progress.jsx'))
 import { fmtWeight } from '../lib/units.js'
 import { PRO_FEATURES, PLANS, money } from '../lib/pricing.js'
 import { ReviewScreen } from './Reviews.jsx'
@@ -308,9 +309,9 @@ function ImportScreen({ defaultUnit, onBack }) {
 
 // ── Main modal ────────────────────────────────────────────────────────────────
 
-export default function ProfileModal({ session, profile, isPro, theme, onToggleTheme, onClose, onEdit, onUpgrade, onEditTargets, onOpenCoach, initialScreen = 'profile' }) {
+export default function ProfileModal({ session, profile, isPro, theme, onToggleTheme, onClose, onEdit, onUpgrade, onEditTargets, onOpenCoach, onProfileChange, initialScreen = 'profile' }) {
   const [pwState, setPwState] = useState('idle')   // idle | loading | sent | error
-  const [screen, setScreen]   = useState(initialScreen) // profile | subscription | import | delete | review
+  const [screen, setScreen]   = useState(initialScreen) // profile | progress | subscription | import | delete | review
   const [exportState, setExportState] = useState('idle') // idle | loading | error
 
   const bmi     = profile ? calcBMI(profile.height_cm, profile.weight_lb) : null
@@ -334,8 +335,15 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
   }
 
   return (
-    <Sheet ariaLabel={screen === 'subscription' ? 'Subscription' : screen === 'import' ? 'Import workouts' : screen === 'delete' ? 'Delete account' : screen === 'review' ? 'Rate ATHRION' : 'You'} onClose={onClose} bodyClassName="-mx-1">
-        {screen === 'subscription' ? (
+    <Sheet ariaLabel={screen === 'subscription' ? 'Subscription' : screen === 'import' ? 'Import workouts' : screen === 'delete' ? 'Delete account' : screen === 'review' ? 'Rate ATHRION' : screen === 'progress' ? 'Progress' : 'You'} onClose={onClose} bodyClassName="-mx-1">
+        {screen === 'progress' ? (
+          <div>
+            <BackTitle title="Progress" onBack={() => setScreen('profile')} />
+            <Suspense fallback={<Skeleton className="h-40 rounded-2xl" />}>
+              <Progress profile={profile} onProfileChange={onProfileChange} />
+            </Suspense>
+          </div>
+        ) : screen === 'subscription' ? (
           <SubscriptionScreen onBack={() => setScreen('profile')} />
         ) : screen === 'import' ? (
           <ImportScreen defaultUnit={profile?.weight_unit === 'kg' ? 'kg' : 'lb'} onBack={() => setScreen('profile')} />
@@ -354,6 +362,11 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
                 <div className="font-bold text-lg leading-tight truncate">{session.name}</div>
                 <div className="text-xs text-muted mt-0.5 truncate">{session.email}</div>
               </div>
+            </div>
+
+            {/* ── Progress: workouts, badges, weight and body ── */}
+            <div className="bg-surface border border-line rounded-2xl p-1 mb-6">
+              <ListRow icon="mdi:chart-line" tile="neon-ink" title="Progress" meta="Streak, badges, weight and measurements" chevron onClick={() => setScreen('progress')} />
             </div>
 
             {/* ── Body stats ── */}
@@ -499,5 +512,18 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
           </div>
         )}
     </Sheet>
+  )
+}
+
+// A screen's title with a back arrow to the You screen
+function BackTitle({ title, onBack }) {
+  return (
+    <div className="flex items-center gap-3 mb-5">
+      <button onClick={onBack} aria-label="Back"
+        className="press w-10 h-10 -ml-2 rounded-full flex items-center justify-center text-ink-2 hover:text-ink hover:bg-raised transition-colors">
+        <Icon icon="mdi:chevron-left" width={24} />
+      </button>
+      <div className="font-bold text-base">{title}</div>
+    </div>
   )
 }

@@ -561,11 +561,9 @@ export default function Plan({ isPro, onUpgrade, ...props }) {
 }
 
 // Free: the person's own goal and results on top, the sample plan behind the lock below
-function FreePlan({ onUpgrade, onStartSetup, profile, onProfileChange, intent, onIntentDone }) {
+function FreePlan({ onUpgrade, onStartSetup, profile, onProfileChange }) {
   const [data, reload] = useGoalData()
   const [sheet, setSheet] = useState(null) // 'goal' | 'weight'
-  // From Train's quick actions: Weigh in
-  useEffect(() => { if (intent === 'weight') { setSheet('weight'); onIntentDone?.() } }, [intent])
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
   const fp = data?.fp
@@ -617,7 +615,7 @@ function FreePlan({ onUpgrade, onStartSetup, profile, onProfileChange, intent, o
   )
 }
 
-function PlanPage({ onGoToWorkout, onStartWorkout, onOpenSwim, profile, onProfileChange, intent, onIntentDone }) {
+function PlanPage({ onGoToWorkout, onStartWorkout, onOpenSwim, profile, onProfileChange }) {
   const { unit } = useUnit()
   const [plan, setPlan]             = useState(undefined) // undefined=loading
   const [nutrition, setNutrition]   = useState(null)
@@ -629,7 +627,6 @@ function PlanPage({ onGoToWorkout, onStartWorkout, onOpenSwim, profile, onProfil
   const [genError, setGenError]     = useState('')
   const [goalData, reloadGoal]      = useGoalData()
   const [showWeight, setShowWeight] = useState(false)
-  useEffect(() => { if (intent === 'weight') { setShowWeight(true); onIntentDone?.() } }, [intent])
   const [weightBusy, setWeightBusy] = useState(false)
   const [weightErr, setWeightErr]   = useState('')
 

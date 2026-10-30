@@ -343,7 +343,7 @@ describe('Progress', () => {
   it('renders the overview with streak and badges', async () => {
     sb.set('workout_logs', { data: [{ created_at: '2026-10-20T10:00:00-04:00', date: '2026-10-20', sets: [], volume: 0 }], error: null })
     render(<P.Progress />)
-    expect(await screen.findByText('Progress')).toBeInTheDocument()
+    expect(await screen.findByText('Week streak')).toBeInTheDocument()
     await waitFor(() => expect(sb.queriesFor('user_badges').length).toBeGreaterThan(0))
   })
 })

@@ -72,34 +72,13 @@ describe('Progress', () => {
     await waitFor(() => expect(sb.queriesFor('body_measurements').some(q => sb.op(q, 'upsert'))).toBe(true))
     expect(sb.queriesFor('user_profiles').some(q => sb.op(q, 'update'))).toBe(false)
   })
-  it('logs a run with its pace on the Cardio tab', async () => {
-    sb.set('cardio_logs', q => (sb.op(q, 'insert') ? { data: { id: 'c1' }, error: null } : { data: [], error: null }))
-    render(<Progress />)
-    await userEvent.click(await screen.findByText('Cardio'))
-    expect(screen.getByText('No runs yet')).toBeInTheDocument()
-    await userEvent.type(screen.getByLabelText('Distance (mi)'), '3.1')
-    await userEvent.type(screen.getByLabelText('Time'), '24:48')
-    expect(screen.getByText('8:00 /mi')).toBeInTheDocument()
-    await userEvent.click(screen.getByText('Save run'))
-    await waitFor(() => expect(sb.queriesFor('cardio_logs').some(q => sb.op(q, 'insert'))).toBe(true))
-    const row = sb.op(sb.queriesFor('cardio_logs').find(q => sb.op(q, 'insert')), 'insert')[0]
-    expect(row).toMatchObject({ user_id: USER.id, kind: 'run', distance_m: 4989, seconds: 1488 })
-  })
-  it('shows lift history and records', async () => {
-    sb.set('workout_logs', { data: history, error: null })
-    render(<Progress />)
-    await userEvent.click(await screen.findByText('Lifts'))
-    expect((await screen.findAllByText('Squat')).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/210/).length).toBeGreaterThan(0)
-  })
-  it('keeps existing progress photos under Body, and opens the health tab', async () => {
+  it('has only Overview and Body, and keeps existing progress photos under Body', async () => {
     sb.set('progress_photos', { data: [{ id: 'p1', date: '2026-10-01', pose: 'front', path: 'user-1/a.jpg' }], error: null })
     render(<Progress />)
-    expect(screen.queryByText('Photos')).toBeNull() // the tab is Cardio now
-    await userEvent.click(await screen.findByText('Body'))
+    expect(await screen.findByText('Overview')).toBeInTheDocument()
+    for (const gone of ['Lifts', 'Cardio', 'Health']) expect(screen.queryByText(gone)).toBeNull()
+    await userEvent.click(screen.getByText('Body'))
     expect(await screen.findByText('Add a photo')).toBeInTheDocument()
-    await userEvent.click(screen.getByText('Health'))
-    expect(await screen.findByText('Averages')).toBeInTheDocument()
   })
   it('awards badges earned from history', async () => {
     sb.set('workout_logs', { data: history, error: null })

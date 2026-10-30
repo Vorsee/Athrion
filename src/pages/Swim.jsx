@@ -1,17 +1,18 @@
 import { useState, useEffect, useRef, useSyncExternalStore } from 'react'
 import { Icon } from '@iconify/react'
 import { useBackHandler } from '../lib/shell.js'
-import { Button, Card, SectionTitle, Segmented, EmptyState, SkeletonRows, InlineError, PageHeader, Fact, InfoButton, ListRow } from '../components/ui/index.js'
+import { Button, Card, SectionTitle, Segmented, EmptyState, SkeletonRows, InlineError, Fact, InfoButton, ListRow, IconButton } from '../components/ui/index.js'
 import { fetchCardio, saveCardio, deleteCardio } from '../lib/progressApi.js'
 import { cardioUnits, parseDuration, fmtDuration, fmtDistance, paceSecs } from '../lib/cardio.js'
 import {
-  STROKES, DISTANCE_BANDS, strokeLabel, strokeStats, strokeBoard, daysAgo, swimInviteLink, clearSwimInvite,
+  STROKES, DISTANCE_BANDS, PR_MIN_M, strokeLabel, strokeStats, strokeBoard, daysAgo, swimInviteLink, clearSwimInvite,
   readPoolUnit, setPoolUnit, subscribePoolUnit, intervalSet,
   swimmerName, PRACTICE_PARTS, PRACTICE_TEMPLATES, DRYLAND_MOVES, isDryland, blankItem, practiceTotals, practiceLine, mainStroke,
 } from '../lib/swim.js'
 import {
   photoUrls, fetchMyPhoto, uploadMyPhoto, fetchCoachedTeam, saveTeam, newTeamCode, fetchRoster, fetchSwimmerSwims,
   respondToSwimmer, fetchTeamPrs, fetchMyTeam, teamByCode, leaveTeam, searchTeams, joinTeam, setTeamName, accountName,
+  fetchTeammates, fetchTeammatesPrs, setTeamVisible,
   fetchPractices, savePractice, deletePractice,
 } from '../lib/swimApi.js'
 import Sheet from '../components/Sheet.jsx'
@@ -47,39 +48,28 @@ export function Photo({ url, name, size = 48 }) {
   )
 }
 
-// One tile per stroke: its PR pace, the longest swim and the last session
+// One card per stroke: its PR pace and when it was last swum. Tapping one opens that stroke.
 export function StrokeGrid({ swims, selected, onSelect }) {
   const u = useSwimUnits()
   const stats = strokeStats(swims)
   return (
-    <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr))' }}>
+    <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 9rem), 1fr))' }}>
       {STROKES.map(s => {
         const st = stats[s.id]
         const on = selected === s.id
         return (
           <button key={s.id} type="button" onClick={() => onSelect(on ? null : s.id)} aria-pressed={on}
-            className={`press text-left rounded-2xl border p-3 transition-colors ${on ? 'bg-neon/10 border-neon-stroke/60' : 'bg-surface border-line hover:border-line-strong'}`}>
-            <span className="flex items-center gap-2">
-              <span aria-hidden="true" className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0 ${st.count ? 'bg-neon text-on-neon' : 'bg-raised text-muted'}`}>{s.short}</span>
-              <span className="text-sm font-semibold text-ink leading-tight break-words min-w-0">{s.label}</span>
-            </span>
+            className={`press text-left rounded-2xl border p-3.5 transition-colors ${on ? 'bg-neon-tint border-neon-stroke/60' : 'bg-surface border-line hover:border-line-strong'}`}>
+            <span className="block text-sm font-semibold text-ink">{s.label}</span>
             {st.count ? (
               <>
-                <span className="block mt-3 text-xs font-semibold text-muted">PR pace</span>
-                <span className="block text-2xl font-bold text-neon-ink tabular-nums leading-tight">
-                  {st.pr ? fmtDuration(paceSecs(st.pr, u)) : '–'}
-                  <span className="text-xs font-semibold text-muted"> /{u.per}</span>
+                <span className="block mt-2 text-2xl font-bold text-neon-ink tabular-nums leading-none">
+                  {st.pr ? fmtDuration(paceSecs(st.pr, u)) : '–'}<span className="text-xs font-semibold text-muted"> /{u.per}</span>
                 </span>
-                <span className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-ink-2 tabular-nums">
-                  <span><span className="text-muted">Longest </span>{fmtDistance(st.longest.distance_m, u)}</span>
-                  <span><span className="text-muted">Last </span>{daysAgo(st.last.date)}</span>
-                </span>
-                <span className="block text-xs text-muted tabular-nums">
-                  {fmtDistance(st.last.distance_m, u)} in {fmtDuration(st.last.seconds)}
-                </span>
+                <span className="block mt-1.5 text-xs text-muted">Last {daysAgo(st.last.date)}</span>
               </>
             ) : (
-              <span className="block mt-3 text-xs text-muted">No swims yet</span>
+              <span className="block mt-2 text-xs text-muted">No swims yet</span>
             )}
           </button>
         )
@@ -117,7 +107,7 @@ function SwimList({ swims, onDelete }) {
 
 // ── My swims ─────────────────────────────────────────────────────────────────
 
-function LogSwim({ stroke, setStroke, onSaved }) {
+function LogSwim({ stroke, setStroke, onSaved, bare = false }) {
   const u = useSwimUnits()
   const blank = { date: todayKey(), distance: '', time: '', notes: '', reps: '', each: '', sendOff: '' }
   const [form, setForm] = useState(blank)
@@ -153,16 +143,18 @@ function LogSwim({ stroke, setStroke, onSaved }) {
     }
   }
 
+  const unitToggle = (
+    <div role="group" aria-label="Pool unit" className="flex rounded-lg border border-line overflow-hidden text-xs font-semibold">
+      {['m', 'yd'].map(v => (
+        <button key={v} type="button" onClick={() => setPoolUnit(v)} aria-pressed={u.dist === v}
+          className={`press min-h-[32px] min-w-[40px] px-2 ${u.dist === v ? 'bg-neon text-on-neon' : 'text-ink-2'}`}>{v === 'm' ? 'Metres' : 'Yards'}</button>
+      ))}
+    </div>
+  )
+  const Wrap = bare ? 'div' : Card
   return (
-    <Card>
-      <SectionTitle action={
-        <div role="group" aria-label="Pool unit" className="flex rounded-lg border border-line overflow-hidden text-xs font-semibold">
-          {['m', 'yd'].map(v => (
-            <button key={v} type="button" onClick={() => setPoolUnit(v)} aria-pressed={u.dist === v}
-              className={`press min-h-[32px] min-w-[40px] px-2 ${u.dist === v ? 'bg-neon text-on-neon' : 'text-ink-2'}`}>{v === 'm' ? 'Metres' : 'Yards'}</button>
-          ))}
-        </div>
-      }>Log a swim</SectionTitle>
+    <Wrap>
+      {bare ? <div className="flex justify-end mb-3">{unitToggle}</div> : <SectionTitle action={unitToggle}>Log a swim</SectionTitle>}
       <Segmented options={STROKES.map(s => [s.id, s.label])} value={stroke} onChange={setStroke} label="Stroke" kind="choice" scroll />
       <div className="mt-3">
         <Segmented options={[['swim', 'One swim'], ['set', 'Interval set']]} value={mode} onChange={setMode} label="What you swam" kind="choice" />
@@ -198,83 +190,71 @@ function LogSwim({ stroke, setStroke, onSaved }) {
       {set && <p className="text-xs text-muted mt-2 tabular-nums">{set.note}: {set.distance} {u.dist} in {fmtDuration(set.seconds)}, rest included.</p>}
       <Button full onClick={save} disabled={saving} className="mt-3">{saving ? 'Saving...' : `Save ${strokeLabel(stroke).toLowerCase()} ${mode === 'set' ? 'set' : 'swim'}`}</Button>
       {err && <p role="alert" className="text-xs text-danger mt-2">{err}</p>}
-    </Card>
+    </Wrap>
   )
 }
 
 // Pro: pace over time for one stroke. Lower is faster. Swims of at least one pool length.
-function StrokeProgress({ swims, isPro, onUpgrade }) {
+function StrokeProgress({ swims, stroke, isPro, onUpgrade }) {
   const u = useSwimUnits()
-  const [stroke, setStroke] = useState('free')
   if (!isPro) return (
-    <Card className="flex flex-wrap items-center gap-3">
-      <Icon icon="mdi:chart-line" width={26} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
-      <div className="grow basis-0 min-w-[10rem]">
-        <div className="text-sm font-bold text-ink">Stroke progress <span className="ml-1 text-xs font-semibold text-on-neon bg-neon rounded-md px-1.5 py-0.5">Pro</span></div>
-        <p className="text-xs text-muted">Your pace for each stroke over time, and pool workouts written for you in your plan.</p>
-      </div>
-      {onUpgrade && <Button size="sm" onClick={onUpgrade}>Get Pro</Button>}
-    </Card>
+    <button type="button" onClick={onUpgrade} className="press w-full text-left flex items-center gap-2 text-sm text-ink-2 py-1">
+      <Icon icon="mdi:chart-line" width={18} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
+      <span className="grow">See your {strokeLabel(stroke).toLowerCase()} pace over time</span>
+      <span className="text-xs font-semibold text-on-neon bg-neon rounded-md px-1.5 py-0.5">Pro</span>
+    </button>
   )
-  const points = swims.filter(l => l.stroke === stroke && Number(l.distance_m) >= 25 && l.seconds > 0)
+  const points = swims.filter(l => l.stroke === stroke && Number(l.distance_m) >= PR_MIN_M && l.seconds > 0)
     .map(l => ({ date: l.date, value: paceSecs(l, u) }))
   const first = points.length ? [...points].sort((a, b) => a.date.localeCompare(b.date))[0] : null
   const best = points.length ? Math.min(...points.map(p => p.value)) : null
-  return (
-    <Card>
-      <SectionTitle action={<InfoButton title="Stroke progress">
-        Your pace per {u.per} on every swim of this stroke. Lower is faster. Interval sets count with their rest, so they sit a little higher.
-      </InfoButton>}>Stroke progress</SectionTitle>
-      <Segmented options={STROKES.map(s => [s.id, s.label])} value={stroke} onChange={setStroke} label="Stroke" kind="choice" scroll />
-      {points.length >= 2 ? (
-        <div className="mt-3">
-          <LineChart data={points} label={`${strokeLabel(stroke)} pace`} format={v => `${fmtDuration(v)}`} />
-          <p className="text-xs text-muted mt-2 tabular-nums">
-            Best {fmtDuration(best)} /{u.per}{first && best < first.value ? `, ${fmtDuration(first.value - best)} faster than your first` : ''}.
-          </p>
-        </div>
-      ) : (
-        <p className="text-sm text-muted text-center py-5">Log two {strokeLabel(stroke).toLowerCase()} swims to see your pace over time.</p>
-      )}
-    </Card>
+  return points.length >= 2 ? (
+    <div>
+      <LineChart data={points} label={`${strokeLabel(stroke)} pace`} format={v => `${fmtDuration(v)}`} />
+      <p className="text-xs text-muted mt-2 tabular-nums">
+        Pace per {u.per}, lower is faster. Best {fmtDuration(best)}{first && best < first.value ? `, ${fmtDuration(first.value - best)} faster than your first` : ''}.
+      </p>
+    </div>
+  ) : (
+    <p className="text-sm text-muted py-2">Log two {strokeLabel(stroke).toLowerCase()} swims of {PR_MIN_M} {u.dist} or more to see your pace over time.</p>
   )
 }
 
 function MySwims({ swims, onChanged, isPro, onUpgrade }) {
-  const u = useSwimUnits()
+  const [selected, setSelected] = useState(null) // a stroke opened from its card
+  const [logging, setLogging] = useState(false)
   const [stroke, setStroke] = useState('free')
-  const [filter, setFilter] = useState(null)
-  const shown = filter ? swims.filter(l => l.stroke === filter) : swims
-
-  function pick(id) {
-    setFilter(id)
-    if (id) setStroke(id)
-  }
+  const [all, setAll] = useState(false)
+  const shown = selected ? swims.filter(l => l.stroke === selected) : swims
+  const del = l => deleteCardio(l.id).then(onChanged)
 
   return (
     <div className="space-y-4">
-      <section aria-label="Strokes">
-        <SectionTitle action={<InfoButton title="Strokes">
-          PR pace is your fastest time per {u.per} on any swim of at least one pool length. Tap a stroke to see only those swims and log that stroke.
-        </InfoButton>}>Strokes</SectionTitle>
-        <StrokeGrid swims={swims} selected={filter} onSelect={pick} />
-      </section>
+      <StrokeGrid swims={swims} selected={selected} onSelect={id => { setSelected(id); if (id) setStroke(id) }} />
 
-      <div id="log-swim" className="scroll-mt-20"><LogSwim stroke={stroke} setStroke={setStroke} onSaved={onChanged} /></div>
+      <Button full icon="mdi:plus" onClick={() => setLogging(true)}>Log a swim</Button>
 
-      <StrokeProgress swims={swims} isPro={isPro} onUpgrade={onUpgrade} />
-
-      {shown.length > 0 ? (
-        <Card>
-          <SectionTitle action={filter && <button onClick={() => setFilter(null)} className="press text-xs font-semibold text-neon-ink min-h-[32px]">Show all</button>}>
-            {filter ? `${strokeLabel(filter)} swims` : 'History'}
+      {selected ? (
+        <Card className="space-y-3">
+          <SectionTitle action={<button onClick={() => setSelected(null)} className="press text-xs font-semibold text-neon-ink min-h-[32px]">All strokes</button>}>
+            {strokeLabel(selected)}
           </SectionTitle>
-          <SwimList swims={shown} onDelete={l => deleteCardio(l.id).then(onChanged)} />
+          <StrokeProgress swims={swims} stroke={selected} isPro={isPro} onUpgrade={onUpgrade} />
+          {shown.length ? <SwimList swims={shown} onDelete={del} /> : <p className="text-sm text-muted">No {strokeLabel(selected).toLowerCase()} swims yet.</p>}
+        </Card>
+      ) : swims.length > 0 ? (
+        <Card>
+          <SectionTitle action={swims.length > 5 && <button onClick={() => setAll(v => !v)} className="press text-xs font-semibold text-neon-ink min-h-[32px]">{all ? 'Less' : 'All'}</button>}>Recent swims</SectionTitle>
+          <SwimList swims={all ? swims : swims.slice(0, 5)} onDelete={del} />
         </Card>
       ) : (
-        <EmptyState icon="mdi:swim" title={filter ? `No ${strokeLabel(filter).toLowerCase()} swims yet` : 'No swims yet'}>
-          Log one above to see your PR pace and last session for each stroke.
-        </EmptyState>
+        <EmptyState icon="mdi:swim" title="No swims yet">Log one to see your PR pace for each stroke.</EmptyState>
+      )}
+
+      {logging && (
+        <Sheet title="Log a swim" onClose={() => setLogging(false)}>
+          <LogSwim bare stroke={stroke} setStroke={setStroke} onSaved={() => { setLogging(false); onChanged() }} />
+        </Sheet>
       )}
     </div>
   )
@@ -553,7 +533,7 @@ function PhotoCard({ path, url, onChanged, coach }) {
       <Photo url={url} name="You" size={56} />
       <div className="grow basis-0 min-w-[8rem]">
         <div className="text-sm font-semibold text-ink">Your photo</div>
-        <div className="text-xs text-muted">{coach ? 'Your swimmers see it.' : 'Only your coach sees it.'}</div>
+        <div className="text-xs text-muted">{coach ? 'Your swimmers see it.' : 'Your coach sees it, and teammates while you show yourself to them.'}</div>
         {err && <p role="alert" className="text-xs text-danger mt-1">{err}</p>}
       </div>
       <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" onChange={pick} className="hidden" aria-label="Choose a photo" />
@@ -595,7 +575,7 @@ function InviteCard({ code, onJoined, onDismiss }) {
             <span className="text-xs text-muted">Your name for the coach</span>
             <input value={name} maxLength={40} onChange={e => setName(e.target.value)} placeholder="First and last name" autoComplete="name" className={`mt-1 ${inputCls}`} />
           </label>
-          <p className="text-xs text-muted">Your coach will see this name, your photo and your swims. Nothing else.</p>
+          <p className="text-xs text-muted">Your coach sees this name, your photo and your swims. Teammates see your name, photo, distance this month and best paces; you can turn that off on Team.</p>
           <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 8rem), 1fr))' }}>
             <Button onClick={join} disabled={busy} icon="mdi:account-plus-outline">{busy ? 'Joining...' : 'Join the team'}</Button>
             <Button variant="secondary" onClick={() => { clearSwimInvite(); onDismiss() }}>Not now</Button>
@@ -769,48 +749,103 @@ function StartTeam({ coach, onCoachChange, onStarted }) {
   )
 }
 
-function MyTeamCard({ team, coachUrl, onLeft }) {
-  const [busy, setBusy] = useState(false)
+function MyTeamCard({ team, coachUrl, myPhoto, myUrl, onChanged }) {
+  const [settings, setSettings] = useState(false)
   const pending = team.status === 'pending'
-  // The name the coach sees (026: my_name). Before 026 the field isn't there and this stays hidden.
-  const hasNames = 'my_name' in team
+  // 026 adds my_name (the name the coach sees); before it runs the field isn't there
+  const needsName = 'my_name' in team && !team.my_name
+  return (
+    <>
+      <Card hero className="space-y-3">
+        <div className="flex items-center gap-3">
+          <Photo url={coachUrl} name={team.coach_nickname} size={48} />
+          <div className="grow min-w-0">
+            <div className="text-xs font-semibold text-neon-ink">{pending ? 'Request sent' : 'Your team'}</div>
+            <div className="text-xl font-bold text-ink break-words leading-tight">{team.name}</div>
+            {team.coach_nickname && <div className="text-sm text-muted">Coach @{team.coach_nickname}</div>}
+          </div>
+          <IconButton icon="mdi:cog-outline" label="You on the team" onClick={() => setSettings(true)} />
+        </div>
+        {pending && <p className="text-sm text-ink-2">Waiting for the coach to accept. Keep logging swims meanwhile.</p>}
+        {needsName && (
+          <button type="button" onClick={() => setSettings(true)} className="press w-full text-left rounded-xl border border-dashed border-neon-stroke/40 px-3 py-2.5 text-sm text-ink-2">
+            <span className="font-semibold text-neon-ink">Add your name</span> so your coach knows who you are.
+          </button>
+        )}
+      </Card>
+      {settings && <TeamSettings team={team} myPhoto={myPhoto} myUrl={myUrl} onClose={() => setSettings(false)} onChanged={onChanged} />}
+    </>
+  )
+}
+
+// The swimmer's own settings on the team: the name the coach sees, their photo, being shown to
+// teammates (027), and leaving
+function TeamSettings({ team, myPhoto, myUrl, onClose, onChanged }) {
+  const pending = team.status === 'pending'
   const [name, setName] = useState(team.my_name ?? '')
-  const [saved, setSaved] = useState(team.my_name ?? '')
-  const [nameErr, setNameErr] = useState('')
-  useEffect(() => { if (hasNames && !team.my_name) accountName().then(n => setName(x => x || n)).catch(() => {}) }, [hasNames, team.my_name])
-  async function saveName(e) {
-    e.preventDefault(); setNameErr('')
-    try { await setTeamName(name.trim()); setSaved(name.trim()) } catch (x) { setNameErr(x.message) }
+  const [visible, setVisible] = useState(team.visible ?? null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  useEffect(() => { if (!team.my_name) accountName().then(n => setName(x => x || n)).catch(() => {}) }, [team.my_name])
+  async function save() {
+    setErr(''); setBusy(true)
+    try {
+      if ('my_name' in team && name.trim() !== (team.my_name ?? '')) await setTeamName(name.trim())
+      if (visible != null && visible !== team.visible) await setTeamVisible(visible)
+      onChanged(); onClose()
+    } catch (x) { setErr(x.message || 'Could not save'); setBusy(false) }
   }
   async function leave() {
-    if (!pending && !window.confirm(`Leave ${team.name}? Your coach stops seeing your swims.`)) return
+    if (!pending && !window.confirm(`Leave ${team.name}? Your coach and teammates stop seeing your swims.`)) return
     setBusy(true)
-    try { await leaveTeam(); onLeft() } finally { setBusy(false) }
+    try { await leaveTeam(); onChanged(); onClose() } catch (x) { setErr(x.message); setBusy(false) }
   }
   return (
-    <Card hero className="space-y-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <Photo url={coachUrl} name={team.coach_nickname} size={56} />
-        <div className="grow basis-0 min-w-[8rem]">
-          <div className="text-xs font-semibold text-neon-ink">{pending ? 'Request sent' : 'Your team'}</div>
-          <div className="text-xl font-bold text-ink break-words leading-tight">{team.name}</div>
-          {team.coach_nickname && <div className="text-sm text-muted">Coach @{team.coach_nickname}</div>}
-        </div>
+    <Sheet title="You on the team" onClose={onClose} footer={
+      <div className="space-y-2">
+        {err && <p role="alert" className="text-xs text-danger">{err}</p>}
+        <Button full onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
+        <button type="button" onClick={leave} disabled={busy} className="press w-full min-h-[44px] text-sm font-semibold text-muted hover:text-danger">{pending ? 'Cancel request' : 'Leave team'}</button>
       </div>
-      {hasNames && (
-        <form onSubmit={saveName} className="space-y-1">
-          <label htmlFor="team-name" className="text-xs text-muted">{saved ? 'Your coach sees you as' : 'Add your name so your coach knows who you are'}</label>
-          <div className="flex gap-2">
-            <input id="team-name" value={name} maxLength={40} onChange={e => setName(e.target.value)} placeholder="First and last name" autoComplete="name" className={`${inputCls} grow min-w-0`} />
-            <Button size="sm" variant={name.trim() === saved ? 'secondary' : 'primary'} type="submit" disabled={name.trim() === saved}>{name.trim() === saved && saved ? 'Saved' : 'Save'}</Button>
-          </div>
-          {nameErr && <p role="alert" className="text-xs text-danger">{nameErr}</p>}
-        </form>
+    }>
+      {'my_name' in team && (
+        <label className="block">
+          <span className="text-xs text-muted">Your name for the team</span>
+          <input value={name} maxLength={40} onChange={e => setName(e.target.value)} placeholder="First and last name" autoComplete="name" className={`mt-1 ${inputCls}`} />
+        </label>
       )}
-      <p className="text-xs text-muted">
-        {pending ? 'Waiting for the coach to accept. You can keep logging swims meanwhile.' : 'Your coach sees your name, photo and swims, stroke by stroke.'}
-      </p>
-      <Button size="sm" variant="secondary" onClick={leave} disabled={busy}>{pending ? 'Cancel request' : 'Leave team'}</Button>
+      <PhotoCard path={myPhoto} url={myUrl} onChanged={onChanged} />
+      {visible != null && (
+        <label className="flex items-start gap-3 rounded-xl border border-line p-3 cursor-pointer">
+          <input type="checkbox" checked={visible} onChange={e => setVisible(e.target.checked)} className="mt-0.5 w-5 h-5 accent-[rgb(var(--neon-stroke))]" />
+          <span>
+            <span className="block text-sm font-semibold text-ink">Show me to my teammates</span>
+            <span className="block text-xs text-muted">Your name, photo, distance this month and best paces. Your coach always sees your swims.</span>
+          </span>
+        </label>
+      )}
+    </Sheet>
+  )
+}
+
+// Teammates by distance in the last 30 days: who's in the water most
+function Teammates({ mates, urls }) {
+  const u = useSwimUnits()
+  if (!mates.length) return null
+  const ranked = [...mates].sort((a, b) => Number(b.metres_30d) - Number(a.metres_30d))
+  return (
+    <Card>
+      <SectionTitle action={<span className="text-xs text-muted">Last 30 days</span>}>Teammates</SectionTitle>
+      <ol className="divide-y divide-line">
+        {ranked.map((m, i) => (
+          <li key={m.user_id} className={`flex items-center gap-3 py-2.5 ${m.is_me ? 'font-semibold' : ''}`}>
+            <span className={`w-5 text-center text-sm font-bold tabular-nums ${i === 0 ? 'text-neon-ink' : 'text-muted'}`}>{i + 1}</span>
+            <Photo url={urls[m.photo_path]} name={m.display_name || m.nickname} size={36} />
+            <span className="grow min-w-0 text-sm text-ink [overflow-wrap:anywhere]">{swimmerName(m)}{m.is_me ? ' (you)' : ''}</span>
+            <span className="text-sm font-bold text-ink tabular-nums">{fmtDistance(m.metres_30d ?? 0, u)}</span>
+          </li>
+        ))}
+      </ol>
     </Card>
   )
 }
@@ -923,7 +958,7 @@ function CoachView({ team, roster, prs, urls, onChanged, onOpenSwimmer }) {
 }
 
 // Who's fastest per stroke: each swimmer's PR pace, ranked
-function Leaderboard({ prs, roster, urls, onOpenSwimmer }) {
+function Leaderboard({ prs, roster, urls, onOpenSwimmer, title = 'Leaderboard' }) {
   const u = useSwimUnits()
   const [stroke, setStroke] = useState('free')
   const [band, setBand] = useState('sprint')
@@ -932,8 +967,8 @@ function Leaderboard({ prs, roster, urls, onOpenSwimmer }) {
   return (
     <section aria-label="Leaderboard">
       <SectionTitle action={<InfoButton title="Leaderboard">
-        Each swimmer's best pace per {u.per} for the stroke, ranked within a distance so sprints and distance swims aren't mixed: sprint is 50 to 100, middle 200 to 300, distance 400 and up. Tap a swimmer to see all their swims.
-      </InfoButton>}>Leaderboard</SectionTitle>
+        Each swimmer's best pace per {u.per} for the stroke, ranked within a distance so sprints and distance swims aren't mixed: sprint is 50 to 100, middle 200 to 300, distance 400 and up.{onOpenSwimmer ? ' Tap a swimmer to see all their swims.' : ''}
+      </InfoButton>}>{title}</SectionTitle>
       <Segmented options={STROKES.map(s => [s.id, s.label])} value={stroke} onChange={setStroke} label="Stroke" kind="choice" scroll />
       <div className="mt-2">
         <Segmented options={DISTANCE_BANDS.map(b => [b.id, b.label])} value={band} onChange={setBand} label="Distance" kind="choice" />
@@ -942,8 +977,8 @@ function Leaderboard({ prs, roster, urls, onOpenSwimmer }) {
         <ol className="mt-3 bg-surface border border-line rounded-2xl divide-y divide-line">
           {board.map(p => (
             <li key={p.user_id}>
-              <button type="button" onClick={() => onOpenSwimmer(p.swimmer)}
-                className="press w-full text-left flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5">
+              <button type="button" onClick={onOpenSwimmer && (() => onOpenSwimmer(p.swimmer))} disabled={!onOpenSwimmer}
+                className="press w-full text-left flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 disabled:cursor-default">
                 <span className={`w-7 text-center text-sm font-bold tabular-nums flex-shrink-0 ${p.place === 1 ? 'text-neon-ink' : 'text-muted'}`}>{p.place}</span>
                 <Photo url={urls[p.swimmer.photo_path]} name={p.swimmer.display_name || p.swimmer.nickname} size={40} />
                 <span className="grow basis-0 min-w-[6rem]">
@@ -959,7 +994,7 @@ function Leaderboard({ prs, roster, urls, onOpenSwimmer }) {
           ))}
         </ol>
       ) : (
-        <p className="text-sm text-muted text-center py-5">No {strokeLabel(stroke).toLowerCase()} swims of {bandInfo.hint} {u.dist} yet. They show once your swimmers log one.</p>
+        <p className="text-sm text-muted text-center py-5">No {strokeLabel(stroke).toLowerCase()} swims of {bandInfo.hint} {u.dist} yet. They show once {onOpenSwimmer ? 'your swimmers log' : 'the team logs'} one.</p>
       )}
     </section>
   )
@@ -1023,7 +1058,7 @@ function SwimmerPage({ swimmer, url, onRemoved }) {
 }
 
 function Team({ invite, onInviteDone, onOpenSwimmer, onOpenApplications, reload, data, setCoach }) {
-  const { coached, mine, roster, prs, myPhoto, urls, coach, isAdmin } = data
+  const { coached, mine, roster, prs, mates = [], matePrs = [], myPhoto, urls, coach, isAdmin } = data
   return (
     <div className="space-y-4">
       {invite && !coached && <InviteCard code={invite} onJoined={() => { onInviteDone(); reload() }} onDismiss={onInviteDone} />}
@@ -1031,13 +1066,15 @@ function Team({ invite, onInviteDone, onOpenSwimmer, onOpenApplications, reload,
         <CoachView team={coached} roster={roster} prs={prs} urls={urls} onChanged={reload} onOpenSwimmer={onOpenSwimmer} />
       ) : mine ? (
         <>
-          <MyTeamCard team={mine} coachUrl={urls[mine.coach_photo]} onLeft={reload} />
+          <MyTeamCard team={mine} coachUrl={urls[mine.coach_photo]} myPhoto={myPhoto} myUrl={urls[myPhoto]} onChanged={reload} />
           {mine.status === 'active' && <TeamPractice teamId={mine.id} />}
+          {mine.status === 'active' && <Teammates mates={mates} urls={urls} />}
+          {mine.status === 'active' && mates.length > 1 && <Leaderboard title="Team results" prs={matePrs} roster={mates} urls={urls} />}
         </>
       ) : (
         <FindTeam onJoined={reload} />
       )}
-      <PhotoCard path={myPhoto} url={urls[myPhoto]} onChanged={reload} coach={!!coached} />
+      {(coached || !mine) && <PhotoCard path={myPhoto} url={urls[myPhoto]} onChanged={reload} coach={!!coached} />}
       {!coached && !mine && <StartTeam coach={coach} onCoachChange={setCoach} onStarted={reload} />}
       {isAdmin && (
         <Card pad="sm">
@@ -1069,8 +1106,11 @@ export default function Swim({ intent, onIntentDone, isPro, onUpgrade }) {
         fetchCoachedTeam(), fetchMyTeam(), fetchMyPhoto(), fetchMyCoach().catch(() => null), fetchIsAdmin().catch(() => false),
       ])
       const [roster, prs] = coached ? await Promise.all([fetchRoster(), fetchTeamPrs().catch(() => [])]) : [[], []]
-      const urls = await photoUrls([myPhoto, mine?.coach_photo, ...roster.map(r => r.photo_path)])
-      setTeam({ coached, mine, roster, prs, myPhoto, urls, coach, isAdmin })
+      // A swimmer on a team sees their teammates and the team's best paces (027)
+      const onTeam = !coached && mine?.status === 'active'
+      const [mates, matePrs] = onTeam ? await Promise.all([fetchTeammates().catch(() => []), fetchTeammatesPrs().catch(() => [])]) : [[], []]
+      const urls = await photoUrls([myPhoto, mine?.coach_photo, ...roster.map(r => r.photo_path), ...mates.map(m => m.photo_path)])
+      setTeam({ coached, mine, roster, prs, mates: mates.map(m => ({ ...m, status: 'active' })), matePrs, myPhoto, urls, coach, isAdmin })
       setTeamState('ready')
       // A coach opens Swim to see the team: start there the first time it loads
       if (coached && !landed.current) setTab('team')
@@ -1085,11 +1125,6 @@ export default function Swim({ intent, onIntentDone, isPro, onUpgrade }) {
     if (!intent) return
     if (intent.invite) setInvite(intent.invite)
     if (intent.invite || intent.tab === 'team') { setTab('team'); setSwimmer(null); loadTeam() }
-    // From Train's quick actions: straight to the log form
-    if (intent.log) {
-      setTab('me'); setSwimmer(null)
-      setTimeout(() => { const el = document.getElementById('log-swim'); el?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); el?.querySelector('input')?.focus({ preventScroll: true }) }, 350)
-    }
     onIntentDone?.()
   }, [intent])
 
@@ -1103,22 +1138,11 @@ export default function Swim({ intent, onIntentDone, isPro, onUpgrade }) {
       onRemoved={() => { setSwimmer(null); loadTeam() }} />
   )
 
-  const all = swims ? strokeStats(swims).all : null
-  const week = swims ? (() => {
-    const monday = new Date(); monday.setHours(0, 0, 0, 0)
-    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7))
-    return swims.filter(l => new Date(`${l.date}T12:00:00`) >= monday)
-  })() : []
   const waiting = team?.roster.filter(r => r.status === 'pending').length ?? 0
 
   return (
     <div className="space-y-4 py-4 slide-up">
-      <PageHeader icon="mdi:swim" title="Swim" facts={swims && <>
-        <Fact icon="mdi:calendar-week">{week.length ? `${fmtDistance(week.reduce((a, l) => a + Number(l.distance_m), 0), u)} this week` : 'No swims this week'}</Fact>
-        {all.count > 0 && <Fact icon="mdi:clock-outline">Last {daysAgo(all.last.date)}</Fact>}
-        {team?.coached && <Fact icon="mdi:whistle-outline">Coach</Fact>}
-      </>} />
-
+      <h1 className="font-bold text-xl text-ink">Swim</h1>
       <Segmented options={TABS.map(([id, label]) => [id, id === 'team' && waiting ? `${label} (${waiting})` : label])} value={tab} onChange={setTab} label="Swim" />
 
       {tab === 'me' && team?.mine?.status === 'active' && <TeamPractice teamId={team.mine.id} compact onOpen={() => setTab('team')} />}

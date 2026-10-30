@@ -40,7 +40,7 @@ function matchPlanExercises(planExercises) {
 
 const SESSION_SCREENS = ['training', 'rest', 'exercise-picker']
 
-export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgrade, onOpenPage, onOpenGroup, onOpenGuide, onQuick, resumeTick = 0 }) {
+export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgrade, onOpenPage, onOpenGroup, onOpenGuide, resumeTick = 0 }) {
   const { unit, toLb } = useUnit()
   const [screen, setScreen]                   = useState('home')
   const [activeExercises, setActiveExercises] = useState([])
@@ -390,7 +390,6 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       customWorkouts={customWorkouts}
       planWorkout={planWorkout}
       planSchedule={planSchedule}
-      onQuick={onQuick}
       onStart={startWorkout}
       onPlanStart={startPlanWorkout}
       onFreeStart={startFreeWorkout}
@@ -613,7 +612,7 @@ function starterSession(done) {
   return { title: s.title, starter: true, workout: { exercises: s.exercises.map(e => ({ name: e.name, sets: e.sets, reps: e.reps, restSeconds: restSecs(e.rest) })) } }
 }
 
-function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade, onOpenPage, onOpenGroup, onOpenGuide, onQuick, pendingCount = 0, onRetryPending }) {
+function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade, onOpenPage, onOpenGroup, onOpenGuide, pendingCount = 0, onRetryPending }) {
   const { fmtVolume } = useUnit()
   const [selectedSession, setSelectedSession] = useState(null)
 
@@ -780,19 +779,6 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
           </>}
           <Button variant="ghost" full icon="mdi:plus" onClick={onFreeStart} className="mt-2">Free workout</Button>
       </Card>
-      )}
-
-      {/* Quick actions: where people go most from here, one tap each */}
-      {onQuick && (
-        <nav aria-label="Quick actions" className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 4.5rem), 1fr))' }}>
-          {[['food', 'Log food', 'mdi:food-apple-outline'], ['weight', 'Weigh in', 'mdi:scale-bathroom'], ['swim', 'Log a swim', 'mdi:swim'], ['mealplan', 'Meal plan', 'mdi:silverware-fork-knife']].map(([kind, label, icon]) => (
-            <button key={kind} type="button" onClick={() => onQuick(kind)}
-              className="press min-h-[4.25rem] rounded-2xl bg-surface border border-line hover:border-neon-stroke/40 px-2 py-2.5 flex flex-col items-center justify-center gap-1.5 text-center transition-colors">
-              <Icon icon={icon} width={22} className="text-neon-ink" aria-hidden="true" />
-              <span className="text-xs font-semibold text-ink leading-tight">{label}</span>
-            </button>
-          ))}
-        </nav>
       )}
 
       {/* ── Train together: a headline feature, so it gets its own neon card. The big button opens

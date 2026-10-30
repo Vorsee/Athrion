@@ -161,20 +161,21 @@ describe('ReminderSettings', () => {
 })
 
 describe('Nav', () => {
-  it('has five tabs, Swim among them, and switches pages', async () => {
+  it('has four tabs, Swim among them, and switches pages (Progress lives in the You sheet)', async () => {
     const setPage = vi.fn()
     render(<Nav page="workout" setPage={setPage} session={{ name: 'Sam', email: 's@x' }} isPro={false} onProfileClick={() => {}} />)
-    expect(screen.getByRole('navigation').querySelectorAll('button')).toHaveLength(5)
+    expect(screen.getByRole('navigation').querySelectorAll('button')).toHaveLength(4)
     expect(screen.queryByText('Coaches')).toBeNull()
-    for (const label of ['Plan', 'Food', 'Progress', 'Swim']) await userEvent.click(screen.getByText(label))
-    expect(setPage.mock.calls.map(c => c[0])).toEqual(['plan', 'calories', 'progress', 'swim'])
+    expect(screen.queryByText('Progress')).toBeNull()
+    for (const label of ['Plan', 'Food', 'Swim']) await userEvent.click(screen.getByText(label))
+    expect(setPage.mock.calls.map(c => c[0])).toEqual(['plan', 'calories', 'swim'])
     // Plan has a free goal card and results, so no tab carries a lock (it read as paid-only)
     expect(screen.getByText('Plan').closest('button')).toHaveTextContent(/^Plan$/)
   })
   it('shows the Coaches tab to admins only', async () => {
     const setPage = vi.fn()
     render(<Nav page="workout" setPage={setPage} session={{ name: 'Sam', email: 's@x' }} isPro isAdmin onProfileClick={() => {}} />)
-    expect(screen.getByRole('navigation').querySelectorAll('button')).toHaveLength(6)
+    expect(screen.getByRole('navigation').querySelectorAll('button')).toHaveLength(5)
     await userEvent.click(screen.getByText('Coaches'))
     expect(setPage).toHaveBeenCalledWith('shop')
   })

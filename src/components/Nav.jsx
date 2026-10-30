@@ -9,7 +9,6 @@ const TABS = [
   { id: 'workout',  label: 'Train',    icon: 'mdi:dumbbell' },
   { id: 'plan',     label: 'Plan',     icon: 'mdi:calendar-check-outline' },
   { id: 'calories', label: 'Food',     icon: 'mdi:food-apple-outline' },
-  { id: 'progress', label: 'Progress', icon: 'mdi:chart-line' },
   { id: 'swim',     label: 'Swim',     icon: 'mdi:swim' },
   // Admins only while the coach shop is being built
   { id: 'shop',     label: 'Coaches',  icon: 'mdi:whistle-outline', admin: true },
@@ -24,7 +23,6 @@ const PAGE_META = {
   workout:  { title: 'Train' },
   plan:     { title: 'Plan' },
   calories: { title: 'Food' },
-  progress: { title: 'Progress', large: true },
   library:  { title: 'Library', large: true },
   group:    { title: 'Train together', large: true },
   coach:    { title: 'Coach', large: true },
@@ -194,7 +192,7 @@ export default function Nav({ page, setPage, session, isPro, isAdmin = false, on
         )}
         <nav aria-label="Main" className="bg-canvas/95 backdrop-blur border-t border-line"
           style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-          <div className={`grid ${tabs.length > 5 ? 'grid-cols-6' : 'grid-cols-5'} max-w-lg mx-auto h-14`}>
+          <div className="grid max-w-lg mx-auto h-14" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
             {tabs.map(t => {
               const active = activeTab === t.id
               return (
@@ -203,9 +201,9 @@ export default function Nav({ page, setPage, session, isPro, isAdmin = false, on
                   <span aria-hidden="true"
                     className={`absolute top-0 left-1/2 -translate-x-1/2 w-7 h-[3px] rounded-b-full bg-neon transition-opacity duration-200 ${active ? 'opacity-100' : 'opacity-0'}`} />
                   <Icon icon={t.icon} width={24} aria-hidden="true" />
-                  {/* Every label shows down to 280px (240px at big phone text keeps only the open tab's),
-                      and six tabs keep only the open one's below 340px; the names stay for screen readers */}
-                  <span className={`text-xs font-semibold leading-tight tracking-tight ${active ? '' : tabs.length > 5 ? 'max-[339px]:sr-only' : 'max-[279px]:sr-only'}`}>
+                  {/* Four short labels fit at any width; with the admin's fifth tab, below 280px only the open
+                      tab keeps its label. The names stay for screen readers */}
+                  <span className={`text-xs font-semibold leading-tight tracking-tight ${active || tabs.length < 5 ? '' : 'max-[279px]:sr-only'}`}>
                     {t.label}
                   </span>
                 </button>

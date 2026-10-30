@@ -1,22 +1,17 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Icon } from '@iconify/react'
-import { useBackHandler, useHeaderAction } from '../lib/shell.js'
-import { Button, Card, SectionTitle, Segmented, EmptyState, Skeleton, SkeletonRows, Sheet, PageHeader, Fact, InfoButton, BigNumber, StatTiles } from '../components/ui/index.js'
+import { Button, Card, SectionTitle, Segmented, Skeleton, SkeletonRows, Fact, InfoButton, BigNumber, StatTiles } from '../components/ui/index.js'
 import LineChart from '../components/LineChart.jsx'
 import { fetchWorkoutHistory, saveProfileWeight } from '../lib/api.js'
 import {
   fetchMeasurements, saveMeasurement, deleteMeasurement,
   fetchProgressPhotos, uploadProgressPhoto, deleteProgressPhoto,
-  fetchDailyHealth, saveDailyHealth, fetchBadges, awardBadges, fetchCheckinWeights,
-  fetchCardio, saveCardio, deleteCardio,
+  fetchBadges, awardBadges, fetchCheckinWeights,
 } from '../lib/progressApi.js'
-import { fmtSecs, setShort } from '../lib/sets.js'
-import { KINDS, cardioUnits, parseDuration, fmtDuration, fmtDistance, paceSecs, cardioSummary } from '../lib/cardio.js'
-import { buildExerciseHistory, getRecords, e1rm, weeklyStreak } from '../lib/progress.js'
+import { weeklyStreak } from '../lib/progress.js'
 import { useUnit } from '../lib/units.js'
 import { BADGES, computeEarnedBadges } from '../lib/badges.js'
-import { getExerciseIcon, todayKey } from '../lib/data.js'
-import { healthSyncAvailable, syncHealthData } from '../lib/health.js'
+import { todayKey } from '../lib/data.js'
 
 const today = () => todayKey()
 // A bare YYYY-MM-DD is read as local noon; new Date('2026-10-27') would be UTC midnight, the day before in the Americas
@@ -89,7 +84,7 @@ const MEASURE_FIELDS = [
   ['arm_in', 'Arm (in)'], ['thigh_in', 'Thigh (in)'], ['body_fat_pct', 'Body fat %'],
 ]
 
-// Weigh-in form: on the Body tab and in the header's Log weight sheet.
+// Weigh-in form on the Body tab.
 // latestDate: the newest weigh-in so far; one on or after it also updates the profile weight.
 function WeighInForm({ onSaved, latestDate, onProfileChange }) {
   const { unit, toLb } = useUnit()
@@ -300,297 +295,10 @@ function Photos({ photos, onChanged }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Health: steps, sleep, resting HR (manual or synced)
-// ─────────────────────────────────────────────────────────────────────────────
-function Health({ health, onChanged }) {
-  const todayRow = health.find(h => h.date === today())
-  const [form, setForm] = useState({
-    steps: todayRow?.steps ?? '', sleep_hours: todayRow?.sleep_hours ?? '', resting_hr: todayRow?.resting_hr ?? '',
-  })
-  const [saving, setSaving] = useState(false)
-  const [syncing, setSyncing] = useState(false)
-  const [msg, setMsg] = useState('')
-  const canSync = healthSyncAvailable()
-
-  async function save() {
-    setSaving(true); setMsg('')
-    try {
-      await saveDailyHealth({ date: today(), steps: num(form.steps), sleep_hours: num(form.sleep_hours), resting_hr: num(form.resting_hr), source: 'manual' })
-      setMsg('Saved')
-      onChanged()
-    } catch (e) {
-      setMsg(e.message || 'Could not save')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function sync() {
-    setSyncing(true); setMsg('')
-    try {
-      const n = await syncHealthData(14)
-      setMsg(`Synced ${n} days`)
-      onChanged()
-    } catch (e) {
-      setMsg(e.message || 'Sync failed')
-    } finally {
-      setSyncing(false)
-    }
-  }
-
-  const week = health.filter(h => Date.now() - new Date(h.date) < 7 * 86400000)
-  const avg = key => {
-    const v = week.map(h => h[key]).filter(x => x != null)
-    return v.length ? Math.round((v.reduce((a, b) => a + Number(b), 0) / v.length) * 10) / 10 : '–'
-  }
-
-  return (
-    <div className="space-y-4">
-      <Card>
-        <SectionTitle action={<Fact icon="mdi:calendar-range">7 days</Fact>}>Averages</SectionTitle>
-        <StatTiles items={[['Steps', avg('steps')], ['Sleep (h)', avg('sleep_hours')], ['Resting HR', avg('resting_hr')]]} />
-      </Card>
-
-      {canSync && (
-        <Button variant="secondary" full icon="mdi:heart-plus-outline" onClick={sync} disabled={syncing}>
-          {syncing ? 'Syncing...' : 'Sync from Health'}
-        </Button>
-      )}
-
-      <Card>
-        <SectionTitle>Today</SectionTitle>
-        <div className="grid grid-cols-3 gap-2">
-          <NumField label="Steps" step="1" value={form.steps} onChange={v => setForm(f => ({ ...f, steps: v }))} />
-          <NumField label="Sleep (h)" value={form.sleep_hours} onChange={v => setForm(f => ({ ...f, sleep_hours: v }))} />
-          <NumField label="Rest HR" step="1" value={form.resting_hr} onChange={v => setForm(f => ({ ...f, resting_hr: v }))} />
-        </div>
-        <Button full onClick={save} disabled={saving} className="mt-3">{saving ? 'Saving...' : 'Save today'}</Button>
-        {msg && <p className="text-xs text-muted mt-2">{msg}</p>}
-      </Card>
-
-      {health.length > 1 && (
-        <Card>
-          <SectionTitle>Steps</SectionTitle>
-          <LineChart data={health.map(h => ({ date: h.date, value: h.steps }))} label="Steps" />
-        </Card>
-      )}
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Cardio: runs with pace, this week's totals and bests (swims have their own tab, Swim.jsx)
-// ─────────────────────────────────────────────────────────────────────────────
-function Cardio({ logs, onChanged }) {
-  const { unit } = useUnit()
-  const kind = 'run'
-  const [form, setForm] = useState({ date: today(), distance: '', time: '', notes: '' })
-  const [saving, setSaving] = useState(false)
-  const [err, setErr] = useState('')
-  const u = cardioUnits(kind, unit)
-  const sum = cardioSummary(logs, kind)
-  const mine = logs.filter(l => l.kind === kind)
-  const pace = l => `${fmtDuration(paceSecs(l, u))} /${u.per}`
-
-  const distance = parseFloat(form.distance)
-  const seconds = parseDuration(form.time)
-  const preview = distance > 0 && seconds ? pace({ seconds, distance_m: u.toM(distance) }) : null
-
-  async function save() {
-    setSaving(true); setErr('')
-    try {
-      if (!(distance > 0)) throw new Error(`Enter the distance in ${u.dist}`)
-      if (!seconds) throw new Error('Enter the time, like 32:15 or 1:05:00')
-      await saveCardio({ date: form.date, kind, distance_m: Math.round(u.toM(distance) * 10) / 10, seconds, notes: form.notes.trim().slice(0, 300) })
-      setForm({ date: today(), distance: '', time: '', notes: '' })
-      onChanged()
-    } catch (e) {
-      setErr(e.message || 'Could not save')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const chart = [...mine].reverse().map(l => ({ date: l.date, value: Math.round(u.fromM(l.distance_m) * 100) / 100 }))
-
-  return (
-    <div className="space-y-4">
-      <Card hero>
-        <SectionTitle action={<Fact icon="mdi:calendar-week">This week</Fact>}>{KINDS[kind].label}s</SectionTitle>
-        <StatTiles items={[
-          ['Distance', sum.week.sessions ? fmtDistance(sum.week.distance_m, u) : '–'],
-          ['Time', sum.week.sessions ? fmtDuration(sum.week.seconds) : '–'],
-          [kind === 'run' ? 'Runs' : 'Swims', sum.week.sessions],
-        ]} />
-      </Card>
-
-      <Card>
-        <SectionTitle>Log a {kind}</SectionTitle>
-        <div className="grid grid-cols-2 gap-3">
-          <NumField label={`Distance (${u.dist})`} step={u.dist === 'km' || u.dist === 'mi' ? '0.01' : '25'} value={form.distance}
-            onChange={v => setForm(f => ({ ...f, distance: v }))} placeholder={kind === 'run' ? (u.dist === 'km' ? '5' : '3.1') : (u.dist === 'm' ? '1500' : '1650')} />
-          <label className="block">
-            <span className="text-xs text-muted">Time</span>
-            <input inputMode="numeric" value={form.time} placeholder={kind === 'run' ? '28:30' : '32:00'} aria-label="Time"
-              onChange={e => setForm(f => ({ ...f, time: e.target.value.replace(/[^\d:]/g, '').slice(0, 8) }))}
-              className="mt-1 w-full bg-raised border border-line rounded-xl px-3 py-2 text-sm text-ink placeholder:text-placeholder focus:outline-none focus:border-neon-stroke/40" />
-          </label>
-          <label className="block">
-            <span className="text-xs text-muted">Date</span>
-            <input type="date" value={form.date} max={today()} onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-              className="mt-1 w-full bg-raised border border-line rounded-xl px-3 py-2 text-sm text-ink focus:outline-none focus:border-neon-stroke/40" />
-          </label>
-          <div className="flex flex-col justify-end">
-            <span className="text-xs text-muted">Pace</span>
-            <span className="mt-1 h-[38px] flex items-center text-sm font-bold text-neon-ink tabular-nums">{preview ?? '–'}</span>
-          </div>
-        </div>
-        <input value={form.notes} maxLength={300} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-          placeholder={kind === 'run' ? 'Notes: easy run, intervals, hills' : 'Notes: freestyle, drills, open water'} aria-label="Notes"
-          className="mt-3 w-full bg-raised border border-line rounded-xl px-3 py-2 text-sm text-ink placeholder:text-placeholder focus:outline-none focus:border-neon-stroke/40" />
-        <Button full onClick={save} disabled={saving} className="mt-3">{saving ? 'Saving...' : `Save ${kind}`}</Button>
-        {err && <p className="text-xs text-danger mt-2">{err}</p>}
-      </Card>
-
-      {sum.count > 0 && (
-        <Card>
-          <SectionTitle>Bests</SectionTitle>
-          <StatTiles items={[
-            ['Longest', fmtDistance(sum.longest.distance_m, u)],
-            [`Fastest per ${u.per}`, sum.fastest ? fmtDuration(paceSecs(sum.fastest, u)) : '–'],
-            ['All time', `${sum.count} ${kind === 'run' ? (sum.count === 1 ? 'run' : 'runs') : (sum.count === 1 ? 'swim' : 'swims')}`],
-          ]} />
-        </Card>
-      )}
-
-      {chart.length > 1 && (
-        <Card>
-          <SectionTitle>Distance</SectionTitle>
-          <LineChart data={chart} unit={u.dist} label="Distance" />
-        </Card>
-      )}
-
-      {mine.length > 0 ? (
-        <Card>
-          <SectionTitle>History</SectionTitle>
-          <div className="divide-y divide-line">
-            {mine.slice(0, 30).map(l => (
-              <div key={l.id} className="flex items-center gap-3 py-2.5">
-                <Icon icon={KINDS[kind].icon} width={22} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-ink tabular-nums">{fmtDistance(l.distance_m, u)} · {fmtDuration(l.seconds)}</div>
-                  <div className="text-xs text-muted truncate">{fmtDate(l.date)} · {pace(l)}{l.notes ? ` · ${l.notes}` : ''}</div>
-                </div>
-                <button onClick={() => deleteCardio(l.id).then(onChanged)} aria-label={`Delete ${kind} on ${fmtDate(l.date)}`}
-                  className="press w-9 h-9 inline-flex items-center justify-center rounded-md text-muted hover:text-danger hover:bg-danger/12">
-                  <Icon icon="mdi:close" width={16} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </Card>
-      ) : (
-        <EmptyState icon={KINDS[kind].icon} title={`No ${kind}s yet`}>
-          Log one above to see your pace, weekly distance and bests.
-        </EmptyState>
-      )}
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Lifts: per-exercise records and estimated 1RM trend
-// ─────────────────────────────────────────────────────────────────────────────
-function Lifts({ history }) {
-  const { unit, fromLb, fmt } = useUnit()
-  const byEx = useMemo(() => buildExerciseHistory(history), [history])
-  const names = Object.keys(byEx).sort((a, b) => byEx[b].length - byEx[a].length)
-  const [selected, setSelected] = useState(null)
-  const [query, setQuery] = useState('')
-  useBackHandler(!!selected, () => setSelected(null), 'Progress', selected)
-
-  if (!names.length) {
-    return (
-      <Card>
-        <EmptyState icon="mdi:chart-line" title="Your lifts will chart here">
-          Finish a workout and each exercise gets its own history.
-        </EmptyState>
-      </Card>
-    )
-  }
-
-  if (selected) {
-    const sessions = byEx[selected]
-    const rec = getRecords(sessions)
-    const held = rec.maxSecs > 0
-    const weighted = !held && rec.maxWeight > 0
-    const series = sessions.map(s => ({
-      date: s.createdAt,
-      value: held ? Math.max(...s.sets.map(x => x.secs ?? 0))
-        : weighted ? fromLb(Math.max(...s.sets.map(x => e1rm(x.weight, x.reps)))) : Math.max(...s.sets.map(x => x.reps)),
-    }))
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <Icon icon={getExerciseIcon({ name: selected })} width={28} className="text-neon-ink flex-shrink-0" />
-          <div className="font-bold text-xl text-ink leading-tight break-words">{selected}</div>
-        </div>
-        <StatTiles items={held
-          ? [['Longest hold', fmtSecs(rec.maxSecs)], ['Sessions', sessions.length], ['Sets', sessions.reduce((a, s) => a + s.sets.length, 0)]]
-          : weighted
-          ? [['Heaviest', `${fromLb(rec.maxWeight)}×${rec.maxWeightReps}`], ['Est. 1RM', Math.round(fromLb(rec.bestE1rm))], ['Best volume', Math.round(fromLb(rec.bestVolume))]]
-          : [['Most reps', rec.maxReps], ['Sessions', sessions.length], ['Best volume', '–']]} />
-        <Card>
-          <SectionTitle>{held ? 'Longest hold (seconds)' : weighted ? 'Estimated 1-rep max' : 'Best set (reps)'}</SectionTitle>
-          <LineChart data={series} unit={held ? 's' : weighted ? unit : 'reps'} label={held ? 'Seconds' : weighted ? 'Est. 1RM' : 'Reps'} />
-        </Card>
-        <Card>
-          <SectionTitle>Sessions</SectionTitle>
-          <div className="space-y-1.5">
-            {[...sessions].reverse().slice(0, 15).map((s, i) => (
-              <div key={i} className="flex items-start justify-between gap-3 py-1 border-b border-line last:border-0">
-                <span className="text-xs text-muted flex-shrink-0">{fmtDate(s.createdAt)}</span>
-                <span className="text-xs text-ink text-right break-words">{s.sets.map(x => setShort(x, fromLb)).join(', ')}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
-    )
-  }
-
-  const filtered = names.filter(n => n.toLowerCase().includes(query.toLowerCase()))
-  return (
-    <div className="space-y-3">
-      <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search exercises"
-        className="w-full bg-surface border border-line rounded-xl px-3 py-2.5 text-sm text-ink placeholder:text-placeholder focus:outline-none focus:border-neon-stroke/40" />
-      {filtered.map(name => {
-        const rec = getRecords(byEx[name])
-        return (
-          <button key={name} onClick={() => setSelected(name)}
-            className="w-full flex items-center gap-3 bg-surface border border-line rounded-xl px-3 py-3 text-left hover:border-line-strong">
-            <Icon icon={getExerciseIcon({ name })} width={22} className="text-muted flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold text-ink break-words">{name}</div>
-              <div className="text-xs text-muted">{byEx[name].length} sessions</div>
-            </div>
-            <div className="text-right flex-shrink-0">
-              <div className="font-bold text-lg text-neon-ink leading-none">{rec.maxSecs > 0 ? fmtSecs(rec.maxSecs) : rec.maxWeight > 0 ? fmt(rec.maxWeight) : `${rec.maxReps} reps`}</div>
-              <div className="text-xs font-medium text-muted">best</div>
-            </div>
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────────────────────
-const TABS = [
-  ['overview', 'Overview'], ['body', 'Body'], ['lifts', 'Lifts'], ['cardio', 'Cardio'], ['health', 'Health'],
-]
+// Overview (streak, badges) and Body (weight, measurements, photos). Opened from the You sheet.
+const TABS = [['overview', 'Overview'], ['body', 'Body']]
 
 export default function Progress({ profile, onProfileChange }) {
   const [tab, setTab] = useState('overview')
@@ -598,24 +306,18 @@ export default function Progress({ profile, onProfileChange }) {
   const [measurements, setMeasurements] = useState([])
   const [checkinWeights, setCheckinWeights] = useState([])
   const [photos, setPhotos] = useState([])
-  const [cardio, setCardio] = useState([])
-  const [health, setHealth] = useState([])
   const [badges, setBadges] = useState([])
   const [loading, setLoading] = useState(true)
-  const [logWeight, setLogWeight] = useState(false)
-  useHeaderAction('mdi:scale-bathroom', 'Log weight', () => setLogWeight(true))
 
   async function load() {
-    fetchCardio().then(setCardio).catch(() => setCardio([]))
-    const [h, m, cw, p, hl, earnedRows] = await Promise.all([
+    const [h, m, cw, p, earnedRows] = await Promise.all([
       fetchWorkoutHistory().catch(() => []),
       fetchMeasurements().catch(() => []),
       fetchCheckinWeights().catch(() => []),
       fetchProgressPhotos().catch(() => []),
-      fetchDailyHealth(30).catch(() => []),
       fetchBadges().catch(() => []),
     ])
-    setHistory(h); setMeasurements(m); setCheckinWeights(cw); setPhotos(p); setHealth(hl)
+    setHistory(h); setMeasurements(m); setCheckinWeights(cw); setPhotos(p)
     syncProfileWeight(m)
 
     // Award anything newly earned
@@ -644,33 +346,20 @@ export default function Progress({ profile, onProfileChange }) {
   const latestDate = [...measurements.filter(m => m.weight_lb != null).map(m => m.date), ...checkinWeights.map(c => c.date)].sort().at(-1) ?? null
 
   return (
-    <div className="space-y-4 pt-2 pb-4">
-      <PageHeader icon="mdi:chart-line" title="Progress" />
+    <div className="space-y-4">
       <Segmented options={TABS} value={tab} onChange={setTab} label="Progress sections" />
-
       {loading ? (
         <div role="status" aria-label="Loading your progress" className="space-y-4">
-          <div className="grid grid-cols-3 gap-3">
-            {[0, 1, 2].map(i => <Skeleton key={i} className="h-24 rounded-2xl" />)}
-          </div>
+          <Skeleton className="h-28 rounded-2xl" />
           <SkeletonRows rows={2} label="Loading your progress" />
         </div>
+      ) : tab === 'overview' ? (
+        <Overview history={history} badges={badges} />
       ) : (
         <>
-          {tab === 'overview' && <Overview history={history} badges={badges} />}
-          {tab === 'body' && <Body measurements={measurements} checkinWeights={checkinWeights} onSaved={load} latestDate={latestDate} onProfileChange={onProfileChange} />}
-          {/* Photos left the tabs for Cardio; anyone who already has some still sees them under Body */}
-          {tab === 'body' && photos.length > 0 && <Photos photos={photos} onChanged={load} />}
-          {tab === 'lifts' && <Lifts history={history} />}
-          {tab === 'cardio' && <Cardio logs={cardio} onChanged={load} />}
-          {tab === 'health' && <Health health={health} onChanged={load} />}
+          <Body measurements={measurements} checkinWeights={checkinWeights} onSaved={load} latestDate={latestDate} onProfileChange={onProfileChange} />
+          {photos.length > 0 && <Photos photos={photos} onChanged={load} />}
         </>
-      )}
-
-      {logWeight && (
-        <Sheet title="Log weight" onClose={() => setLogWeight(false)}>
-          <WeighInForm onSaved={() => { setLogWeight(false); load() }} latestDate={latestDate} onProfileChange={onProfileChange} />
-        </Sheet>
       )}
     </div>
   )

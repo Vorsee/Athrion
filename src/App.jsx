@@ -32,7 +32,6 @@ const Calories          = lazy(() => import('./pages/Calories.jsx'))
 const Library           = lazy(() => import('./pages/Library.jsx'))
 const Group             = lazy(() => import('./pages/Group.jsx'))
 const Plan              = lazy(() => import('./pages/Plan.jsx'))
-const Progress          = lazy(() => import('./pages/Progress.jsx'))
 const Coach             = lazy(() => import('./pages/Coach.jsx'))
 const Coaches           = lazy(() => import('./pages/Coaches.jsx'))
 const Swim              = lazy(() => import('./pages/Swim.jsx'))
@@ -53,7 +52,7 @@ const onGuidePath = () => /^\/(workout|guide)\/?$/.test(window.location.pathname
 // athrion.app/add/<nickname>: a friend invite
 const INVITE_PATH = /^\/add\/@?([A-Za-z0-9._-]{3,20})\/?$/
 
-const PAGES = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan, progress: Progress, coach: Coach, shop: Coaches, swim: Swim }
+const PAGES = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan, coach: Coach, shop: Coaches, swim: Swim }
 // The coach shop is hidden from everyone but admins while it's being built
 const ADMIN_PAGES = ['shop', 'coach']
 
@@ -99,8 +98,7 @@ export default function App() {
   const [editingProfile, setEditingProfile] = useState(false)
   const [checkout, setCheckout] = useState({ open: false, busy: false, error: '' })
   const [planSetup, setPlanSetup] = useState(false) // free user answering the plan questions
-  const [foodIntent, setFoodIntent] = useState(null) // 'goals' | 'log' | 'plan': open that on Food
-  const [planIntent, setPlanIntent] = useState(null) // 'weight': open the weigh-in on Plan
+  const [foodIntent, setFoodIntent] = useState(null) // 'goals': open the targets editor on Food
   const [shopIntent, setShopIntent] = useState(null) // { product, paid } or { coach }: open it on the Coaches tab
   const [resumeTick, setResumeTick] = useState(0)    // bumped when the session bar is tapped
   const minimised = useMinimisedSession()
@@ -242,7 +240,7 @@ export default function App() {
     setShowInbox(false)
     if (target === 'friends' || target === 'ranks') setGroupIntent({ tab: target })
     else if (target === 'workout') resumeWorkout()
-    else if (target === 'progress') navigate('progress')
+    else if (target === 'progress') setShowProfile('progress') // Progress lives in the You sheet
     else if (target === 'notifications') setShowInbox(true)
     else if (target === 'review') setShowProfile('review')
     else if (target === 'swim') navigate('swim')
@@ -377,23 +375,15 @@ export default function App() {
     </Suspense>
   )
 
-  // Train's quick actions: the places people go most, one tap each
-  function quickAction(kind) {
-    if (kind === 'food' || kind === 'mealplan') { setFoodIntent(kind === 'food' ? 'log' : 'plan'); navigate('calories') }
-    else if (kind === 'weight') { setPlanIntent('weight'); navigate('plan') }
-    else if (kind === 'swim') { setSwimIntent({ log: true }); navigate('swim') }
-  }
-
   const pageProps = {
-    workout: { pendingWorkout, onClearPending: () => setPendingWorkout(null), isPro, onUpgrade: goUpgrade, onOpenPage: navigate, onOpenGroup: tab => setGroupIntent({ tab }), onOpenGuide: openGuide, resumeTick, onQuick: quickAction },
+    workout: { pendingWorkout, onClearPending: () => setPendingWorkout(null), isPro, onUpgrade: goUpgrade, onOpenPage: navigate, onOpenGroup: tab => setGroupIntent({ tab }), onOpenGuide: openGuide, resumeTick },
     library: { onStartWorkout: handleStartFromLibrary },
     shop: { onStartPlanDay: handleStartPlanDay, onOpenCoach: () => navigate('coach'), shopIntent, onShopIntentDone: () => setShopIntent(null) },
     coach: { onOpenShop: () => navigate('shop') },
     calories: { profile, isPro, onUpgrade: goUpgrade, onGoToPlan: () => navigate('plan'), intent: foodIntent, onIntentHandled: () => setFoodIntent(null) },
     group: { session, intent: groupIntent, onIntentDone: () => setGroupIntent(null) },
     swim: { intent: swimIntent, onIntentDone: () => setSwimIntent(null), isPro, onUpgrade: goUpgrade },
-    progress: { profile, onProfileChange: refreshProfile },
-    plan: { isPro, onUpgrade: goUpgrade, intent: planIntent, onIntentDone: () => setPlanIntent(null), onStartSetup: () => setPlanSetup(true), onGoToWorkout: () => navigate('workout'), onStartWorkout: handleStartPlanDay, onOpenSwim: () => navigate('swim'), profile, onProfileChange: () => { refreshProfile(); refreshFitnessProfile() } },
+    plan: { isPro, onUpgrade: goUpgrade, onStartSetup: () => setPlanSetup(true), onGoToWorkout: () => navigate('workout'), onStartWorkout: handleStartPlanDay, onOpenSwim: () => navigate('swim'), profile, onProfileChange: () => { refreshProfile(); refreshFitnessProfile() } },
   }
 
   const PageComponent = (!isAdmin && ADMIN_PAGES.includes(page) ? null : PAGES[page]) ?? Workout
@@ -443,7 +433,8 @@ export default function App() {
       {showProfile && (
         <Suspense fallback={null}>
           <ProfileModal
-            initialScreen={showProfile === 'review' ? 'review' : 'profile'}
+            initialScreen={['review', 'progress'].includes(showProfile) ? showProfile : 'profile'}
+            onProfileChange={refreshProfile}
             session={session}
             profile={profile}
             isPro={isPro}

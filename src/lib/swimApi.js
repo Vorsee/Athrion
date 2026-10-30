@@ -51,6 +51,19 @@ export async function fetchTeamPrs() {
   }
   return data ?? []
 }
+// A missing function (a migration not run yet) reads as empty, not an error
+async function optional(fn, args) {
+  const { data, error } = await supabase.rpc(fn, args)
+  if (error) {
+    if (['PGRST202', '42883'].includes(error.code)) return null
+    throw new Error(error.message || 'Something went wrong')
+  }
+  return data ?? []
+}
+// A swimmer's team (027): teammates shown to the team, and their best paces
+export const fetchTeammates = async () => (await optional('my_teammates')) ?? []
+export const fetchTeammatesPrs = async () => (await optional('my_teammates_prs')) ?? []
+export const setTeamVisible = async show => must(await supabase.rpc('set_swim_team_visible', { p_show: show }))
 export const respondToSwimmer = async (userId, accept) => must(await supabase.rpc('respond_swim_request', { p_user: userId, p_accept: accept }))
 
 // ── Swimmer ──────────────────────────────────────────────────────────────────
