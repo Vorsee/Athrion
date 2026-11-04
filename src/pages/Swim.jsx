@@ -1160,7 +1160,8 @@ function Team({ invite, onInviteDone, onOpenSwimmer, onOpenApplications, reload,
 const TABS = [['me', 'My swims'], ['team', 'Team']]
 
 // The Swim tab: strokes with PR and last session, logging, and swim teams with a coach
-export default function Swim({ intent, onIntentDone, isPro, onUpgrade }) {
+// embedded: inside the Cardio tab, which draws the page title and its own spacing
+export default function Swim({ intent, onIntentDone, isPro, onUpgrade, embedded = false, onSubScreen }) {
   const u = useSwimUnits()
   const [tab, setTab] = useState(intent?.invite || intent?.tab === 'team' ? 'team' : 'me')
   const [swims, setSwims] = useState(null)
@@ -1216,6 +1217,8 @@ export default function Swim({ intent, onIntentDone, isPro, onUpgrade }) {
     onIntentDone?.()
   }, [intent])
 
+  // A swimmer's page or the applications fill the screen: Cardio hides its title and switch
+  useEffect(() => { onSubScreen?.(!!swimmer || applications) }, [swimmer, applications])
   useBackHandler(!!swimmer, () => setSwimmer(null), 'Swim', swimmer ? swimmerName(swimmer) : '')
   useBackHandler(applications, () => setApplications(false), 'Swim', 'Applications')
 
@@ -1229,8 +1232,8 @@ export default function Swim({ intent, onIntentDone, isPro, onUpgrade }) {
   const waiting = team?.roster.filter(r => r.status === 'pending').length ?? 0
 
   return (
-    <div className="space-y-4 py-4 slide-up">
-      <h1 className="font-bold text-xl text-ink">Swim</h1>
+    <div className={embedded ? 'space-y-4' : 'space-y-4 py-4 slide-up'}>
+      {!embedded && <h1 className="font-bold text-xl text-ink">Swim</h1>}
       {newBadges.length > 0 && (
         <div role="status" className="pop-in flex items-center gap-3 rounded-2xl bg-neon text-on-neon px-4 py-3">
           <span className="relative flex-shrink-0 w-9 h-9 flex items-center justify-center" aria-hidden="true">

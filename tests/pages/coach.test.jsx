@@ -69,6 +69,37 @@ describe('Train together: sets one by one', () => {
     expect(screen.getByText('Then rest 2m 30s')).toBeInTheDocument()
     expect(screen.getByText('Set 1 of 3')).toBeInTheDocument()
   })
+
+  it('runs a free workout: the host picks sets and rest, everyone picks their own exercises', async () => {
+    render(<Group session={{ name: 'Sam' }} intent={{ tab: 'rooms' }} />)
+    await userEvent.click(screen.getByText('Create a room'))
+    await screen.findByText('Room code')
+    await userEvent.click(screen.getByRole('radio', { name: 'Free workout' }))
+    expect(screen.queryByPlaceholderText('Search exercises')).toBeNull() // no list to plan
+    await userEvent.click(screen.getByRole('radio', { name: '4' }))
+    await userEvent.click(screen.getByRole('radio', { name: '90s' }))
+    const saved = updates('group_sessions').at(-1)
+    expect(saved.plan).toEqual([{ free: true, sets: Array(4).fill({ reps: null, rest: 90 }) }])
+    expect(saved.exercises).toEqual([])
+
+    await userEvent.click(screen.getByText('Start workout'))
+    expect(await screen.findByText('First exercise')).toBeInTheDocument()
+    await userEvent.type(screen.getByPlaceholderText('Search exercises'), 'Front Squat')
+    await userEvent.click(screen.getByRole('button', { name: 'Go: Front Squat' }))
+    expect(await screen.findByText('Set 1 of 4')).toBeInTheDocument()
+    expect(screen.getByText('Then rest 1m 30s')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Pick another exercise' }))
+    expect(await screen.findByText('Next exercise')).toBeInTheDocument()
+  })
+
+  it('ends a room workout by itself 4 hours after it started', async () => {
+    const plan = [{ name: 'Front Squat', sets: [{ reps: 5, rest: 60 }] }]
+    sb.set('group_sessions', { data: { id: 's1', code: 'ABC234', host_id: USER.id, status: 'active', plan, exercises: ['Front Squat'], total_sets: 1, rest_secs: 60 }, error: null })
+    localStorage.setItem('athrion_group_session_state', JSON.stringify({ sessionId: 's1', screen: 'training', isHost: true, exIdx: 0, setIdx: 0, startTime: Date.now() - 5 * 3600 * 1000 }))
+    render(<Group session={{ name: 'Sam' }} intent={{ tab: 'rooms' }} />)
+    expect(await screen.findByText('Ended automatically after 4 hours. Your sets are saved.')).toBeInTheDocument()
+    expect(screen.getByText('Duration: 240 min')).toBeInTheDocument()
+  })
 })
 
 const PID = '11111111-2222-3333-4444-555555555555'

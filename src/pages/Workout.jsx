@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Icon } from '@iconify/react'
 import { Button, Card, SectionTitle, SectionLink, Skeleton, Chip, Sheet, Segmented, InlineError, InfoButton, Fact, PageHeader, IconButton, ExerciseRow, ActionRow, StatTiles } from '../components/ui/index.js'
-import { EXERCISES, getTodaysExercises, todayKey, fmtTime, getExerciseIcon } from '../lib/data.js'
+import { EXERCISES, getTodaysExercises, todayKey, localDateKey, fmtTime, getExerciseIcon } from '../lib/data.js'
 import { fetchWorkoutHistory, saveWorkoutEntry, fetchCustomWorkouts, saveCustomWorkout, deleteCustomWorkout } from '../lib/api.js'
 import { fetchActivePlan, fetchFitnessProfile } from '../lib/fitnessApi.js'
 import { fetchCardio } from '../lib/progressApi.js'
@@ -9,7 +9,7 @@ import { DemoButton, ExerciseDemoSheet } from '../components/ExerciseDemo.jsx'
 import { buildExerciseHistory, getRecords, suggestNext, parseRepRange, findNewPRs } from '../lib/progress.js'
 import ShareSheet from '../components/ShareSheet.jsx'
 import { cardContent } from '../lib/shareCard.js'
-import { lighter, historyFor, coachedWeek, swimsAsHistory, startableDay, shortVersion, shortOptions } from '../lib/coaching.js'
+import { lighter, historyFor, coachedWeek, cardioAsHistory, startableDay, shortVersion, shortOptions } from '../lib/coaching.js'
 import { BADGES, computeEarnedBadges } from '../lib/badges.js'
 import { fetchBadges, awardBadges } from '../lib/progressApi.js'
 import { tok } from '../lib/tokens.js'
@@ -19,9 +19,11 @@ import { FREE_WORKOUT_LIMIT } from '../lib/pricing.js'
 import { guidePlan } from '../lib/guidePlans.js'
 import { syncOpenWorkout, clearOpenWorkout } from '../lib/notifications.js'
 import TrainingCalendar from '../components/TrainingCalendar.jsx'
+import { rememberCardioSport } from '../lib/cardio.js'
+import LogPastWorkout from '../components/LogPastWorkout.jsx'
 import { CoachNote } from '../components/CoachVideo.jsx'
 import { exerciseMode, isTimedSet, setText, setShort, parseTimeTarget, fmtSecs, roundSecs } from '../lib/sets.js'
-import { useBackHandler, useFocusMode, notifySession, readSession, setSessionMinimised } from '../lib/shell.js'
+import { useBackHandler, useFocusMode, notifySession, readSession, setSessionMinimised, SESSION_LIMIT_MS } from '../lib/shell.js'
 import { HeaderBar } from '../components/Nav.jsx'
 
 const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
@@ -42,7 +44,7 @@ function matchPlanExercises(planExercises) {
 
 const SESSION_SCREENS = ['training', 'rest', 'exercise-picker']
 
-export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgrade, onOpenPage, onOpenGroup, onOpenGuide, resumeTick = 0 }) {
+export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgrade, onOpenPage, onOpenGuide, resumeTick = 0 }) {
   const { unit, toLb } = useUnit()
   const [screen, setScreen]                   = useState('home')
   const [activeExercises, setActiveExercises] = useState([])
@@ -70,6 +72,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
   const [lastSave, setLastSave]               = useState('saving') // saving | saved | queued, for the done screen
   const [pendingCount, setPendingCount]       = useState(() => loadPending().length)
   const [confirmEnd, setConfirmEnd]           = useState(false)
+  const [doneInfo, setDoneInfo]               = useState({ minutes: 0, auto: false }) // for the done screen
 
   // Training, rest and the free-workout picker are the session: focus mode hides the
   // tabs, and back (gesture or Minimise) drops to the Train tab with the session bar
@@ -139,7 +142,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       fetchCustomWorkouts().then(w => setCustomWorkouts(w)),
       fetchActivePlan().then(plan => setFetchedPlan(plan ?? null)),
       Promise.all([fetchFitnessProfile().catch(() => null), fetchCardio(500).catch(() => [])])
-        .then(([fp, cardio]) => setCoachInfo({ goalStartDate: fp?.goal_start_date ?? null, swims: swimsAsHistory(cardio) })),
+        .then(([fp, cardio]) => setCoachInfo({ goalStartDate: fp?.goal_start_date ?? null, swims: cardioAsHistory(cardio) })),
     ]).then(() => { setHomeReady(true); retryPending() })
 
     // Restore in-progress workout
@@ -288,6 +291,13 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
     setLastSave(left ? 'queued' : 'saved')
   }
 
+  // A workout added to an earlier day from the calendar: saved like any other (queued if offline),
+  // then the history is put back in date order, newest first
+  async function handleLogPast(entry) {
+    await saveHistory(entry)
+    setHistory(prev => [...prev].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)))
+  }
+
   async function handleSaveAsWorkout(name, exerciseNames) {
     if (!isPro && customWorkouts.length >= FREE_WORKOUT_LIMIT) {
       onUpgrade?.(); return
@@ -296,10 +306,13 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
     setCustomWorkouts(prev => [saved, ...prev])
   }
 
-  function handleEndWorkout() {
+  // auto: the 4-hour limit ended it. It's timed at 4 hours and dated the day it started.
+  function handleEndWorkout({ auto = false } = {}) {
     setConfirmEnd(false)
     clearPersistedWorkout()
-    const duration = Math.round((Date.now() - startTime) / 60000)
+    const endAt = Math.min(Date.now(), startTime + SESSION_LIMIT_MS)
+    const duration = Math.round((endAt - startTime) / 60000)
+    setDoneInfo({ minutes: duration, auto })
     // Warm-up sets are logged but never count toward volume or records
     const working = loggedSets.filter(s => !s.warmup)
     const volume = working.reduce((a, s) => a + s.weight * s.reps, 0)
@@ -312,7 +325,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       return
     }
     {
-      const entry = { date: todayKey(), name: activeWorkoutName, duration: `${duration}min`, volume, sets: loggedSets }
+      const entry = { date: auto ? localDateKey(new Date(startTime)) : todayKey(), name: activeWorkoutName, duration: `${duration}min`, volume, sets: loggedSets }
       saveHistory(entry)
       // Workout-based badges unlocked by this session (body/photo badges are awarded in Progress)
       if (earnedBadgeIds) {
@@ -327,6 +340,17 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
     }
     setScreen('done')
   }
+
+  // The 4-hour limit: a timer while the session runs (minimised too), and straight away
+  // when an older session is restored. The ref keeps the timer on the latest logged sets.
+  const endRef = useRef(handleEndWorkout)
+  endRef.current = handleEndWorkout
+  useEffect(() => {
+    // Waits for the history, so records and badges compare against it
+    if (!homeReady || !startTime || !(inSession || readSession())) return
+    const id = setTimeout(() => endRef.current({ auto: true }), Math.max(0, startTime + SESSION_LIMIT_MS - Date.now()))
+    return () => clearTimeout(id)
+  }, [homeReady, startTime, screen])
 
   // ── Set and exercise controls ─────────────────────────────────────────────
   const setsFor = i => setCounts[i] ?? totalSets
@@ -401,10 +425,10 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       isPro={isPro}
       onUpgrade={onUpgrade}
       onOpenPage={onOpenPage}
-      onOpenGroup={onOpenGroup}
       onOpenGuide={onOpenGuide}
       pendingCount={pendingCount}
       onRetryPending={retryPending}
+      onLogPast={handleLogPast}
     />
   )
 
@@ -456,7 +480,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
           </p>
           <div className="flex gap-3">
             <Button variant="secondary" className="flex-1" onClick={() => setConfirmEnd(false)}>Keep going</Button>
-            <Button variant="danger" className="flex-1" onClick={handleEndWorkout}>End workout</Button>
+            <Button variant="danger" className="flex-1" onClick={() => handleEndWorkout()}>End workout</Button>
           </div>
         </Sheet>
       )}
@@ -475,7 +499,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
         persistWorkout({ screen: 'training', exIdx: nextIdx, setIdx: 0, exerciseNames: newExercises.map(e => e.name), exercises: newExercises })
         setScreen('training')
       }}
-      onEnd={handleEndWorkout}
+      onEnd={() => handleEndWorkout()}
     />
   )
 
@@ -489,16 +513,15 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       onEditSet={handleEditSet} onDeleteSet={handleDeleteSet}
       reps={reps} setReps={setReps}
       freeWorkout={freeWorkout}
-      onLog={(stopwatchSecs, { warmup = false, rpe = null } = {}) => {
+      onLog={(stopwatchSecs, { warmup = false } = {}) => {
         const w = toLb(parseFloat(weight) || 0) // typed in the person's unit, stored in lb
         const ex = activeExercises[exIdx]
         const timedMove = exerciseMode(ex) === 'time'
         // Timed moves: the reps box holds seconds (to the hundredth), or the stopwatch just stopped hands them over
         const r = stopwatchSecs ?? (timedMove ? roundSecs(reps) : parseInt(reps) || 0)
-        const extra = { ...(rpe && { rpe }) }
         const set = timedMove
-          ? { ex: ex.name, set: setIdx + 1, weight: w, reps: 0, secs: r, ...extra }
-          : { ex: ex.name, set: setIdx + 1, weight: w, reps: r, ...extra }
+          ? { ex: ex.name, set: setIdx + 1, weight: w, reps: 0, secs: r }
+          : { ex: ex.name, set: setIdx + 1, weight: w, reps: r }
         // A warm-up set is kept with the workout but isn't one of the working sets: no rest timer,
         // the set count stays, and the boxes keep the weight to build from
         if (warmup) {
@@ -543,7 +566,8 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       prs={sessionPRs}
       badges={sessionBadges}
       loggedSets={loggedSets}
-      startTime={startTime}
+      minutes={doneInfo.minutes}
+      autoEnded={doneInfo.auto}
       freeWorkout={freeWorkout}
       activeExercises={activeExercises}
       workoutName={activeWorkoutName}
@@ -615,9 +639,10 @@ function starterSession(done) {
   return { title: s.title, starter: true, workout: { exercises: s.exercises.map(e => ({ name: e.name, sets: e.sets, reps: e.reps, restSeconds: restSecs(e.rest) })) } }
 }
 
-function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade, onOpenPage, onOpenGroup, onOpenGuide, pendingCount = 0, onRetryPending }) {
+function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade, onOpenPage, onOpenGuide, pendingCount = 0, onRetryPending, onLogPast }) {
   const { fmtVolume } = useUnit()
   const [selectedSession, setSelectedSession] = useState(null)
+  const [loggingDay, setLoggingDay] = useState(null) // 'YYYY-MM-DD' a workout is being added to
 
   // AI plan (full dayData) takes priority; fall back to custom rotation, then default
   const rotation = [...customWorkouts].reverse()
@@ -772,7 +797,10 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
           {(!isRestDay || shownWorkout) && (
             shownWorkout?.sport === 'swim' && onOpenPage ? (
               // A pool session from the plan: swum, then logged on Swim
-              <Button full icon="mdi:swim" className="h-14 text-base" onClick={() => onOpenPage('swim')}>Log this swim</Button>
+              <Button full icon="mdi:swim" className="h-14 text-base" onClick={() => { rememberCardioSport('swim'); onOpenPage('swim') }}>Log this swim</Button>
+            ) : shownWorkout?.sport === 'run' && onOpenPage ? (
+              // A run day from the plan: run it, then log it on Cardio → Run
+              <Button full icon="mdi:run" className="h-14 text-base" onClick={() => { rememberCardioSport('run'); onOpenPage('swim') }}>Log this run</Button>
             ) : (
             <Button full icon="mdi:play" className="h-14 text-base" onClick={shownWorkout ? handlePlanStart : () => onStart(fallbackExs, fallbackName)}>
               {isRestDay ? 'Train anyway' : 'Start workout'}
@@ -784,33 +812,10 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
       </Card>
       )}
 
-      {/* ── Train together: a headline feature, so it gets its own neon card. The big button opens
-           live rooms; Friends and this month's leaderboard sit right under it, one tap each ── */}
-      {onOpenGroup && (
-        <section aria-label="Train together" className="rounded-2xl border border-neon-stroke/40 p-3 space-y-2"
-          style={{ background: 'linear-gradient(135deg, rgb(var(--neon-tint)), rgb(var(--surface)))' }}>
-          <button type="button" onClick={() => onOpenGroup('rooms')}
-            className="press w-full min-h-[4rem] rounded-xl bg-neon text-on-neon active:bg-neon-press px-4 py-3 flex items-center gap-3 text-left">
-            <Icon icon="mdi:account-group" width={28} className="flex-shrink-0" aria-hidden="true" />
-            <span className="flex-1 min-w-0">
-              <span className="block font-bold text-lg leading-tight">Train together</span>
-              <span className="block text-xs font-medium opacity-80">Start or join a live room</span>
-            </span>
-            <Icon icon="mdi:chevron-right" width={24} className="flex-shrink-0" aria-hidden="true" />
-          </button>
-          {/* Side by side; stacked on a narrow screen (or big phone text) */}
-          <div className="grid grid-cols-2 max-[300px]:grid-cols-1 gap-2">
-            {[['friends', 'Friends', 'mdi:account-multiple-outline'], ['ranks', 'Leaderboard', 'mdi:trophy-outline']].map(([tab, label, icon]) => (
-              <button key={tab} type="button" onClick={() => onOpenGroup(tab)}
-                className="press min-h-[2.75rem] rounded-xl px-3 py-2 bg-surface border border-neon-stroke/30 hover:border-neon-stroke text-ink text-sm font-semibold flex items-center justify-center gap-2 transition-colors">
-                <Icon icon={icon} width={18} className="text-neon-ink flex-shrink-0" aria-hidden="true" />{label}
-              </button>
-            ))}
-          </div>
-        </section>
+      <TrainingCalendar history={history} planSchedule={planSchedule} onOpenSession={setSelectedSession} onLogDay={onLogPast ? setLoggingDay : undefined} />
+      {loggingDay && (
+        <LogPastWorkout date={loggingDay} customWorkouts={customWorkouts} onSave={onLogPast} onClose={() => setLoggingDay(null)} />
       )}
-
-      <TrainingCalendar history={history} planSchedule={planSchedule} onOpenSession={setSelectedSession} />
 
       {onOpenPage && <ActionRow icon="mdi:book-open-variant" title="Exercise library" onClick={() => onOpenPage('library')} />}
 
@@ -1039,8 +1044,6 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
   const progress = freeWorkout ? null : (setsDone / setsTotal) * 100
   const prev = loggedSets.filter(s => s.ex === ex.name && !s.warmup).slice(-1)[0]
   const [warmup, setWarmup] = useState(false) // the next set logged is a warm-up
-  const [rpe, setRpe] = useState(null) // how hard it was, 6-10 (optional)
-  useEffect(() => { setRpe(null) }, [ex.name, setIdx])
   const pastSessions = historyFor(exerciseHistory, ex.name) // also under another name for the same lift
   const lastSession = pastSessions[pastSessions.length - 1]
   const records = pastSessions.length ? getRecords(pastSessions) : null
@@ -1151,27 +1154,8 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
             </div>
           </div>
         )}
-        {mode !== 'time' && !warmup && (
-          <div className="mb-3">
-            <div className="flex items-center justify-between gap-2 mb-1.5">
-              <span className="text-xs text-muted">How hard was it? <span className="text-placeholder">(optional)</span></span>
-              <InfoButton title="Effort (RPE)">
-                <div className="space-y-2 text-sm text-ink-2">
-                  <p>RPE is how hard a set felt, out of 10. 10 means you couldn't do one more rep. 8 means you had about 2 left. 6 is easy.</p>
-                  <p>Most working sets should land around 7 to 9. It's saved with the set, so you can see how a weight felt next time.</p>
-                </div>
-              </InfoButton>
-            </div>
-            <div className="grid grid-cols-5 gap-1.5" role="group" aria-label="Effort, RPE">
-              {[6, 7, 8, 9, 10].map(n => (
-                <button key={n} type="button" onClick={() => setRpe(r => (r === n ? null : n))} aria-pressed={rpe === n}
-                  className={`press min-h-[40px] rounded-xl border text-sm font-semibold tabular-nums transition-colors ${rpe === n ? 'bg-neon text-on-neon border-neon' : 'bg-raised text-ink-2 border-line'}`}>{n}</button>
-              ))}
-            </div>
-          </div>
-        )}
         {/* Logging mid-hold stops the clock and logs the exact time */}
-        <Button full icon={warmup ? 'mdi:fire' : 'mdi:check'} onClick={() => { onLog(holding ? stopHold.current?.() : undefined, { warmup, rpe }); setWarmup(false) }}
+        <Button full icon={warmup ? 'mdi:fire' : 'mdi:check'} onClick={() => { onLog(holding ? stopHold.current?.() : undefined, { warmup }); setWarmup(false) }}
           disabled={mode === 'time' && !holding && !(parseFloat(reps) > 0)}>{warmup ? 'Log warm-up set' : `Log set ${setIdx + 1}`}</Button>
         {mode !== 'time' && (
           <button type="button" onClick={() => setWarmup(w => !w)} aria-pressed={warmup}
@@ -1393,7 +1377,7 @@ function LoggedSets({ sets, onEdit, onDelete }) {
                   ? <span className="w-7 h-7 rounded-full border border-line-strong text-muted text-xs font-bold flex items-center justify-center flex-shrink-0" aria-label="Warm-up set">W</span>
                   : <span className="w-7 h-7 rounded-full bg-neon text-on-neon text-xs font-bold flex items-center justify-center flex-shrink-0" aria-label={`Set ${s.set}`}>{s.set}</span>}
                 <span className={`flex-1 text-base font-bold tabular-nums ${s.warmup ? 'text-ink-2' : 'text-ink'}`}>
-                  {setText(s, fmt)}{s.rpe ? <span className="ml-2 text-xs font-semibold text-muted">RPE {s.rpe}</span> : null}
+                  {setText(s, fmt)}
                 </span>
                 <button aria-label={s.warmup ? 'Edit warm-up set' : `Edit set ${s.set}`} onClick={() => { setDraft({ weight: String(fromLb(s.weight)), reps: String(isTimedSet(s) ? s.secs : s.reps), timed: isTimedSet(s) }); setEditing(s.i) }}
                   className="press w-11 h-11 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-raised">
@@ -1544,9 +1528,8 @@ function RestScreen({ exercises, restDuration, exIdx, setIdx, totalSets, onAdvan
 // ─────────────────────────────────────────────────────────────────────────────
 // Done
 // ─────────────────────────────────────────────────────────────────────────────
-function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, freeWorkout, activeExercises, workoutName: doneName, onSaveWorkout, saveStatus, onRetrySave }) {
+function DoneScreen({ prs = [], badges = [], loggedSets, minutes: duration, autoEnded = false, onHome, freeWorkout, activeExercises, workoutName: doneName, onSaveWorkout, saveStatus, onRetrySave }) {
   const { fmt, fmtVolume } = useUnit()
-  const duration = Math.round((Date.now() - startTime) / 60000)
   const volume   = loggedSets.filter(s => !s.warmup).reduce((a, s) => a + s.weight * s.reps, 0)
 
   // Unique exercises in the exact order they were first performed
@@ -1586,6 +1569,7 @@ function DoneScreen({ prs = [], badges = [], loggedSets, startTime, onHome, free
       <Icon icon="mdi:trophy-outline" width={56} className="mx-auto text-neon-ink" />
       <div>
         <div className="font-bold text-3xl text-neon-ink">Workout complete</div>
+        {autoEnded && <p className="text-sm text-muted mt-1">Ended automatically after 4 hours. Everything you logged is saved.</p>}
       </div>
 
       {saveStatus === 'queued' && (

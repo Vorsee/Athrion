@@ -81,7 +81,7 @@ export function shortVersion(day, minutes) {
   return { ...day, durationMinutes: minutes, short: minutes, workout: { ...day.workout, exercises } }
 }
 // The shorter lengths worth offering for a day: only when it's a gym day longer than them
-export const shortOptions = day => (day?.sport === 'swim' || (day?.workout?.exercises ?? []).some(e => timedReps(e.reps)) ? []
+export const shortOptions = day => (day?.sport === 'swim' || day?.sport === 'run' || (day?.workout?.exercises ?? []).some(e => timedReps(e.reps)) ? []
   : SHORT_MINUTES.filter(m => m < (day?.durationMinutes || daySets(day) * MIN_PER_SET)))
 
 /**
@@ -107,9 +107,12 @@ export function reshuffleWeek(schedule, thisWeek, today = new Date()) {
   return { schedule: DAYS.map(d => out[d]).filter(Boolean), moves }
 }
 
-// Swims (cardio_logs) as training days, so a plan's pool sessions count as done
-export const swimsAsHistory = (cardio, label = () => 'Swim') => (cardio ?? []).filter(l => l.kind === 'swim')
-  .map(l => ({ date: l.date, created_at: l.created_at, name: label(l), sets: [], volume: 0 }))
+// Swims and runs (cardio_logs) as training days, so a plan's pool sessions and cardio days
+// count as done, and a run on a free day counts as training that day
+const cardioName = l => (l.kind === 'run' ? 'Run' : 'Swim')
+export const cardioAsHistory = (cardio, label = cardioName) => (cardio ?? []).filter(l => l.kind === 'swim' || l.kind === 'run')
+  .map(l => ({ date: l.date, created_at: l.created_at, name: label(l), sets: [], volume: 0, cardio: l.kind }))
+export const swimsAsHistory = cardioAsHistory // the older name
 
 /**
  * The week as the coach runs it, the same on Plan and Train: progress so far, whether it's a

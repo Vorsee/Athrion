@@ -8,6 +8,18 @@ export const MAX_SETS = 10
 
 export const makeSets = (n = 3, rest = 60, reps = null) => Array.from({ length: n }, () => ({ reps, rest }))
 
+// A free workout room: no exercises planned, everyone picks their own as they go, and the
+// host sets the sets per exercise and the rest between sets (the choices Train's free
+// workout offers). Saved as plan = [{ free: true, sets }], so it needs no new column;
+// planFrom leaves it out, freeRoom reads it.
+export const FREE_SET_OPTIONS = [2, 3, 4, 5]
+export const FREE_REST_OPTIONS = [30, 60, 90, 120]
+export const freePlan = ({ sets = 3, rest = 60 } = {}) => [{ free: true, sets: makeSets(sets, rest) }]
+export function freeRoom(plan) {
+  const head = Array.isArray(plan) ? plan[0] : null
+  return head?.free ? { sets: head.sets?.length || 3, rest: head.sets?.[0]?.rest ?? 60 } : null
+}
+
 export function planFrom(sess) {
   if (Array.isArray(sess?.plan) && sess.plan.length) {
     return sess.plan

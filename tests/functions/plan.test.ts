@@ -116,3 +116,21 @@ describe('gatherProgress', () => {
     expect(p.checkins[0]).toMatchObject({ date: '2026-10-20', weightLb: 181, energy: 4 })
   })
 })
+
+describe('runners', () => {
+  const recentRuns = { runsLast8Weeks: 16, runsPerWeek: 2, averageWeeklyKm: 12, longestRunKm: 8, bestPacePerKm: '4:50', recentPacePerKm: '5:30', usualRunDays: ['Tuesday', 'Saturday'], daysSinceLastRun: 2 }
+  it('sends their recent runs with the plan request, and lets a day be a run', () => {
+    const msg = JSON.parse(buildUserMessage({ ...fp, recentRuns }, nt, null))
+    expect(msg.profile.recentRuns).toEqual(recentRuns)
+    expect(msg.outputSchema.properties.weeklySchedule.items.properties.sport.enum).toContain('run')
+    expect(JSON.parse(buildUserMessage(fp, nt, null)).profile.recentRuns).toBeUndefined()
+  })
+  it('turns the backup plan\'s easy cardio day into an easy run at their pace', () => {
+    const plan = makeFallbackPlan({ ...fp, recentRuns }, nt)
+    const run = plan.weeklySchedule.find((d: any) => d.sport === 'run')
+    expect(run).toMatchObject({ type: 'workout', title: 'Easy Run' })
+    expect(run.workout.exercises[0].intensityNote).toMatch(/^About 6:30 per km/)
+    expect(isValidPlan(plan)).toBe(true)
+    expect(makeFallbackPlan(fp, nt).weeklySchedule.some((d: any) => d.sport === 'run')).toBe(false)
+  })
+})

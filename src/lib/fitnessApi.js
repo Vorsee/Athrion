@@ -1,4 +1,5 @@
 import { supabase } from './supabase.js'
+import { runSummary } from './cardio.js'
 
 // ── Fitness Profile ───────────────────────────────────────────────────────────
 
@@ -164,10 +165,19 @@ async function swimPaces() {
     : undefined
 }
 
+// Runners: the last 8 weeks of runs (lib/cardio.js), so the plan works around them
+async function recentRuns() {
+  const { data } = await supabase.from('cardio_logs').select('date, kind, distance_m, seconds').eq('kind', 'run')
+    .order('date', { ascending: false }).limit(200)
+  return runSummary(data ?? [])
+}
+
 export async function generatePlan(fitnessProfile, nutritionTargets, mode = 'new') {
   if ([fitnessProfile.primaryGoal, ...(fitnessProfile.secondaryGoals ?? [])].includes('swimming')) {
     fitnessProfile = { ...fitnessProfile, swimPaces: await swimPaces().catch(() => undefined) }
   }
+  // Every goal: anyone who runs gets a plan that counts their runs (new plans and weekly adapts)
+  fitnessProfile = { ...fitnessProfile, recentRuns: await recentRuns().catch(() => undefined) }
   const { data: { session } } = await supabase.auth.getSession()
   if (!session?.access_token) throw new Error('Not authenticated')
 

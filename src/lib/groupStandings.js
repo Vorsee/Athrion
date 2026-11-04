@@ -18,9 +18,11 @@ function position(last, plan) {
 }
 
 // plan: see groupPlan.js. Each person rests for the rest of the set they last logged.
+// free: a free room's { sets, rest } (freeRoom): everyone picks their own exercises, so there's
+// no total to finish, only sets done and where they are.
 // → [{ id, name, volume, reps, done, total, finished, resting, where, latest }], best first
-export function standings({ sets, participants, plan, now = Date.now() }) {
-  const total = totalSets(plan)
+export function standings({ sets, participants, plan, free = null, now = Date.now() }) {
+  const total = free ? 0 : totalSets(plan)
   const people = new Map()
   const person = (id, name) => {
     if (!people.has(id)) people.set(id, { id, name, sets: [], volume: 0, reps: 0 })
@@ -36,6 +38,11 @@ export function standings({ sets, participants, plan, now = Date.now() }) {
 
   return [...people.values()].map(p => {
     const latest = p.sets[p.sets.length - 1] ?? null
+    if (free) {
+      const resting = !!latest && now - Date.parse(latest.logged_at) < free.rest * 1000
+      const where = latest ? `${latest.exercise} · set ${latest.set_num}` : 'Picking an exercise'
+      return { id: p.id, name: p.name, volume: p.volume, reps: p.reps, done: p.sets.length, total: 0, finished: false, resting, where, latest }
+    }
     const done = Math.min(p.sets.length, total)
     const pos = position(latest, plan)
     const finished = total > 0 && (done >= total || pos.exIdx >= plan.length)

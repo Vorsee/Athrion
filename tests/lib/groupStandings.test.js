@@ -77,3 +77,23 @@ describe('rooms planned set by set', () => {
     expect(bob).toMatchObject({ resting: false, where: 'Squat · set 3/3' }) // 100s into a 90s rest
   })
 })
+
+describe('free workout rooms', () => {
+  it('saves as a one-item plan that planFrom leaves out and freeRoom reads', async () => {
+    const { freePlan, freeRoom } = await import('../../src/lib/groupPlan.js')
+    const plan = freePlan({ sets: 4, rest: 90 })
+    expect(freeRoom(plan)).toEqual({ sets: 4, rest: 90 })
+    expect(planFrom({ plan })).toEqual([])
+    expect(freeRoom(planFrom({ exercises: ['Squat'] }))).toBeNull()
+    expect(freeRoom(null)).toBeNull()
+  })
+  it('ranks by volume with no total to finish, resting for the room rest', () => {
+    const sets = [set(1, 'a', 'Deadlift', 1, 300, 5, 30), set(2, 'b', 'Curl', 3, 40, 10, 200)]
+    const rows = standings({ sets, participants, plan: [], free: { sets: 3, rest: 60 }, now })
+    expect(rows.map(r => [r.name, r.done, r.total, r.finished, r.resting, r.where])).toEqual([
+      ['alice', 1, 0, false, true, 'Deadlift · set 1'],
+      ['bob', 1, 0, false, false, 'Curl · set 3'],
+      ['cara', 0, 0, false, false, 'Picking an exercise'],
+    ])
+  })
+})

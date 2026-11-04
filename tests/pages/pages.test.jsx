@@ -1,7 +1,7 @@
 // Smoke and key-flow tests for every other page, plus the App shell.
 // "Today" is Friday 23 Oct 2026, 10am New York.
 import { describe, it, expect, afterEach, beforeAll, beforeEach, vi } from 'vitest'
-import { render, screen, waitFor, act } from '@testing-library/react'
+import { render, screen, waitFor, act, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { sb, USER } from '../helpers/supabaseMock.js'
 import { planRow, restTodayPlan, withWorkoutOn, profile, fitnessProfile } from '../helpers/fixtures.js'
@@ -271,40 +271,30 @@ describe('Upgrade sheet before Stripe', () => {
   })
 })
 
-describe('Library and Group live inside Workout', () => {
-  it('opens Train together straight on Friends or the leaderboard', async () => {
+describe('Train together is its own tab', () => {
+  function signInPro() {
     sb.supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: 't' } } })
     sb.set('user_profiles', { data: profile, error: null })
     sb.set('fitness_profiles', { data: fitnessProfile, error: null })
     sb.set('subscriptions', { data: { status: 'pro' }, error: null })
     sb.set('fitness_plans', { data: planRow, error: null })
+  }
+  it('opens on Rooms from the bar, and Train no longer has the card', async () => {
+    signInPro()
     render(<P.App />)
-    await userEvent.click(await screen.findByRole('button', { name: 'Leaderboard' }))
-    expect(await screen.findByRole('tab', { name: 'Leaderboard' })).toHaveAttribute('aria-selected', 'true')
-    await userEvent.click(screen.getByLabelText('Back to Train'))
-    await userEvent.click(await screen.findByRole('button', { name: 'Friends' }))
-    expect(await screen.findByRole('tab', { name: 'Friends' })).toHaveAttribute('aria-selected', 'true')
-  })
-  it('opens from cards on the Workout tab and has a way back', async () => {
-    sb.supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: 't' } } })
-    sb.set('user_profiles', { data: profile, error: null })
-    sb.set('fitness_profiles', { data: fitnessProfile, error: null })
-    sb.set('subscriptions', { data: { status: 'pro' }, error: null })
-    sb.set('fitness_plans', { data: planRow, error: null })
-    render(<P.App />)
-    await userEvent.click(await screen.findByRole('button', { name: /^Train together/ }))
-    expect(await screen.findByText('Host a room')).toBeInTheDocument()
-    await userEvent.click(screen.getByLabelText('Back to Train'))
     expect(await screen.findByText('Exercise library')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Train together' })).toBeNull()
+    await userEvent.click(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('button', { name: /Together/ }))
+    expect(await screen.findByText('Host a room')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Rooms' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByLabelText('Back to Train')).toBeNull() // a tab, not a page inside Train
+    await userEvent.click(screen.getByRole('tab', { name: 'Leaderboard' }))
+    expect(screen.getByRole('tab', { name: 'Leaderboard' })).toHaveAttribute('aria-selected', 'true')
   })
   it('steps back with the phone back gesture instead of leaving the app', async () => {
-    sb.supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: 't' } } })
-    sb.set('user_profiles', { data: profile, error: null })
-    sb.set('fitness_profiles', { data: fitnessProfile, error: null })
-    sb.set('subscriptions', { data: { status: 'pro' }, error: null })
-    sb.set('fitness_plans', { data: planRow, error: null })
+    signInPro()
     render(<P.App />)
-    await userEvent.click(await screen.findByRole('button', { name: /^Train together/ }))
+    await userEvent.click(within(await screen.findByRole('navigation', { name: 'Main' })).getByRole('button', { name: /Together/ }))
     expect(await screen.findByText('Host a room')).toBeInTheDocument()
     await waitFor(() => expect(window.history.state?.page).toBe('group'))
     act(() => window.history.back())

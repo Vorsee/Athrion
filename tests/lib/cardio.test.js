@@ -31,3 +31,20 @@ describe('cardio', () => {
     expect(s.count).toBe(3)
   })
 })
+
+describe('runs for plans and training days', () => {
+  it('sums up the last 8 weeks of runs for the plan', async () => {
+    const { runSummary } = await import('../../src/lib/cardio.js')
+    const now = new Date(2026, 10, 4) // Wednesday, Nov 4 2026
+    const r = (date, km, mins) => ({ kind: 'run', date, distance_m: km * 1000, seconds: mins * 60 })
+    const s = runSummary([r('2026-11-03', 5, 27.5), r('2026-10-27', 5, 28), r('2026-10-31', 10, 60), r('2026-08-01', 20, 120), { kind: 'swim', date: '2026-11-02', distance_m: 1000, seconds: 1200 }], now)
+    expect(s).toMatchObject({ runsLast8Weeks: 3, longestRunKm: 10, bestPacePerKm: '5:30', usualRunDays: ['Tuesday'], daysSinceLastRun: 1 })
+    expect(s.averageWeeklyKm).toBe(2.5)
+    expect(runSummary([], now)).toBeUndefined()
+  })
+  it('counts runs and swims as training days', async () => {
+    const { cardioAsHistory } = await import('../../src/lib/coaching.js')
+    const days = cardioAsHistory([{ kind: 'run', date: '2026-11-03' }, { kind: 'swim', date: '2026-11-02' }])
+    expect(days.map(d => [d.date, d.name])).toEqual([['2026-11-03', 'Run'], ['2026-11-02', 'Swim']])
+  })
+})

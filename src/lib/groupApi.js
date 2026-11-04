@@ -49,7 +49,7 @@ export async function joinGroupSession(code, displayName) {
 // Before 013 is applied the plan column is missing: save the old columns alone.
 export async function saveSessionPlan(sessionId, plan) {
   const legacy = {
-    exercises: plan.map(e => e.name),
+    exercises: plan.map(e => e.name).filter(Boolean), // a free room's plan has no names
     total_sets: Math.max(1, ...plan.map(e => e.sets.length)),
     rest_secs: plan[0]?.sets[0]?.rest ?? 60,
   }

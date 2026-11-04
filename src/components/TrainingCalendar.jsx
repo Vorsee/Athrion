@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Icon } from '@iconify/react'
-import { Card, Sheet } from './ui/index.js'
+import { Button, Card, Sheet } from './ui/index.js'
 import { localDateKey, todayKey } from '../lib/data.js'
 import { useUnit } from '../lib/units.js'
 
@@ -12,7 +12,8 @@ const mondayIndex = d => (d.getDay() + 6) % 7
 
 // Month view of the training log: trained days filled, today outlined, upcoming
 // plan days dotted. Tapping a day lists its sessions; each opens the session detail.
-export default function TrainingCalendar({ history, planSchedule, onOpenSession }) {
+// onLogDay(date): a past day (or today) can have a workout added to it after the fact.
+export default function TrainingCalendar({ history, planSchedule, onOpenSession, onLogDay }) {
   const { fmtVolume } = useUnit()
   const today = todayKey()
   const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1) })
@@ -118,6 +119,11 @@ export default function TrainingCalendar({ history, planSchedule, onOpenSession 
             <p className="text-sm text-ink-2">Planned: <span className="font-semibold text-ink">{openPlan.title}</span></p>
           ) : (
             <p className="text-sm text-muted">{openDay > today ? 'Nothing planned.' : 'No training logged.'}</p>
+          )}
+          {onLogDay && openDay <= today && (
+            <Button variant="secondary" full icon="mdi:plus" onClick={() => { const d = openDay; setOpenDay(null); onLogDay(d) }}>
+              {openSessions.length ? 'Log another workout' : 'Log a workout'}
+            </Button>
           )}
         </Sheet>
       )}

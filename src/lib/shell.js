@@ -169,6 +169,10 @@ export function useFocusMode(active) {
 // ── Active session, read from the workout's saved state ─────────────────────
 export const SESSION_EVENT = 'athrion:session'
 
+// A workout (on Train or in a Train together room) ends by itself 4 hours after it started,
+// so one left open doesn't run for days; what was logged is saved, timed at 4 hours.
+export const SESSION_LIMIT_MS = 4 * 60 * 60 * 1000
+
 export function notifySession() {
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(SESSION_EVENT))
 }

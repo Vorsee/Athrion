@@ -13,6 +13,7 @@ import { PageSkeleton } from './components/ui/States.jsx'
 import { readGuidePick, clearGuidePick } from './lib/guidePlans.js'
 import { rememberInvite, readInvite } from './lib/socialApi.js'
 import { parseShopPath, readShopLink, clearShopLink, shopTarget } from './lib/shopLink.js'
+import { rememberCardioSport } from './lib/cardio.js'
 import { SWIM_INVITE_PATH, rememberSwimInvite, readSwimInvite, rememberSwimStart, readSwimStart, clearSwimStart } from './lib/swim.js'
 import { fetchIsAdmin } from './lib/coachApi.js'
 import { useUnreadCount } from './lib/notifications.js'
@@ -34,7 +35,7 @@ const Group             = lazy(() => import('./pages/Group.jsx'))
 const Plan              = lazy(() => import('./pages/Plan.jsx'))
 const Coach             = lazy(() => import('./pages/Coach.jsx'))
 const Coaches           = lazy(() => import('./pages/Coaches.jsx'))
-const Swim              = lazy(() => import('./pages/Swim.jsx'))
+const Cardio            = lazy(() => import('./pages/Cardio.jsx')) // Swim and Run
 const ProfileModal      = lazy(() => import('./components/ProfileModal.jsx'))
 const UpgradeSheet      = lazy(() => import('./components/UpgradeSheet.jsx'))
 const NotificationsSheet = lazy(() => import('./components/NotificationsSheet.jsx'))
@@ -52,7 +53,7 @@ const onGuidePath = () => /^\/(workout|guide)\/?$/.test(window.location.pathname
 // athrion.app/add/<nickname>: a friend invite
 const INVITE_PATH = /^\/add\/@?([A-Za-z0-9._-]{3,20})\/?$/
 
-const PAGES = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan, coach: Coach, shop: Coaches, swim: Swim }
+const PAGES = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan, coach: Coach, shop: Coaches, swim: Cardio }
 // The coach shop is hidden from everyone but admins while it's being built
 const ADMIN_PAGES = ['shop', 'coach']
 
@@ -376,14 +377,14 @@ export default function App() {
   )
 
   const pageProps = {
-    workout: { pendingWorkout, onClearPending: () => setPendingWorkout(null), isPro, onUpgrade: goUpgrade, onOpenPage: navigate, onOpenGroup: tab => setGroupIntent({ tab }), onOpenGuide: openGuide, resumeTick },
+    workout: { pendingWorkout, onClearPending: () => setPendingWorkout(null), isPro, onUpgrade: goUpgrade, onOpenPage: navigate, onOpenGuide: openGuide, resumeTick },
     library: { onStartWorkout: handleStartFromLibrary },
     shop: { onStartPlanDay: handleStartPlanDay, onOpenCoach: () => navigate('coach'), shopIntent, onShopIntentDone: () => setShopIntent(null) },
     coach: { onOpenShop: () => navigate('shop') },
     calories: { profile, isPro, onUpgrade: goUpgrade, onGoToPlan: () => navigate('plan'), intent: foodIntent, onIntentHandled: () => setFoodIntent(null) },
     group: { session, intent: groupIntent, onIntentDone: () => setGroupIntent(null) },
     swim: { intent: swimIntent, onIntentDone: () => setSwimIntent(null), isPro, onUpgrade: goUpgrade },
-    plan: { isPro, onUpgrade: goUpgrade, onStartSetup: () => setPlanSetup(true), onGoToWorkout: () => navigate('workout'), onStartWorkout: handleStartPlanDay, onOpenSwim: () => navigate('swim'), profile, onProfileChange: () => { refreshProfile(); refreshFitnessProfile() } },
+    plan: { isPro, onUpgrade: goUpgrade, onStartSetup: () => setPlanSetup(true), onGoToWorkout: () => navigate('workout'), onStartWorkout: handleStartPlanDay, onOpenSwim: () => { rememberCardioSport('swim'); navigate('swim') }, onOpenRun: () => { rememberCardioSport('run'); navigate('swim') }, profile, onProfileChange: () => { refreshProfile(); refreshFitnessProfile() } },
   }
 
   const PageComponent = (!isAdmin && ADMIN_PAGES.includes(page) ? null : PAGES[page]) ?? Workout

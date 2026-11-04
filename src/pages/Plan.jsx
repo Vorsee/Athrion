@@ -23,7 +23,7 @@ import { sampleFor } from '../lib/sampleFor.js'
 import ProLock from '../components/ProLock.jsx'
 import PlanBuilding from '../components/PlanBuilding.jsx'
 import { useUnit } from '../lib/units.js'
-import { coachedWeek, swimsAsHistory, dayTargets, startableDay, weeklyReview } from '../lib/coaching.js'
+import { coachedWeek, cardioAsHistory, dayTargets, startableDay, weeklyReview } from '../lib/coaching.js'
 import { liftProgress } from '../lib/liftGoals.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -155,14 +155,15 @@ function TodayWorkout({ dayData, onGoToWorkout, onStartWorkout, onSwap }) {
 
 // Today in one row: what the plan has on, and a way to start it. The exercises live on Train
 // and in the weekly schedule below, not repeated here.
-function TodayRow({ dayData, onGoToWorkout, onStartWorkout, onOpenSwim }) {
+function TodayRow({ dayData, onGoToWorkout, onStartWorkout, onOpenSwim, onOpenRun }) {
   if (!dayData) return null
   const isRest = dayData.type !== 'workout'
   const n = dayData.workout?.exercises?.length ?? 0
   const swim = dayData.sport === 'swim'
+  const run = dayData.sport === 'run' // a run day: run it, then log it on Cardio
   return (
     <Card className="flex flex-wrap items-center gap-x-3 gap-y-2">
-      <Icon icon={isRest ? 'mdi:sleep' : swim ? 'mdi:swim' : 'mdi:dumbbell'} width={26} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
+      <Icon icon={isRest ? 'mdi:sleep' : swim ? 'mdi:swim' : run ? 'mdi:run' : 'mdi:dumbbell'} width={26} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
       <div className="grow basis-0 min-w-[8rem]">
         <div className="text-xs font-semibold text-neon-ink">Today</div>
         <div className="font-bold text-lg text-ink leading-tight break-words">{dayData.title}</div>
@@ -171,6 +172,7 @@ function TodayRow({ dayData, onGoToWorkout, onStartWorkout, onOpenSwim }) {
       {isRest
         ? onGoToWorkout && <Button size="sm" variant="secondary" onClick={onGoToWorkout} className="ml-auto">Train anyway</Button>
         : swim ? onOpenSwim && <Button size="sm" icon="mdi:swim" onClick={onOpenSwim} className="ml-auto">Log swim</Button>
+        : run ? onOpenRun && <Button size="sm" icon="mdi:run" onClick={onOpenRun} className="ml-auto">Log run</Button>
         : n > 0 && <Button size="sm" icon="mdi:play" onClick={() => (onStartWorkout ? onStartWorkout(dayData) : onGoToWorkout())} className="ml-auto">Start</Button>}
     </Card>
   )
@@ -187,8 +189,8 @@ function useGoalData() {
       fetchWorkoutHistory().catch(() => []),
       fetchCardio(500).catch(() => []),
     ])
-    // Swims count as training days too, so the plan's pool sessions show as done
-    const swims = swimsAsHistory(cardio, l => (l.stroke ? `${strokeLabel(l.stroke)} swim` : 'Swim'))
+    // Swims and runs count as training days too, so the plan's pool sessions and cardio show as done
+    const swims = cardioAsHistory(cardio, l => (l.kind === 'run' ? 'Run' : l.stroke ? `${strokeLabel(l.stroke)} swim` : 'Swim'))
     setData({ fp, weights: mergeWeights(measurements, checkins), history: [...workouts, ...swims] })
   }
   useEffect(() => { load() }, [])
@@ -614,7 +616,7 @@ function FreePlan({ onUpgrade, onStartSetup, profile, onProfileChange }) {
   )
 }
 
-function PlanPage({ onGoToWorkout, onStartWorkout, onOpenSwim, profile, onProfileChange }) {
+function PlanPage({ onGoToWorkout, onStartWorkout, onOpenSwim, onOpenRun, profile, onProfileChange }) {
   const { unit } = useUnit()
   const [plan, setPlan]             = useState(undefined) // undefined=loading
   const [nutrition, setNutrition]   = useState(null)
@@ -797,7 +799,7 @@ function PlanPage({ onGoToWorkout, onStartWorkout, onOpenSwim, profile, onProfil
 
       <TipCard tip={planData.coachingTip ?? (goalData?.fp ? personalTip(dbProfileToPayload(goalData.fp)) : null)} />
 
-      <TodayRow dayData={todayData} onGoToWorkout={onGoToWorkout} onStartWorkout={onStartWorkout && startDay} onOpenSwim={onOpenSwim} />
+      <TodayRow dayData={todayData} onGoToWorkout={onGoToWorkout} onStartWorkout={onStartWorkout && startDay} onOpenSwim={onOpenSwim} onOpenRun={onOpenRun} />
 
       {review && <CoachCard review={review} moves={moves} deload={deload} week={progress.week} />}
 

@@ -1,21 +1,22 @@
 import { useEffect, useState } from 'react'
 import { Icon } from '@iconify/react'
-import { useShell, goBack, readSession, SESSION_EVENT } from '../lib/shell.js'
+import { useShell, goBack, readSession, SESSION_EVENT, SESSION_LIMIT_MS } from '../lib/shell.js'
 import Brand from './Brand.jsx'
 
 export const LANDING = 'workout'
 
 const TABS = [
   { id: 'workout',  label: 'Train',    icon: 'mdi:dumbbell' },
+  { id: 'group',    label: 'Together', icon: 'mdi:account-group-outline' },
   { id: 'plan',     label: 'Plan',     icon: 'mdi:calendar-check-outline' },
   { id: 'calories', label: 'Food',     icon: 'mdi:food-apple-outline' },
-  { id: 'swim',     label: 'Swim',     icon: 'mdi:swim' },
+  { id: 'swim',     label: 'Cardio',   icon: 'mdi:heart-pulse' }, // Swim and Run inside (pages/Cardio.jsx)
   // Admins only while the coach shop is being built
   { id: 'shop',     label: 'Coaches',  icon: 'mdi:whistle-outline', admin: true },
 ]
 
 // Pages opened from inside a tab, rather than from the bottom bar
-export const PARENT_TAB = { library: 'workout', group: 'workout', coach: 'shop' }
+export const PARENT_TAB = { library: 'workout', coach: 'shop' }
 
 // Header title per page. `large`: the page shows its own big title at the top of
 // the content, so the bar title only fades in once that has scrolled away.
@@ -27,7 +28,7 @@ const PAGE_META = {
   group:    { title: 'Train together', large: true },
   coach:    { title: 'Coach', large: true },
   shop:     { title: 'Coaches', large: true },
-  swim:     { title: 'Swim', large: true },
+  swim:     { title: 'Cardio', large: true },
 }
 
 export const pageTitle = id => PAGE_META[id]?.title ?? ''
@@ -157,7 +158,8 @@ export function useMinimisedSession() {
       clearInterval(id)
     }
   }, [])
-  return s?.minimised ? s : null
+  // Past the 4-hour limit it's no longer open: Train ends and saves it when next opened
+  return s?.minimised && Date.now() - s.startTime < SESSION_LIMIT_MS ? s : null
 }
 
 export function SessionBar({ session, onResume }) {
@@ -201,9 +203,9 @@ export default function Nav({ page, setPage, session, isPro, isAdmin = false, on
                   <span aria-hidden="true"
                     className={`absolute top-0 left-1/2 -translate-x-1/2 w-7 h-[3px] rounded-b-full bg-neon transition-opacity duration-200 ${active ? 'opacity-100' : 'opacity-0'}`} />
                   <Icon icon={t.icon} width={24} aria-hidden="true" />
-                  {/* Four short labels fit at any width; with the admin's fifth tab, below 280px only the open
-                      tab keeps its label. The names stay for screen readers */}
-                  <span className={`text-xs font-semibold leading-tight tracking-tight ${active || tabs.length < 5 ? '' : 'max-[279px]:sr-only'}`}>
+                  {/* Five short labels fit down to 280px, the admin's six down to 360px; narrower, only the
+                      open tab keeps its label. The names stay for screen readers */}
+                  <span className={`text-xs font-semibold leading-tight tracking-tight ${active ? '' : tabs.length > 5 ? 'max-[359px]:sr-only' : 'max-[279px]:sr-only'}`}>
                     {t.label}
                   </span>
                 </button>

@@ -42,8 +42,9 @@ Rules:
 - For rest and active-recovery days use empty warmup, exercises and cooldown arrays and fill recoveryNotes.
 - Legs are muscles too: unless an injury rules it out, every plan with 3 or more training days trains the lower body (quads, hamstrings, glutes, calves) at least as often as the upper body, with at least one full leg day or a squat or lunge and a hip hinge in most sessions. Never write an upper-body-only week.
 - Cardio has a place in every plan except mobility: at least one cardio session a week (a short cardio day such as "Easy Cardio" on a rest day, or 10-20 minutes at the end of a session), written as exercises with a duration in reps, for example "Incline Walk" with reps "20-30 min".
+- Runs: when profile.recentRuns is given, this person already runs, and their runs are part of the week. Keep about runsPerWeek runs, on their usualRunDays when those are free. A day that is only a run has sport "run", type "workout", and one to three exercises written like cardio, for example "Easy Run" with sets 1 and reps "30 min" (or "5 km"), restSeconds 0, equipment "None", and the pace in intensityNote from their paces: easy runs about 45-75 s per km slower than recentPacePerKm, tempo or interval work near bestPacePerKm; a short run can also finish a gym session. Their runs count as the week's cardio, so don't add other cardio on top for muscle or strength goals; for lose weight and endurance goals runs can carry most of it. Never put the hardest leg session the day before or after their longest run or a hard run; pair runs with upper-body days or rest days. Keep weekly running within 10% of averageWeeklyKm unless the goal is endurance and they are building up. If daysSinceLastRun is over 14, restart a little easier. Mention in the notes how the lifting fits around the runs.
 - Use plain, common exercise names people know and that match a normal gym app library: "Squat", "Bench Press", "Romanian Deadlift", "Lunge", "Leg Press", "Lat Pulldown", "Standing Calf Raise", "Incline Walk", "Stationary Bike". Avoid made-up or brand names.
-- Every day has a sport: "gym" for land training and rest days, "swim" for pool sessions. Pool sessions only when swimming is a goal. In a pool session each exercise is one set of repeats: name says the part and the stroke ("Warm-up: easy freestyle", "Drill: catch-up freestyle", "Main set: freestyle", "Kick: flutter kick with board", "Cool-down: easy backstroke"), sets is the number of repeats, reps is the distance and send-off ("100 m on 1:50", or "400 m easy" for a single swim), restSeconds is 0, equipment is "Pool". Every pool session starts with a short dryland block before the warm-up: 2-3 exercises named "Dryland: ..." (band pull-aparts, external rotation, squat or streamline jumps, plank, dead bugs), 2 sets each, reps like "15" or "30 s", equipment "Bodyweight" or "Band"; warmup and cooldown are short mobility steps (arm circles, stretching).
+- Every day has a sport: "gym" for land training and rest days, "swim" for pool sessions, "run" for a day that is only a run (see Runs). Pool sessions only when swimming is a goal. In a pool session each exercise is one set of repeats: name says the part and the stroke ("Warm-up: easy freestyle", "Drill: catch-up freestyle", "Main set: freestyle", "Kick: flutter kick with board", "Cool-down: easy backstroke"), sets is the number of repeats, reps is the distance and send-off ("100 m on 1:50", or "400 m easy" for a single swim), restSeconds is 0, equipment is "Pool". Every pool session starts with a short dryland block before the warm-up: 2-3 exercises named "Dryland: ..." (band pull-aparts, external rotation, squat or streamline jumps, plank, dead bugs), 2 sets each, reps like "15" or "30 s", equipment "Bodyweight" or "Band"; warmup and cooldown are short mobility steps (arm circles, stretching).
 - coachingTip is a personal note from you as their trainer, written to them ("you"), from their stats: experience, goal, days, session length, injuries and, on a weekly update, recentProgress. title is 3-6 words; body is 2-3 short sentences. A beginner hears to start light (weights they could lift 3-4 more times, form first), that the targets go up a little every week, and that starting small is the plan, not a step back. Others get the one thing that matters most for them this week. Plain words, no exclamation marks.
 - weeklySchedule has exactly 7 entries, Monday through Sunday, in order.`
 
@@ -70,7 +71,7 @@ export const PLAN_SCHEMA = obj({
     items: obj({
       day: { type: 'string', enum: DAYS },
       type: { type: 'string', enum: ['workout', 'rest', 'active_recovery'] },
-      sport: { type: 'string', enum: ['gym', 'swim'] },
+      sport: { type: 'string', enum: ['gym', 'swim', 'run'] },
       title: str(),
       sessionMode: { type: 'string', enum: ['solo', 'group', 'solo_or_group'] },
       durationMinutes: num(),
@@ -157,6 +158,9 @@ export function buildUserMessage(fp: any, nt: any, progress: any): string {
       },
       // Swimmers: best pace per 100 m by stroke from their logged swims ("1:52"), for send-offs
       swimPaces: fp.swimPaces ?? undefined,
+      // Runners: the last 8 weeks of runs (runsPerWeek, averageWeeklyKm, longestRunKm, paces per km,
+      // usualRunDays, daysSinceLastRun), from lib/cardio.js runSummary. Plan the week around them.
+      recentRuns: fp.recentRuns ?? undefined,
       // Lift targets set on Plan: best set of 5, now and target, in lb. Build the main lifts around them.
       keyLifts: (fp.goalLifts ?? []).map((l: any) => ({ name: l.name, bestSetOf5Lb: l.startLb, targetLb: l.targetLb })),
     },
@@ -449,6 +453,23 @@ const CARDIO_DAY = {
   recoveryNotes: '20-30 min of easy cardio you could talk through: incline walk, stationary bike or elliptical. Helps recovery and heart health without eating into muscle gains.',
 }
 
+// Runners (fp.recentRuns): the easy cardio day is an easy run, about a minute per km slower
+// than their recent pace
+export function runDay(fp: any) {
+  const [m, sec] = String(fp.recentRuns?.recentPacePerKm ?? '').split(':').map(Number)
+  const easy = Number.isFinite(m) && Number.isFinite(sec) ? m * 60 + sec + 60 : null
+  const pace = easy ? `About ${Math.floor(easy / 60)}:${String(easy % 60).padStart(2, '0')} per km, a pace you could talk at.` : 'A pace you could talk at.'
+  return {
+    type: 'workout', sport: 'run', title: 'Easy Run', sessionMode: 'solo', durationMinutes: 30,
+    workout: { warmup: [], cooldown: [], exercises: [{
+      name: 'Easy Run', sets: 1, reps: '25-35 min', restSeconds: 0, intensityNote: pace,
+      formTip: 'Short, light steps and relaxed shoulders.', easierVersion: 'Run-walk: 2 min running, 1 min walking.',
+      harderVersion: 'Add 5 minutes, or finish with 4 strides of 20 s.', equipment: 'None',
+    }] },
+    recoveryNotes: '',
+  }
+}
+
 // Pool sessions for swimming goals: technique, aerobic and speed, sized by experience.
 // Send-offs come from the person's freestyle pace when they've logged swims.
 const SWIM_LEVEL: Record<string, { pace: number, scale: number }> = {
@@ -565,7 +586,9 @@ export function makeFallbackPlan(fp: any, nt: any): any {
     }
     if ((goal === 'build_muscle' || goal === 'improve_strength' || goals.includes('swimming') || goals.includes('lose_weight')) && !activeRecoveryUsed && days < 6) {
       activeRecoveryUsed = true
-      return swims.length ? { day, ...swimDay(swims[fp.primaryGoal === 'swimming' ? 2 : 0]) } : { day, sport: 'gym', ...cardioDay, workout: { warmup: [], exercises: [], cooldown: [] } }
+      return swims.length ? { day, ...swimDay(swims[fp.primaryGoal === 'swimming' ? 2 : 0]) }
+        : fp.recentRuns ? { day, ...runDay(fp) }
+        : { day, sport: 'gym', ...cardioDay, workout: { warmup: [], exercises: [], cooldown: [] } }
     }
     if (activeRecoveryGoals.includes(goal) && !activeRecoveryUsed && days < 6) {
       activeRecoveryUsed = true

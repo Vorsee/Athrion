@@ -16,13 +16,13 @@ const MARK_BARS = [[150, 348, 51, 126], [204, 282, 51, 192], [258, 396, 51, 78]]
  * The text on a card.
  * workout: { kind: 'workout', title, date, minutes, volume, sets, lifts: ['Bench Press 185 lb × 5'], records }
  *   (volume already formatted in the person's unit)
- * swim: { kind: 'swim', title, date, distance, time, pace }
+ * swim / run: { kind: 'swim' | 'run', title, date, distance, time, pace }
  * @returns { eyebrow, title, stats: [[label, value]], lines: [], highlight }
  */
 export function cardContent(a) {
   const date = new Date(`${a.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
-  if (a.kind === 'swim') return {
-    eyebrow: `Swim · ${date}`,
+  if (a.kind === 'swim' || a.kind === 'run') return {
+    eyebrow: `${a.kind === 'run' ? 'Run' : 'Swim'} · ${date}`,
     title: a.title,
     stats: [['Distance', a.distance], ['Time', a.time], ['Pace', a.pace]].filter(([, v]) => v),
     lines: [],
