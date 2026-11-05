@@ -28,6 +28,7 @@ import Sheet from '../../src/components/Sheet.jsx'
 import LineChart from '../../src/components/LineChart.jsx'
 import { DemoButton, ExerciseDemoSheet, SwapSheet } from '../../src/components/ExerciseDemo.jsx'
 import ReminderSettings from '../../src/components/ReminderSettings.jsx'
+import WeighInSheet from '../../src/components/WeighInSheet.jsx'
 import Nav from '../../src/components/Nav.jsx'
 import AdaptiveNutritionCard from '../../src/components/AdaptiveNutritionCard.jsx'
 
@@ -123,28 +124,19 @@ describe('ReminderSettings', () => {
     expect(push.enablePush).toHaveBeenCalled()
     const upsert = sb.op(sb.queriesFor('reminder_settings').at(-1), 'upsert')[0]
     expect(upsert).toMatchObject({ enabled: true, reminder_hour: 18, timezone: 'America/New_York' })
-    expect(screen.getByText(/reminder around 6\s?PM/i)).toBeInTheDocument()
+    expect(screen.getByText(/At most one reminder a day/)).toBeInTheDocument()
   })
-  it('sends a test notification once reminders are on', async () => {
-    sb.set('reminder_settings', { data: { enabled: true, reminder_hour: 7, streak_warnings: true }, error: null })
+  it('is one on/off switch, keeping the saved per-type choices', async () => {
+    sb.set('reminder_settings', { data: { enabled: true, reminder_hour: 7, streak_warnings: true, notify_recap: false }, error: null })
     push.currentSubscription.mockResolvedValueOnce({ endpoint: 'x' })
     render(<ReminderSettings />)
-    await userEvent.click(await screen.findByText('Send test notification'))
-    expect(push.sendTestPush).toHaveBeenCalled()
-    expect(await screen.findByText(/Test sent/)).toBeInTheDocument()
-  })
-  it('saves a per-type switch, keeping the others on', async () => {
-    sb.set('reminder_settings', { data: { enabled: true, reminder_hour: 7, streak_warnings: true }, error: null })
-    push.currentSubscription.mockResolvedValueOnce({ endpoint: 'x' })
-    render(<ReminderSettings />)
-    await userEvent.click(await screen.findByRole('switch', { name: 'Sunday recap of your week' }))
-    const upsert = sb.op(sb.queriesFor('reminder_settings').at(-1), 'upsert')[0]
-    expect(upsert).toMatchObject({ notify_recap: false, notify_friends: true, notify_workout_open: true, notify_achievements: true })
-  })
-  it('hides the test button while reminders are off', async () => {
-    render(<ReminderSettings />)
-    await screen.findByRole('switch')
+    const toggle = await screen.findByRole('switch', { name: 'Notifications' })
+    expect(screen.getAllByRole('switch')).toHaveLength(1)
     expect(screen.queryByText('Send test notification')).toBeNull()
+    expect(screen.queryByText('Remind me at')).toBeNull()
+    await userEvent.click(toggle)
+    const upsert = sb.op(sb.queriesFor('reminder_settings').at(-1), 'upsert')[0]
+    expect(upsert).toMatchObject({ enabled: false, reminder_hour: 7, notify_recap: false, notify_friends: true })
   })
   it('shows the push error when permission is refused', async () => {
     push.enablePush.mockRejectedValueOnce(new Error('Notifications are blocked.'))
@@ -157,6 +149,19 @@ describe('ReminderSettings', () => {
     render(<ReminderSettings />)
     expect(await screen.findByText(/add ATHRION to your Home Screen/)).toBeInTheDocument()
     push.needsHomeScreenInstall.mockReturnValue(false)
+  })
+})
+
+describe('WeighInSheet (a weigh-in reminder opens it)', () => {
+  it("saves today's weight to Progress and the profile, then closes", async () => {
+    sb.set('body_measurements', { data: { id: 'm1' }, error: null })
+    const onClose = vi.fn(), onProfileChange = vi.fn()
+    render(<WeighInSheet onClose={onClose} onProfileChange={onProfileChange} />)
+    await userEvent.type(screen.getByRole('spinbutton'), '180')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+    expect(sb.op(sb.queriesFor('body_measurements').at(-1), 'upsert')[0]).toMatchObject({ weight_lb: 180 })
+    expect(onProfileChange).toHaveBeenCalled()
   })
 })
 

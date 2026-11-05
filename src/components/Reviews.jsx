@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Icon } from '@iconify/react'
 import { Button, InlineError } from './ui/index.js'
 import { fetchReviews, fetchReviewSummary, fetchMyReview, saveMyReview, deleteMyReview, fetchAllReviews, setReviewHidden, sendPublicReview, shortName, reviewProblem } from '../lib/reviews.js'
@@ -51,7 +51,7 @@ function PublicReviewForm({ onClose }) {
   }
 
   if (state === 'sent') return (
-    <div role="status" className="bg-surface border border-neon-stroke/30 rounded-2xl p-5 mb-5 flex flex-wrap items-center gap-3">
+    <div role="status" className="bg-surface border border-neon-stroke/30 rounded-2xl p-5 flex flex-wrap items-center gap-3 text-left">
       <Icon icon="mdi:check-circle-outline" width={28} className="text-neon-ink" aria-hidden="true" />
       <div className="grow basis-0 min-w-[12rem]">
         <div className="font-semibold text-ink">Thanks for your review</div>
@@ -62,7 +62,7 @@ function PublicReviewForm({ onClose }) {
   )
 
   return (
-    <form onSubmit={send} className="bg-surface border border-line rounded-2xl p-5 mb-5 space-y-4 max-w-xl">
+    <form onSubmit={send} className="bg-surface border border-line rounded-2xl p-5 space-y-4 max-w-xl text-left">
       <fieldset>
         <legend className="text-sm font-semibold text-ink mb-1">Your rating</legend>
         <StarPicker value={f.rating} onChange={rating => setF(v => ({ ...v, rating }))} />
@@ -89,49 +89,170 @@ function PublicReviewForm({ onClose }) {
   )
 }
 
-// Landing page: the average, how many, and the latest reviews; before the first one, an invitation to write one
+const reducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+// True once the element has been on screen (stays true), so the section animates when it's reached
+function useSeen() {
+  const ref = useRef(null)
+  const [seen, setSeen] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof IntersectionObserver === 'undefined') { setSeen(true); return }
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setSeen(true); io.disconnect() } }, { threshold: 0.2 })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+  return [ref, seen]
+}
+
+// A slide-up that waits for its turn: invisible until the section is reached, then in order
+const reveal = (seen, i) => (seen
+  ? { className: 'slide-up', style: { animationDelay: `${i * 90}ms`, animationFillMode: 'both' } }
+  : { className: 'opacity-0', style: undefined })
+
+// Five big stars lighting up one after another, again and again, as someone rating
+function RatingStars() {
+  const still = reducedMotion()
+  const [lit, setLit] = useState(still ? 5 : 0)
+  useEffect(() => {
+    if (still) return
+    let n = 0
+    const t = setInterval(() => { n = (n + 1) % 10; setLit(Math.min(5, n)) }, 380) // 5 fill, then a pause
+    return () => clearInterval(t)
+  }, [still])
+  return (
+    <div className="flex justify-center gap-1.5" aria-hidden="true">
+      {[1, 2, 3, 4, 5].map(i => (
+        <span key={i} className={`transition-transform duration-300 ${i <= lit ? 'scale-110' : 'scale-100'}`}>
+          <Icon icon={i <= lit ? 'mdi:star' : 'mdi:star-outline'} width={44} className={i <= lit ? 'text-neon-ink' : 'text-line-strong'} />
+        </span>
+      ))}
+    </div>
+  )
+}
+
+const PROMPTS = ['What helped you most?', 'What should be better?', 'Would you tell a friend?', 'How did your training change?']
+
+// Questions to start from, one at a time
+function RotatingPrompt() {
+  const still = reducedMotion()
+  const [i, setI] = useState(0)
+  useEffect(() => {
+    if (still) return
+    const t = setInterval(() => setI(n => (n + 1) % PROMPTS.length), 2600)
+    return () => clearInterval(t)
+  }, [still])
+  return (
+    <div className="h-8 overflow-hidden" aria-hidden="true">
+      <div key={i} className="slide-up text-xl font-semibold text-neon-ink">{PROMPTS[i]}</div>
+    </div>
+  )
+}
+
+// The average counting up from 0 once the section is reached
+function CountUp({ value, run }) {
+  const [v, setV] = useState(reducedMotion() ? value : 0)
+  useEffect(() => {
+    if (!run || reducedMotion()) { if (run) setV(value); return }
+    const start = performance.now()
+    let raf
+    const frame = now => {
+      const k = Math.min(1, (now - start) / 900)
+      setV(value * (1 - (1 - k) ** 3))
+      if (k < 1) raf = requestAnimationFrame(frame)
+    }
+    raf = requestAnimationFrame(frame)
+    return () => cancelAnimationFrame(raf)
+  }, [value, run])
+  return v.toFixed(1)
+}
+
+const initial = name => (String(name || '?').trim()[0] || '?').toUpperCase()
+
+// Landing page: before the first review, a big invitation to write one; then the average, how many,
+// and the latest reviews, each sliding in as the section is reached. Only real, approved reviews.
 export function LandingReviews() {
   const [writing, setWriting] = useState(false)
   const [state, setState] = useState({ summary: { average: null, count: 0 }, reviews: [] })
+  const [ref, seen] = useSeen()
   useEffect(() => {
     Promise.all([fetchReviewSummary(), fetchReviews(6)])
       .then(([summary, reviews]) => setState({ summary, reviews }))
       .catch(() => {})
   }, [])
   const { summary, reviews } = state
+  const has = summary.count > 0
+  const form = writing && <div className="slide-up mt-8 text-left max-w-xl mx-auto"><PublicReviewForm onClose={() => setWriting(false)} /></div>
+
+  if (!has) return (
+    <section ref={ref} className="max-w-5xl mx-auto px-4 py-20" aria-labelledby="reviews">
+      <div className="bg-surface border border-line rounded-3xl px-5 py-12 xs:px-8 text-center">
+        <RatingStars />
+        {/* Before the first review, an invitation rather than "Reviews" with no stars, which reads as no users */}
+        <h2 id="reviews" className="font-bold text-4xl xs:text-5xl leading-[1.05] tracking-tight mt-6">Tried ATHRION?</h2>
+        <p className="text-lg text-ink-2 mt-4 max-w-md mx-auto">Tell people what it did for your training. Your review shows here after a quick check.</p>
+        <div className="mt-5"><RotatingPrompt /></div>
+        {!writing && (
+          <div className="mt-7 max-w-xs mx-auto">
+            <Button full icon="mdi:pencil-outline" onClick={() => setWriting(true)}>Write a review</Button>
+          </div>
+        )}
+        {form}
+      </div>
+    </section>
+  )
 
   return (
-    <section className="max-w-5xl mx-auto px-4 pb-14" aria-labelledby="reviews">
-      <div className="flex flex-wrap items-end justify-between gap-4 mb-5">
-        <div>
-          {/* Before the first review, an invitation rather than "Reviews" with no stars, which reads as no users */}
-          <h2 id="reviews" className="font-bold text-3xl text-ink">{summary.count > 0 ? 'Reviews' : 'Tried ATHRION?'}</h2>
-          <div className="flex flex-wrap items-center gap-2 mt-2">
-            {summary.count > 0 ? (
-              <>
-                <span className="font-bold text-4xl text-ink tabular-nums leading-none">{summary.average.toFixed(1)}</span>
-                <span>
-                  <Stars value={summary.average} size={20} />
-                  <span className="block text-xs text-muted">{summary.count} {summary.count === 1 ? 'review' : 'reviews'}</span>
-                </span>
-              </>
-            ) : (
-              <p className="text-sm text-ink-2 max-w-md">Tell people what it did for your training. Reviews show here after a quick check.</p>
-            )}
-          </div>
+    <section ref={ref} className="max-w-5xl mx-auto px-4 py-20" aria-labelledby="reviews">
+      <div className="text-center">
+        <h2 id="reviews" className="font-bold text-4xl xs:text-5xl leading-[1.05] tracking-tight">What people <span className="text-neon-ink">say</span>.</h2>
+        <div className="mt-6 inline-flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+          <span className="font-bold text-6xl text-ink tabular-nums leading-none"><CountUp value={summary.average} run={seen} /></span>
+          <span className="text-left">
+            <span className="flex" role="img" aria-label={`${summary.average.toFixed(1)} out of 5 stars`}>
+              {[1, 2, 3, 4, 5].map(i => {
+                const v = Math.round(summary.average * 2) / 2
+                const icon = i <= v ? 'mdi:star' : i - 0.5 === v ? 'mdi:star-half-full' : 'mdi:star-outline'
+                return (
+                  <span key={i} className={seen ? 'pop-in' : 'opacity-0'} style={{ animationDelay: `${200 + i * 110}ms` }}>
+                    <Icon icon={icon} width={28} className={icon === 'mdi:star-outline' ? 'text-muted' : 'text-neon-ink'} aria-hidden="true" />
+                  </span>
+                )
+              })}
+            </span>
+            <span className="block text-sm text-muted mt-0.5">{summary.count} {summary.count === 1 ? 'review' : 'reviews'}</span>
+          </span>
         </div>
-        {!writing && <Button variant="secondary" icon="mdi:pencil-outline" onClick={() => setWriting(true)}>Write a review</Button>}
+        {!writing && (
+          <div className="mt-6">
+            <Button variant="secondary" icon="mdi:pencil-outline" onClick={() => setWriting(true)}>Write a review</Button>
+          </div>
+        )}
       </div>
-      {writing && <PublicReviewForm onClose={() => setWriting(false)} />}
-      {reviews.length > 0 && <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 17rem), 1fr))' }}>
-        {reviews.map(r => (
-          <figure key={`${r.created_at}-${r.name}`} className="bg-surface border border-line rounded-2xl p-4 flex flex-col gap-2">
-            <Stars value={r.rating} size={16} />
-            <blockquote className="text-sm text-ink-2 whitespace-pre-line break-words grow">{r.body}</blockquote>
-            <figcaption className="text-xs text-muted"><span className="font-semibold text-ink">{r.name}</span> · {fmtDate(r.created_at)}</figcaption>
-          </figure>
-        ))}
-      </div>}
+      {form}
+      {reviews.length > 0 && (
+        <div className="mt-10 grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 17rem), 1fr))' }}>
+          {reviews.map((r, i) => {
+            const rv = reveal(seen, i + 2)
+            return (
+              <figure key={`${r.created_at}-${r.name}`} className={`bg-surface border border-line rounded-3xl p-5 flex flex-col gap-3 ${rv.className}`} style={rv.style}>
+                <div className="flex items-center justify-between gap-2">
+                  <Icon icon="mdi:format-quote-open" width={32} className="text-neon-ink" aria-hidden="true" />
+                  <Stars value={r.rating} size={18} />
+                </div>
+                <blockquote className="text-base text-ink whitespace-pre-line break-words grow">{r.body}</blockquote>
+                <figcaption className="flex items-center gap-2.5">
+                  <span className="w-9 h-9 rounded-full bg-raised text-ink font-bold flex items-center justify-center flex-shrink-0" aria-hidden="true">{initial(r.name)}</span>
+                  <span className="text-sm min-w-0">
+                    <span className="block font-semibold text-ink break-words">{r.name}</span>
+                    <span className="block text-xs text-muted">{fmtDate(r.created_at)}</span>
+                  </span>
+                </figcaption>
+              </figure>
+            )
+          })}
+        </div>
+      )}
     </section>
   )
 }

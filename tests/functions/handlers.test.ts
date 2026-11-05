@@ -128,7 +128,7 @@ describe('send-reminders', () => {
     webpush.sendNotification.mockImplementation(async (sub: any) => { if (sub.endpoint.endsWith('gone')) throw Object.assign(new Error('Gone'), { statusCode: 410 }) })
     const h = await load('send-reminders')
     expect(await (await h(post({}, { 'x-cron-secret': 'cron-123' }))).json()).toEqual({ sent: 1, skipped: 1, removed: 1 })
-    expect(JSON.parse(webpush.sendNotification.mock.calls[0][1])).toMatchObject({ title: 'Time to train', url: '/' })
+    expect(JSON.parse(webpush.sendNotification.mock.calls[0][1])).toMatchObject({ title: 'Time to train', url: '/?open=workout' })
   })
 })
 

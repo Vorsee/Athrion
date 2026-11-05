@@ -3,6 +3,8 @@ import { LandingReviews } from '../components/Reviews.jsx'
 import { Button } from '../components/ui/index.js'
 import { PLANS, PRO_FEATURES, TRIAL_DAYS, money } from '../lib/pricing.js'
 import Brand from '../components/Brand.jsx'
+import FriendsWorkoutDemo from '../components/FriendsWorkoutDemo.jsx'
+import { SwimDemo, RunDemo } from '../components/CardioDemo.jsx'
 
 // The three things ATHRION does
 const PILLARS = [
@@ -39,6 +41,7 @@ export default function Landing({ onCreateAccount, onSignIn }) {
           <div className="mt-10 max-w-xs mx-auto">
             <Button full onClick={onCreateAccount}>Create free account</Button>
           </div>
+          <TrainTogether />
           <ProductPreview />
         </section>
 
@@ -60,17 +63,8 @@ export default function Landing({ onCreateAccount, onSignIn }) {
           </div>
         </section>
 
-        {/* Swim */}
-        <section className="max-w-5xl mx-auto px-4 py-14" aria-labelledby="swim">
-          <div className="flex flex-wrap items-center gap-4">
-            <Icon icon="mdi:swim" width={36} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
-            <div className="grow basis-0 min-w-[14rem]">
-              <h2 id="swim" className="font-bold text-2xl">Swim teams</h2>
-              <p className="text-ink-2 mt-1">Every stroke, every PR. Coaches see their whole team.</p>
-            </div>
-            <Button variant="secondary" icon="mdi:swim" onClick={() => onCreateAccount('swim')} className="w-full sm:w-auto">Start swimming</Button>
-          </div>
-        </section>
+        {/* Swim and run */}
+        <SwimAndRun onStart={onCreateAccount} />
 
         <LandingReviews />
 
@@ -123,6 +117,86 @@ export default function Landing({ onCreateAccount, onSignIn }) {
         <a href="/privacypolicy.html#health-data" className="underline underline-offset-2 hover:text-ink-2 min-h-[44px] inline-flex items-center">Consumer health data</a>
       </footer>
     </div>
+  )
+}
+
+const TOGETHER_STEPS = [
+  ['mdi:door-open', 'Open a room'],
+  ['mdi:link-variant', 'Send the link'],
+  ['mdi:account-group-outline', 'Lift together, live'],
+]
+
+// Right under the hero's button: working out with friends, told big and shown as a live room
+function TrainTogether() {
+  return (
+    <section className="mt-24 grid gap-14 md:gap-10 md:grid-cols-2 md:items-center md:text-left" aria-labelledby="together">
+      <div>
+        <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-neon-ink border border-neon-stroke/30 rounded-full px-3 py-1">
+          <Icon icon="mdi:account-group-outline" width={18} aria-hidden="true" />Free with every account
+        </span>
+        <h2 id="together" className="font-bold text-4xl xs:text-5xl leading-[1.05] tracking-tight mt-4">
+          Train with <span className="text-neon-ink">friends</span>.
+        </h2>
+        <p className="text-lg text-ink-2 mt-4 max-w-md mx-auto md:mx-0">
+          One workout, everyone in it. Every set your friends finish shows up live.
+        </p>
+        <ul className="mt-6 space-y-3 max-w-xs mx-auto md:mx-0 text-left">
+          {TOGETHER_STEPS.map(([icon, label]) => (
+            <li key={label} className="flex items-center gap-3">
+              <span className="w-11 h-11 rounded-xl bg-neon/10 border border-neon-stroke/30 flex items-center justify-center flex-shrink-0">
+                <Icon icon={icon} width={22} className="text-neon-ink" aria-hidden="true" />
+              </span>
+              <span className="text-lg font-semibold text-ink">{label}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="text-sm text-muted mt-7 max-w-md mx-auto md:mx-0">
+          Plus a monthly leaderboard with your friends and everyone. The top 3 win a free month of Pro.
+        </p>
+      </div>
+      <FriendsWorkoutDemo />
+    </section>
+  )
+}
+
+const CARDIO = [
+  { id: 'swim', icon: 'mdi:swim', title: 'Swim', Demo: SwimDemo, cta: 'Start swimming',
+    body: 'Log a swim or a whole interval set by stroke. Your best pace for every stroke, and every PR, as you get faster.',
+    points: ['Pace and PRs for each stroke', 'Interval sets like 10 × 100 on 1:50', 'Teams: your coach posts the practice, you log it'] },
+  { id: 'run', icon: 'mdi:run', title: 'Run', Demo: RunDemo, cta: 'Start running',
+    body: 'Log the distance and the time, and see your week: how far, how fast, and your longest run.',
+    points: ['Weekly distance, best pace, a pace chart', 'Runs count as training days', 'Your plan is built around your runs'] },
+]
+
+// Swim and run, each told in a few words and shown moving
+function SwimAndRun({ onStart }) {
+  return (
+    <section className="max-w-5xl mx-auto px-4 py-20" aria-labelledby="cardio">
+      <div className="text-center">
+        <h2 id="cardio" className="font-bold text-4xl xs:text-5xl leading-[1.05] tracking-tight">
+          Swim and <span className="text-neon-ink">run</span>.
+        </h2>
+        <p className="text-lg text-ink-2 mt-4 max-w-lg mx-auto">Every length and every kilometre, logged in seconds. Watch your pace drop week by week.</p>
+      </div>
+      <div className="mt-12 grid gap-14 md:gap-8 md:grid-cols-2">
+        {CARDIO.map(({ id, icon, title, Demo, cta, body, points }) => (
+          <div key={id} className="flex flex-col">
+            <div className="flex items-center gap-3">
+              <span className="w-12 h-12 rounded-2xl bg-neon/10 border border-neon-stroke/30 flex items-center justify-center flex-shrink-0">
+                <Icon icon={icon} width={26} className="text-neon-ink" aria-hidden="true" />
+              </span>
+              <h3 className="font-bold text-3xl">{title}</h3>
+            </div>
+            <p className="text-lg text-ink-2 mt-3">{body}</p>
+            <ul className="mt-4 space-y-2">
+              {points.map(p => <Check key={p}>{p}</Check>)}
+            </ul>
+            <div className="mt-6 grow"><Demo /></div>
+            <Button variant="secondary" icon={icon} onClick={() => onStart(id)} className="mt-5 w-full">{cta}</Button>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 

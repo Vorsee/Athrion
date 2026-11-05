@@ -10,6 +10,8 @@ import AiMealPlan from '../components/AiMealPlan.jsx'
 import AdaptiveNutritionCard from '../components/AdaptiveNutritionCard.jsx'
 import BarcodeScanner from '../components/BarcodeScanner.jsx'
 import AddFoodSheet from '../components/AddFoodSheet.jsx'
+import ScanFoodRow from '../components/ScanFoodRow.jsx'
+import { withBase, toEntry } from '../lib/mealScan.js'
 import { tok } from '../lib/tokens.js'
 import { Segmented, Sheet, Button, Card, SectionTitle, SectionLink, ListRow, Fact, IconButton } from '../components/ui/index.js'
 import { useHeaderAction } from '../lib/shell.js'
@@ -181,7 +183,7 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
       if (!isPro) markScanUsed()
       const text = data.content?.map(c => c.text || '').join('') || ''
       const result = JSON.parse(text.replace(/```json|```/g, '').trim())
-      setAiResult(result); setAiState('result')
+      setAiResult({ ...result, foods: withBase(result.foods) }); setAiState('result')
     } catch (e) {
       setAiError(e.message); setAiState('error')
     }
@@ -334,24 +336,14 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
                 </div>
 
                 {aiResult.foods?.map((f, i) => (
-                  <div key={i} className="py-2 border-b border-line last:border-0">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium text-sm">{f.name}</div>
-                        <div className="text-xs text-muted">{f.portion}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-bold text-sm text-neon-ink">{f.kcal} kcal</div>
-                        <div className="text-xs text-muted">P{f.protein} C{f.carbs} F{f.fat}</div>
-                      </div>
-                    </div>
-                  </div>
+                  <ScanFoodRow key={i} food={f}
+                    onChange={next => setAiResult(r => ({ ...r, foods: r.foods.map((x, j) => (j === i ? next : x)) }))} />
                 ))}
 
                 <div className="flex gap-2 mt-3">
                   <button
                     onClick={() => {
-                      const tagged = (aiResult.foods || []).map(f => ({ ...f, meal: aiMeal }))
+                      const tagged = (aiResult.foods || []).map(f => ({ ...toEntry(f), meal: aiMeal }))
                       saveFoods([...foods, ...tagged])
                       setAiState('idle')
                     }}

@@ -39,6 +39,7 @@ const Cardio            = lazy(() => import('./pages/Cardio.jsx')) // Swim and R
 const ProfileModal      = lazy(() => import('./components/ProfileModal.jsx'))
 const UpgradeSheet      = lazy(() => import('./components/UpgradeSheet.jsx'))
 const NotificationsSheet = lazy(() => import('./components/NotificationsSheet.jsx'))
+const WeighInSheet      = lazy(() => import('./components/WeighInSheet.jsx'))
 
 // Before the shell exists: the wordmark on the canvas. Inside the shell: a content-shaped skeleton.
 const Loading = () => (
@@ -105,7 +106,8 @@ export default function App() {
   const minimised = useMinimisedSession()
   const [unread, setUnread] = useUnreadCount(!!session)
   const [showInbox, setShowInbox] = useState(false)
-  // Where a tapped notification points: /?open=friends | ranks | workout | progress | notifications | coach,
+  const [showWeighIn, setShowWeighIn] = useState(false) // a weigh-in reminder was tapped
+  // Where a tapped notification points: /?open=friends | ranks | workout | weighin | progress | notifications | coach,
   // or shop (&product=<id>, back from buying a coach's workout). A shared shop link, or one
   // remembered through sign-up, opens that product or coach.
   const [pendingOpen, setPendingOpen] = useState(() => {
@@ -243,6 +245,7 @@ export default function App() {
     else if (target === 'workout') resumeWorkout()
     else if (target === 'progress') setShowProfile('progress') // Progress lives in the You sheet
     else if (target === 'notifications') setShowInbox(true)
+    else if (target === 'weighin') setShowWeighIn(true)
     else if (target === 'review') setShowProfile('review')
     else if (target === 'swim') navigate('swim')
     else if (target === 'team') setSwimIntent({ tab: 'team' })
@@ -323,6 +326,8 @@ export default function App() {
             onHome={() => { clearShopLink(); setPendingOpen(null); window.history.replaceState(null, '', '/'); setShopLink(null) }} />
         : <Landing onCreateAccount={from => {
             if (from === 'swim') { rememberSwimStart(); setSwimIntent(i => i ?? { start: true }) }
+            // Start running: Cardio opens on Run (remembered on the device) once signed up
+            if (from === 'run') { rememberCardioSport('run'); setPendingOpen(p => p ?? 'swim') }
             setAuthMode('register')
           }} onSignIn={() => setAuthMode('login')} />}
     </Suspense>
@@ -414,6 +419,12 @@ export default function App() {
       {recovering && (
         <Suspense fallback={null}>
           <NewPasswordSheet onClose={() => setRecovering(false)} />
+        </Suspense>
+      )}
+
+      {showWeighIn && (
+        <Suspense fallback={null}>
+          <WeighInSheet onClose={() => setShowWeighIn(false)} onProfileChange={refreshProfile} />
         </Suspense>
       )}
 

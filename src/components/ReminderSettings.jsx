@@ -1,12 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { fetchReminderSettings, saveReminderSettings } from '../lib/progressApi.js'
-import { pushSupported, needsHomeScreenInstall, currentSubscription, enablePush, disablePush, sendTestPush } from '../lib/push.js'
+import { pushSupported, needsHomeScreenInstall, currentSubscription, enablePush, disablePush } from '../lib/push.js'
 
-const HOURS = Array.from({ length: 18 }, (_, i) => i + 5) // 5am – 10pm
-const fmtHour = h => new Date(2000, 0, 1, h).toLocaleTimeString(undefined, { hour: 'numeric' })
-
-// Push switches per type (supabase/schema.sql, 011 and 019); the in-app bell always lists them
+// Push switches per type (supabase/schema.sql, 011 and 019). Not shown any more (one on/off switch),
+// but kept as saved so nobody's earlier choice is lost; the in-app bell always lists everything
 const TYPES = [
   ['notify_friends', 'Friend requests and accepts'],
   ['notify_team', 'Swim team: practices, requests and changes'],
@@ -60,19 +58,7 @@ export default function ReminderSettings() {
       if (on) { await enablePush(); setSubscribed(true) }
       else { await disablePush(); setSubscribed(false) }
       await update({ enabled: on })
-      if (on) setMsg(`You'll get a reminder around ${fmtHour(settings.reminder_hour)} when it's time to train.`)
-    } catch (e) {
-      setMsg(e.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function sendTest() {
-    setBusy(true); setMsg('')
-    try {
-      await sendTestPush()
-      setMsg('Test sent. It should appear within a few seconds.')
+      if (on) setMsg('At most one reminder a day: your workout on training days, and a weigh-in once a week.')
     } catch (e) {
       setMsg(e.message)
     } finally {
@@ -87,7 +73,7 @@ export default function ReminderSettings() {
           <Icon icon="mdi:bell-ring-outline" width={20} className="text-neon-ink flex-shrink-0" />
           <div>
             <div className="text-sm font-semibold text-ink">Notifications</div>
-            <div className="text-xs text-muted">Reminders, friends, open workouts and your weekly recap</div>
+            <div className="text-xs text-muted">Workout and weigh-in reminders, friends and your weekly recap</div>
           </div>
         </div>
         <Toggle on={active} onChange={toggle} label="Notifications" />
@@ -98,31 +84,6 @@ export default function ReminderSettings() {
         <p className="text-xs text-muted">On iPhone, add ATHRION to your Home Screen first (Share, then Add to Home Screen), then turn reminders on from there.</p>
       )}
 
-      {active && (
-        <div className="space-y-3 pt-1">
-          <label className="flex items-center justify-between gap-3">
-            <span className="text-xs text-muted">Remind me at</span>
-            <select value={settings.reminder_hour} onChange={e => update({ reminder_hour: Number(e.target.value) })}
-              className="bg-raised border border-line rounded-lg px-2 py-1.5 text-xs text-ink focus:outline-none">
-              {HOURS.map(h => <option key={h} value={h}>{fmtHour(h)}</option>)}
-            </select>
-          </label>
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-muted">Warn me before I lose my streak</span>
-            <Toggle on={settings.streak_warnings} onChange={v => update({ streak_warnings: v })} label="Streak warnings" />
-          </div>
-          {TYPES.map(([key, label]) => (
-            <div key={key} className="flex items-center justify-between gap-3">
-              <span className="text-xs text-muted">{label}</span>
-              <Toggle on={settings[key] !== false} onChange={v => update({ [key]: v })} label={label} />
-            </div>
-          ))}
-          <button onClick={sendTest} disabled={busy}
-            className="w-full py-2 rounded-xl border border-line-strong text-xs font-semibold text-ink-2 hover:text-neon-ink hover:border-neon-stroke/40 disabled:opacity-50 transition-colors">
-            Send test notification
-          </button>
-        </div>
-      )}
       {busy && <p className="text-xs text-muted">Working...</p>}
       {msg && <p className="text-xs text-muted">{msg}</p>}
     </div>

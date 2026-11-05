@@ -19,15 +19,19 @@ const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE
 const DAY = 86400000
 
 async function loadContext(userId: string) {
-  const [{ data: plan }, { data: logs }, { data: summary }] = await Promise.all([
+  const [{ data: plan }, { data: logs }, { data: summary }, { data: weigh }, { data: fp }] = await Promise.all([
     admin.from('fitness_plans').select('plan_data').eq('user_id', userId).eq('status', 'active')
       .order('created_at', { ascending: false }).limit(1).maybeSingle(),
     admin.from('workout_logs').select('created_at, name, volume, sets').eq('user_id', userId)
       .gte('created_at', new Date(Date.now() - 100 * DAY).toISOString()),
     admin.rpc('points_summary', { p_user: userId }),
+    admin.from('body_measurements').select('date').eq('user_id', userId).not('weight_lb', 'is', null)
+      .order('date', { ascending: false }).limit(1).maybeSingle(),
+    admin.from('fitness_profiles').select('primary_goal, secondary_goals').eq('user_id', userId).maybeSingle(),
   ])
   const sorted = [...(logs ?? [])].sort((a: any, b: any) => a.created_at < b.created_at ? 1 : -1)
-  return { plan: plan?.plan_data, logs: sorted, summary: Array.isArray(summary) ? summary[0] : summary }
+  return { plan: plan?.plan_data, logs: sorted, summary: Array.isArray(summary) ? summary[0] : summary,
+    lastWeighIn: weigh?.date ?? null, goals: fp ? [fp.primary_goal, ...(fp.secondary_goals ?? [])].filter(Boolean) : [] }
 }
 
 // Push one message to every device of a user; drops subscriptions the browser has ended
@@ -171,7 +175,7 @@ Deno.serve(async (req) => {
     }
 
     const message = chooseMessage(ctx.plan, ctx.logs.map((l: any) => l.created_at), s, local, new Date(),
-      { last: ctx.logs[0], month: ctx.summary })
+      { last: ctx.logs[0], month: ctx.summary, lastWeighIn: ctx.lastWeighIn, goals: ctx.goals })
     if (!message) { skipped++; continue }
 
     const { delivered, removed: gone } = await pushTo(s.user_id, message, 4 * 3600)

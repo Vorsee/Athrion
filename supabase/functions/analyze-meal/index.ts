@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
           role: 'user',
           content: [
             { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
-            { type: 'text', text: 'Analyze this meal photo. Identify every visible food item and estimate nutritional content. Respond ONLY with a JSON object like this (no markdown, no explanation):\n{"foods":[{"name":"Food Name","kcal":300,"protein":20,"carbs":30,"fat":10,"portion":"1 cup"}],"total":{"kcal":300,"protein":20,"carbs":30,"fat":10},"confidence":"high"}' }
+            { type: 'text', text: 'Analyze this meal photo. Identify every visible food item and estimate nutritional content, with "grams" as your best estimate of the weight of each item in grams. Respond ONLY with a JSON object like this (no markdown, no explanation):\n{"foods":[{"name":"Food Name","kcal":300,"protein":20,"carbs":30,"fat":10,"portion":"1 cup","grams":160}],"total":{"kcal":300,"protein":20,"carbs":30,"fat":10},"confidence":"high"}' }
           ]
         }]
       })

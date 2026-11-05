@@ -1,6 +1,6 @@
 // Pure logic from the send-reminders Edge Function
 import { describe, it, expect } from 'vitest'
-import { localParts, streakBeforeThisWeek, chooseMessage, buildRecap, openWorkoutMessage, pushAllowed, mondayOf } from '../../supabase/functions/send-reminders/reminders.ts'
+import { localParts, streakBeforeThisWeek, chooseMessage, buildRecap, openWorkoutMessage, pushAllowed, mondayOf, weighInDue } from '../../supabase/functions/send-reminders/reminders.ts'
 
 const plan = { weeklySchedule: [
   { day: 'Friday', type: 'workout', title: 'Upper Body', durationMinutes: 45, workout: { exercises: [{}, {}, {}] } },
@@ -28,11 +28,32 @@ describe('streakBeforeThisWeek', () => {
   })
 })
 
+describe('weighInDue', () => {
+  const today = '2026-10-23'
+  it('asks a week after the last weigh-in, then every 3rd day while skipped, never daily', () => {
+    const due = (last: string) => weighInDue(last, ['lose_weight'], today)
+    expect(due('2026-10-20')).toBeNull()                 // 3 days
+    expect(due('2026-10-16')).toEqual({ gap: 7 })
+    expect(due('2026-10-15')).toBeNull()                 // 8
+    expect(due('2026-10-14')).toBeNull()                 // 9
+    expect(due('2026-10-13')).toEqual({ gap: 10 })
+  })
+  it('without a weight goal, only for people who weigh in', () => {
+    expect(weighInDue('2026-10-16', ['build_muscle'], today)).toEqual({ gap: 7 })
+    expect(weighInDue('2026-06-01', ['build_muscle'], '2026-10-23')).toBeNull()
+    expect(weighInDue(null, ['build_muscle'], today, 'Monday')).toBeNull()
+  })
+  it('never weighed in with a weight goal: Mondays', () => {
+    expect(weighInDue(null, ['gain_weight'], today, 'Monday')).toEqual({ gap: null })
+    expect(weighInDue(null, ['gain_weight'], today, 'Friday')).toBeNull()
+  })
+})
+
 describe('chooseMessage', () => {
   const friday = { date: '2026-10-23', hour: 18, weekday: 'Friday' }
   const now = new Date('2026-10-23T22:00:00Z')
   it('reminds on a planned workout day', () => {
-    expect(chooseMessage(plan, [], {}, friday, now)).toEqual({ title: 'Time to train', body: 'Today: Upper Body · 3 exercises · ~45 min', tag: 'workout-day' })
+    expect(chooseMessage(plan, [], {}, friday, now)).toEqual({ title: 'Time to train', body: 'Today: Upper Body · 3 exercises · ~45 min', tag: 'workout-day', url: '/?open=workout' })
   })
   it('stays quiet after training today, on rest days and without a plan', () => {
     expect(chooseMessage(plan, ['2026-10-23T14:00:00Z'], {}, friday, now)).toBeNull()
@@ -46,9 +67,16 @@ describe('chooseMessage', () => {
   it('without a plan, nudges after two days off with the last workout', () => {
     const last = { name: 'Push day', created_at: '2026-10-20T14:00:00Z' }
     expect(chooseMessage(null, [last.created_at], {}, friday, now, { last, month: { workout_days: 5 } }))
-      .toEqual({ title: 'Time to train', body: 'Last workout: Push day, 3 days ago. 5/12 days in October.', tag: 'nudge' })
+      .toEqual({ title: 'Time to train', body: 'Last workout: Push day, 3 days ago. 5/12 days in October.', tag: 'nudge', url: '/?open=workout' })
     const yesterday = { name: 'Legs', created_at: '2026-10-22T14:00:00Z' }
     expect(chooseMessage(null, [yesterday.created_at], {}, friday, now, { last: yesterday })).toBeNull()
+  })
+  it('asks for a weigh-in that opens the weigh-in, behind a planned workout', () => {
+    const extra = { lastWeighIn: '2026-10-16', goals: ['lose_weight'] }
+    expect(chooseMessage(null, [], {}, friday, now, extra))
+      .toEqual({ title: 'Time to weigh in', body: 'Last weigh-in 7 days ago. A quick one keeps your goal on track.', tag: 'weigh-in', url: '/?open=weighin' })
+    expect(chooseMessage(plan, [], {}, friday, now, extra)?.tag).toBe('workout-day')
+    expect(chooseMessage(plan, ['2026-10-23T14:00:00Z'], {}, friday, now, extra)?.tag).toBe('weigh-in')
   })
   it('warns on Sunday when a streak is about to end', () => {
     const sunday = { date: '2026-10-25', hour: 18, weekday: 'Sunday' }

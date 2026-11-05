@@ -35,8 +35,25 @@ function inZone(tz: string) {
   return (d: string) => { try { return localParts(tz, new Date(d)).date } catch { return localParts('UTC', new Date(d)).date } }
 }
 
-// extra: { last: the latest workout log { name, created_at }, month: { workout_days } from points_summary }
-// The reminder to send today, or null when there's no reason to send one
+const WEIGHT_GOALS = ['lose_weight', 'gain_weight', 'maintain_weight']
+const WEIGH_EVERY = 7       // a weigh-in is asked for a week after the last one
+const WEIGH_AGAIN = 3       // and, while it's skipped, every 3rd day after that, never daily
+const WEIGH_ACTIVE = 60     // without a weight goal, only people who weighed in this recently
+
+// A weigh-in is due: a weight goal, or someone who weighs in, on day 7, 10, 13... since the last
+// one (never weighed in, with a weight goal: Mondays)
+export function weighInDue(lastWeighIn: string | null, goals: string[] = [], today: string, weekday = '') {
+  const gap = lastWeighIn ? dayNumber(today) - dayNumber(lastWeighIn) : null
+  const cares = goals.some(g => WEIGHT_GOALS.includes(g)) || (gap !== null && gap <= WEIGH_ACTIVE)
+  if (!cares) return null
+  if (gap === null) return weekday === 'Monday' ? { gap } : null
+  return gap >= WEIGH_EVERY && (gap - WEIGH_EVERY) % WEIGH_AGAIN === 0 ? { gap } : null
+}
+
+// extra: { last: the latest workout log { name, created_at }, month: { workout_days } from points_summary,
+//   lastWeighIn: the latest weight date (YYYY-MM-DD), goals: the fitness profile's goals }
+// The one reminder to send today (at most one a day), or null when there's no reason to send one.
+// In order: a planned workout not done yet, a streak about to end, a weigh-in that's due, two days off.
 export function chooseMessage(planData: any, dates: string[], settings: any, local: ReturnType<typeof localParts>, now = new Date(), extra: any = {}) {
   // Trained on today's date in the user's own timezone (a late workout last night doesn't count)
   const localDate = inZone(settings.timezone || 'UTC')
@@ -50,6 +67,7 @@ export function chooseMessage(planData: any, dates: string[], settings: any, loc
       title: 'Time to train',
       body: [`Today: ${today.title}`, n && `${n} exercises`, today.durationMinutes && `~${today.durationMinutes} min`, monthLine].filter(Boolean).join(' · '),
       tag: 'workout-day',
+      url: '/?open=workout',
     }
   }
 
@@ -60,7 +78,20 @@ export function chooseMessage(planData: any, dates: string[], settings: any, loc
         title: `Your ${streak}-week streak ends tonight`,
         body: 'One workout today keeps it alive.',
         tag: 'streak',
+        url: '/?open=workout',
       }
+    }
+  }
+
+  const weigh = weighInDue(extra.lastWeighIn ?? null, extra.goals ?? [], local.date, local.weekday)
+  if (weigh) {
+    return {
+      title: 'Time to weigh in',
+      body: weigh.gap === null
+        ? 'Log your weight to see how your goal is going. It takes a few seconds.'
+        : `Last weigh-in ${weigh.gap} days ago. A quick one keeps your goal on track.`,
+      tag: 'weigh-in',
+      url: '/?open=weighin',
     }
   }
 
@@ -72,6 +103,7 @@ export function chooseMessage(planData: any, dates: string[], settings: any, loc
         title: 'Time to train',
         body: `Last workout: ${extra.last.name || 'Workout'}, ${gap} days ago.${monthLine ? ` ${monthLine}.` : ''}`,
         tag: 'nudge',
+        url: '/?open=workout',
       }
     }
   }
