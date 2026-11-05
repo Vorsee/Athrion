@@ -54,15 +54,15 @@ export default async function handler(req, res) {
       payment_method_types: ['card'],
       line_items: [{ price: PRICES[plan], quantity: 1 }],
       allow_promotion_codes: true,
-      ...(customer
-        ? { customer }
-        : {
-            customer_email: user.email,
-            subscription_data: {
-              trial_period_days: TRIAL_DAYS,
-              trial_settings: { end_behavior: { missing_payment_method: 'cancel' } },
-            },
-          }),
+      ...(customer ? { customer } : { customer_email: user.email }),
+      // user_id on the subscription too, so the webhook can always tie it back to the account
+      subscription_data: {
+        metadata: { user_id: user.id },
+        ...(!customer && {
+          trial_period_days: TRIAL_DAYS,
+          trial_settings: { end_behavior: { missing_payment_method: 'cancel' } },
+        }),
+      },
       success_url: `${appUrl}?upgraded=1`,
       cancel_url: appUrl,
       client_reference_id: user.id,

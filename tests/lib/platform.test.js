@@ -50,6 +50,15 @@ describe('stripe.js', () => {
     await expect(createCheckoutSession()).rejects.toThrow('Not logged in')
     await expect(cancelSubscription()).rejects.toThrow('Not logged in')
   })
+  it('turns a reply that isn\'t JSON into a clear message instead of Safari\'s pattern error', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500, text: async () => 'A server error has occurred\n\nFUNCTION_INVOCATION_FAILED' })))
+    await expect(cancelSubscription()).rejects.toThrow("The payment server didn't answer properly (error 500)")
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, text: async () => '<!doctype html><html></html>' })))
+    vi.stubGlobal('location', { hostname: 'localhost' })
+    await expect(cancelSubscription()).rejects.toThrow('Payments only work on athrion.app')
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ success: true, cancelled: true }) })))
+    await expect(cancelSubscription()).resolves.toMatchObject({ cancelled: true })
+  })
   it('cancels with the user token and surfaces server errors', async () => {
     const fetchMock = vi.fn(async () => ({ ok: false, json: async () => ({ error: 'No active subscription found' }) }))
     vi.stubGlobal('fetch', fetchMock)

@@ -4,7 +4,8 @@ import { sb } from '../helpers/supabaseMock.js'
 
 const stripe = {
   checkout: { sessions: { create: vi.fn() } },
-  subscriptions: { update: vi.fn(), retrieve: vi.fn(), cancel: vi.fn() },
+  subscriptions: { update: vi.fn(), retrieve: vi.fn(), cancel: vi.fn(), list: vi.fn() },
+  customers: { list: vi.fn() },
   webhooks: { constructEvent: vi.fn() },
   accounts: { create: vi.fn(), retrieve: vi.fn(), createLoginLink: vi.fn() },
   accountLinks: { create: vi.fn() },
@@ -30,6 +31,9 @@ let checkout, cancel, webhook, deleteAccount, coachCheckout, coachConnect
 beforeEach(async () => {
   sb.reset()
   vi.clearAllMocks()
+  stripe.subscriptions.retrieve.mockResolvedValue({ id: 'sub_1', status: 'active', customer: 'cus_1' })
+  stripe.subscriptions.list.mockResolvedValue({ data: [] })
+  stripe.customers.list.mockResolvedValue({ data: [] })
   process.env.STRIPE_SECRET_KEY = 'sk_test_x'
   process.env.STRIPE_WEBHOOK_SECRET = 'whsec_x'
   process.env.STRIPE_PRICE_MONTHLY = 'price_monthly'
@@ -76,7 +80,7 @@ describe('POST /api/create-checkout', () => {
     const r = res(); await checkout(req({ body: { plan: 'monthly' }, headers: auth }), r)
     const args = stripe.checkout.sessions.create.mock.calls[0][0]
     expect(args.customer).toBe('cus_1')
-    expect(args.subscription_data).toBeUndefined()
+    expect(args.subscription_data).toEqual({ metadata: { user_id: 'user-1' } }) // no trial
     expect(args.customer_email).toBeUndefined()
     expect(r.body.trial).toBe(false)
   })
@@ -142,7 +146,7 @@ describe('POST /api/cancel-subscription', () => {
 
   it('reports a pending cancellation from Stripe', async () => {
     sb.set('subscriptions', { data: { status: 'pro', stripe_subscription_id: 'sub_1' } })
-    stripe.subscriptions.retrieve.mockResolvedValue({ status: 'active', cancel_at_period_end: true, cancel_at: 1798761600, items: { data: [{ current_period_end: 1798761600 }] } })
+    stripe.subscriptions.retrieve.mockResolvedValue({ id: 'sub_1', status: 'active', cancel_at_period_end: true, cancel_at: 1798761600, items: { data: [{ current_period_end: 1798761600 }] } })
     const r = res(); await cancel(req({ headers: auth, body: { action: 'status' } }), r)
     expect(stripe.subscriptions.update).not.toHaveBeenCalled()
     expect(r.body).toMatchObject({ cancelled: true, cancel_at: '2027-01-01T00:00:00.000Z' })
@@ -153,6 +157,34 @@ describe('POST /api/cancel-subscription', () => {
     const r = res(); await cancel(req({ headers: auth, body: { action: 'resume' } }), r)
     expect(stripe.subscriptions.update).toHaveBeenCalledWith('sub_1', { cancel_at_period_end: false })
     expect(r.body).toMatchObject({ cancelled: false, cancel_at: null })
+  })
+  it('finds the live subscription in Stripe when the saved id is an old, cancelled one, and repairs the row', async () => {
+    sb.set('subscriptions', q => (sb.op(q, 'upsert') ? { data: null, error: null } : { data: { status: 'pro', stripe_subscription_id: 'sub_old', stripe_customer_id: 'cus_1' } }))
+    stripe.subscriptions.retrieve.mockResolvedValue({ id: 'sub_old', status: 'canceled' })
+    stripe.subscriptions.list.mockResolvedValue({ data: [{ id: 'sub_new', status: 'active', customer: 'cus_1', created: 2 }] })
+    stripe.subscriptions.update.mockResolvedValue({ id: 'sub_new', status: 'active', cancel_at_period_end: true, items: { data: [{ current_period_end: 1798761600 }] } })
+    const r = res(); await cancel(req({ headers: auth }), r)
+    expect(stripe.subscriptions.list).toHaveBeenCalledWith({ customer: 'cus_1', status: 'all', limit: 20 })
+    expect(stripe.subscriptions.update).toHaveBeenCalledWith('sub_new', { cancel_at_period_end: true })
+    expect(r.body).toMatchObject({ success: true, cancelled: true })
+    const upsert = sb.queriesFor('subscriptions').map(q => sb.op(q, 'upsert')).find(Boolean)
+    expect(upsert[0]).toMatchObject({ user_id: 'user-1', status: 'pro', stripe_subscription_id: 'sub_new', stripe_customer_id: 'cus_1' })
+  })
+  it('finds it by the sign-in email when the row has no Stripe ids at all', async () => {
+    sb.set('subscriptions', q => (sb.op(q, 'upsert') ? { data: null, error: null } : { data: { status: 'pro', stripe_subscription_id: null, stripe_customer_id: null } }))
+    stripe.customers.list.mockResolvedValue({ data: [{ id: 'cus_9' }] })
+    stripe.subscriptions.list.mockResolvedValue({ data: [{ id: 'sub_9', status: 'trialing', customer: 'cus_9', created: 1 }] })
+    const r = res(); await cancel(req({ headers: auth, body: { action: 'status' } }), r)
+    expect(stripe.customers.list).toHaveBeenCalledWith({ email: 'sam@example.com', limit: 10 })
+    expect(r.body).toMatchObject({ success: true, status: 'trialing' })
+  })
+  it('says so plainly when Stripe has no live subscription either', async () => {
+    sb.set('subscriptions', { data: { status: 'pro', stripe_subscription_id: 'sub_1' } })
+    stripe.subscriptions.retrieve.mockResolvedValue({ id: 'sub_1', status: 'canceled' })
+    const r = res(); await cancel(req({ headers: auth }), r)
+    expect(r.statusCode).toBe(400)
+    expect(r.body.error).toMatch(/couldn't find a subscription for sam@example.com/)
+    expect(stripe.subscriptions.update).not.toHaveBeenCalled()
   })
   it('rejects unknown actions', async () => {
     const r = res(); await cancel(req({ headers: auth, body: { action: 'delete' } }), r)
@@ -204,6 +236,22 @@ describe('POST /api/stripe-webhook', () => {
     event('customer.subscription.deleted', { id: 'sub_1' })
     await webhook(req({ body: '{}', headers: sig }), res())
     expect(sb.op(sb.queriesFor('subscriptions').at(-1), 'update')[0]).toMatchObject({ status: 'free', stripe_subscription_id: null })
+  })
+
+  it('saves a live subscription on an account whose row lost its id, never replacing one it has', async () => {
+    const rowFor = id => q => {
+      const [col] = sb.op(q, 'eq') ?? []
+      if (sb.op(q, 'update')) return { data: null, error: null }
+      return { data: col === 'user_id' ? { user_id: 'user-1', stripe_subscription_id: id } : null, error: null }
+    }
+    sb.set('subscriptions', rowFor(null))
+    event('customer.subscription.updated', { id: 'sub_2', status: 'active', customer: 'cus_1', metadata: { user_id: 'user-1' } })
+    await webhook(req({ body: '{}', headers: sig }), res())
+    expect(sb.queriesFor('subscriptions').map(q => sb.op(q, 'update')).find(Boolean)[0]).toMatchObject({ status: 'pro', stripe_subscription_id: 'sub_2' })
+
+    sb.reset(); sb.set('subscriptions', rowFor('sub_1'))
+    await webhook(req({ body: '{}', headers: sig }), res())
+    expect(sb.queriesFor('subscriptions').some(q => sb.op(q, 'update'))).toBe(false)
   })
 
   describe('regression: fixed in the October 2026 review', () => {

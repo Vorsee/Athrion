@@ -82,8 +82,24 @@ export default async function handler(req, res) {
     const sub = data.object
     // Follow Stripe both ways: lapsed → free, paid again → pro
     const status = sub.status === 'active' || sub.status === 'trialing' ? 'pro' : 'free'
-    const { data: row } = await supabase.from('subscriptions')
+    let { data: row } = await supabase.from('subscriptions')
       .select('user_id').eq('stripe_subscription_id', sub.id).maybeSingle()
+    // A live subscription on an account whose row lost its id: find the account by the
+    // subscription's user_id (set at checkout), else its Stripe customer, and save the id.
+    // A row that already has an id keeps it (cancel-subscription checks it against Stripe).
+    if (!row && status === 'pro') {
+      const byUser = sub.metadata?.user_id
+        ? (await supabase.from('subscriptions').select('user_id, stripe_subscription_id').eq('user_id', sub.metadata.user_id).maybeSingle()).data
+        : null
+      row = byUser ?? (await supabase.from('subscriptions').select('user_id, stripe_subscription_id').eq('stripe_customer_id', sub.customer).maybeSingle()).data
+      if (row?.stripe_subscription_id) row = null
+      if (row) {
+        await supabase.from('subscriptions')
+          .update({ status, stripe_subscription_id: sub.id, updated_at: new Date().toISOString() })
+          .eq('user_id', row.user_id)
+        row = null // done
+      }
+    }
     if (row) {
       await supabase.from('subscriptions')
         .update({ status, updated_at: new Date().toISOString() })

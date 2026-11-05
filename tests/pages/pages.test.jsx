@@ -88,11 +88,11 @@ describe('Plan', () => {
 
 describe('Calories', () => {
   async function addFood(name, kcal) {
-    if (!screen.queryByPlaceholderText('Food name')) await userEvent.click((await screen.findAllByText('Add'))[0])
+    await userEvent.click(await screen.findByRole('button', { name: 'Add food to breakfast' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Enter yourself' }))
     await userEvent.type(screen.getByPlaceholderText('Food name'), name)
     await userEvent.type(screen.getByPlaceholderText('Calories'), String(kcal))
-    const form = screen.getByPlaceholderText('Fat (g)').parentElement
-    await userEvent.click([...form.querySelectorAll('button')].find(b => b.textContent.trim() === 'Add'))
+    await userEvent.click(screen.getByRole('button', { name: 'Add to breakfast' }))
   }
   const upserts = () => sb.queriesFor('calorie_logs').filter(q => sb.op(q, 'upsert')).map(q => sb.op(q, 'upsert'))
 
@@ -109,6 +109,29 @@ describe('Calories', () => {
     expect(second).toMatchObject({ date: '2026-10-23', total_calories: 400 })
     expect(screen.getByText('Oats')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+  it('adds a food from the library, counting calories and macros for the amount without the AI', async () => {
+    sb.set('nutrition_targets', { data: null, error: null })
+    sb.set('calorie_logs', q => sb.op(q, 'upsert') ? { data: { id: 'c1' }, error: null } : { data: sb.op(q, 'eq') ? null : [], error: null })
+    render(<P.Calories profile={profile} isPro onUpgrade={() => {}} onGoToPlan={() => {}} />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Add food to lunch' }))
+    await userEvent.type(screen.getByLabelText('Search foods'), 'rice')
+    await userEvent.click(screen.getByRole('button', { name: /White rice, cooked/ }))
+    expect(screen.getByLabelText('Unit')).toHaveValue('g') // grams by default, from 100 g
+    expect(screen.getByLabelText('Amount')).toHaveValue(100)
+    expect(screen.getByText('130')).toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByLabelText('Unit'), '0') // 1 cup = 158 g
+    expect(screen.getByLabelText('Amount')).toHaveValue(1)
+    expect(screen.getByText('205')).toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByLabelText('Unit'), 'g')
+    expect(screen.getByLabelText('Amount')).toHaveValue(158) // the same food, back in grams
+    await userEvent.clear(screen.getByLabelText('Amount'))
+    await userEvent.type(screen.getByLabelText('Amount'), '150')
+    expect(screen.getByText('195')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Add to lunch' }))
+    await waitFor(() => expect(upserts()).toHaveLength(1))
+    expect(upserts()[0][0]).toMatchObject({ total_calories: 195 })
+    expect(screen.getByText('White rice, cooked, 150 g')).toBeInTheDocument()
   })
   it('tells the user when saving fails', async () => {
     sb.set('nutrition_targets', { data: null, error: null })

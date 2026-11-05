@@ -9,6 +9,7 @@ import { fetchLatestNutritionTarget, fetchFitnessProfile, saveDiet } from '../li
 import AiMealPlan from '../components/AiMealPlan.jsx'
 import AdaptiveNutritionCard from '../components/AdaptiveNutritionCard.jsx'
 import BarcodeScanner from '../components/BarcodeScanner.jsx'
+import AddFoodSheet from '../components/AddFoodSheet.jsx'
 import { tok } from '../lib/tokens.js'
 import { Segmented, Sheet, Button, Card, SectionTitle, SectionLink, ListRow, Fact, IconButton } from '../components/ui/index.js'
 import { useHeaderAction } from '../lib/shell.js'
@@ -31,7 +32,6 @@ function getCurrentMeal() {
   return 'snack'
 }
 
-const EMPTY_FORM = { name: '', kcal: '', protein: '', carbs: '', fat: '' }
 
 // Example day shown behind the Pro lock; never saved
 // Free: manual logging, barcode scanning, goals and one AI photo scan a day. Pro: unlimited photo scans, the AI meal plan
@@ -54,7 +54,6 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
   const [tab, setTab]                 = useState('today')
   const [selectedLog, setSelectedLog] = useState(null)
   const [addingTo, setAddingTo]       = useState(null)
-  const [form, setForm]               = useState(EMPTY_FORM)
   const [aiState, setAiState]         = useState('idle')
   const [aiResult, setAiResult]       = useState(null)
   const [aiError, setAiError]         = useState(null)
@@ -142,11 +141,9 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
     return saveQueue.current
   }
 
-  function addManual(meal) {
-    const { name, kcal, protein, carbs, fat } = form
-    if (!name.trim()) return
-    saveFoods([...foods, { name, kcal: +kcal||0, protein: +protein||0, carbs: +carbs||0, fat: +fat||0, meal }])
-    setForm(EMPTY_FORM)
+  // From the add sheet: a library food sized and counted there, or one typed in
+  function addFood(food) {
+    saveFoods([...foods, { ...food, meal: addingTo }])
     setAddingTo(null)
   }
 
@@ -378,15 +375,14 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
               meal={meal}
               foods={foods.filter(f => f.meal === meal.id)}
               allFoods={foods}
-              isAdding={addingTo === meal.id}
-              form={form}
-              setForm={setForm}
-              onToggleAdd={() => setAddingTo(addingTo === meal.id ? null : meal.id)}
-              onAdd={() => addManual(meal.id)}
+              onOpenAdd={() => setAddingTo(meal.id)}
               onRemove={removeFood}
               isCurrent={getCurrentMeal() === meal.id}
             />
           ))}
+          {addingTo && (
+            <AddFoodSheet meal={MEALS.find(m => m.id === addingTo)} onAdd={addFood} onClose={() => setAddingTo(null)} />
+          )}
 
           {/* Backward-compat: foods logged before meal tagging */}
           {foods.some(f => !f.meal) && (
@@ -510,7 +506,7 @@ function CaloriesPage({ profile, onGoToPlan, isPro, onUpgrade, intent, onIntentH
 // ─────────────────────────────────────────────────────────────────────────────
 // Meal Section
 // ─────────────────────────────────────────────────────────────────────────────
-function MealSection({ meal, foods, allFoods, isAdding, form, setForm, onToggleAdd, onAdd, onRemove, isCurrent }) {
+function MealSection({ meal, foods, allFoods, onOpenAdd, onRemove, isCurrent }) {
   const mealKcal = foods.reduce((a, f) => a + (f.kcal || 0), 0)
 
   return (
@@ -534,13 +530,9 @@ function MealSection({ meal, foods, allFoods, isAdding, form, setForm, onToggleA
             )}
           </div>
         </div>
-        <button onClick={onToggleAdd}
-          className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${
-            isAdding
-              ? 'bg-raised text-muted border border-line-strong'
-              : 'border text-neon-ink border-neon-stroke/40 hover:bg-neon hover:text-on-neon'
-          }`}>
-          {isAdding ? 'Cancel' : <span className="inline-flex items-center gap-1"><Icon icon="mdi:plus" width={14} />Add</span>}
+        <button onClick={onOpenAdd} aria-label={`Add food to ${meal.label.toLowerCase()}`}
+          className="press text-xs font-bold px-3 min-h-[36px] rounded-lg transition-all border text-neon-ink border-neon-stroke/40 hover:bg-neon hover:text-on-neon">
+          <span className="inline-flex items-center gap-1"><Icon icon="mdi:plus" width={14} aria-hidden="true" />Add</span>
         </button>
       </div>
 
@@ -574,23 +566,6 @@ function MealSection({ meal, foods, allFoods, isAdding, form, setForm, onToggleA
 
       {/* Empty state */}
 
-      {/* Inline add form */}
-      {isAdding && (
-        <div className="px-4 pb-4 pt-3 border-t border-line">
-          <div className="grid grid-cols-2 gap-2">
-            {[['name','Food name','text'],['kcal','Calories','number'],['protein','Protein (g)','number'],['carbs','Carbs (g)','number'],['fat','Fat (g)','number']].map(([k, ph, t]) => (
-              <input key={k} type={t} placeholder={ph} value={form[k]}
-                onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))}
-                className="bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-3 py-2.5 text-sm outline-none transition-colors" />
-            ))}
-            <button onClick={onAdd}
-              className="press font-bold py-2.5 rounded-xl text-sm text-canvas inline-flex items-center justify-center gap-1"
-              style={{ background: tok(meal.color) }}>
-              <Icon icon="mdi:plus" width={16} />Add
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

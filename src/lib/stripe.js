@@ -26,8 +26,23 @@ export async function postAsUser(path, body) {
     res = await send(data.session.access_token)
     if (res.status === 401) throw new Error('Your sign-in expired. Sign in again and retry.')
   }
-  const data = await res.json()
-  return { res, data }
+  return { res, data: await readReply(res) }
+}
+
+// Our routes answer JSON. Anything else (a crashed function's plain-text error, or the app's own
+// page when the route isn't there, as on `npm run dev`, which doesn't run api/) would make
+// res.json() throw Safari's "The string did not match the expected pattern", so say what happened.
+async function readReply(res) {
+  if (typeof res.text !== 'function') return res.json() // a bare test double
+  const text = await res.text().catch(() => '')
+  try {
+    return text ? JSON.parse(text) : {}
+  } catch {
+    const local = typeof location !== 'undefined' && /^(localhost|127\.|192\.168\.)/.test(location.hostname)
+    throw new Error(local
+      ? "Payments only work on athrion.app: the local dev server doesn't run the payment routes."
+      : `The payment server didn't answer properly (error ${res.status}). Try again in a minute.`)
+  }
 }
 
 // plan is 'monthly' or 'annual'; the server picks the Stripe price
