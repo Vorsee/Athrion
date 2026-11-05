@@ -487,6 +487,15 @@ describe('ProfileModal', () => {
     expect(screen.queryByText('Renew subscription')).toBeNull()
     expect(fetchMock).not.toHaveBeenCalled() // no Stripe subscription to ask about
   })
+  it('shows Pro given by hand as free forever, with nothing to cancel or renew', async () => {
+    stripeReply({ success: true, lifetime: true, status: 'lifetime', cancelled: false, cancel_at: null, period_end: null })
+    await openSubscription()
+    expect(await screen.findByText('Free forever')).toBeInTheDocument()
+    expect(screen.getByText('ATHRION Pro is free forever for you.')).toBeInTheDocument()
+    expect(screen.queryByText('Cancel subscription')).toBeNull()
+    expect(screen.queryByText('Renew subscription')).toBeNull()
+    expect(screen.queryByText(/^Renews/)).toBeNull()
+  })
   it('cancels an active subscription and then offers only Renew', async () => {
     const fetchMock = stripeReply(
       { cancelled: false, cancel_at: null, period_end: '2026-11-01T12:00:00.000Z' },

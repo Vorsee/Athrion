@@ -62,6 +62,13 @@ export default async function handler(req, res) {
     // cancelled one, a webhook that didn't arrive): Stripe is the source of truth, so look it up there
     const trace = []
     const live = await findSubscription(row, user, trace)
+    // Pro given by hand (status pro, never through Stripe checkout, nothing in Stripe either):
+    // ATHRION Pro free for good, so there's nothing to bill, cancel or renew
+    if (!live && row?.status === 'pro' && !row.stripe_subscription_id && !row.stripe_customer_id) {
+      return action === 'status'
+        ? res.json({ success: true, lifetime: true, status: 'lifetime', cancelled: false, cancel_at: null, period_end: null })
+        : res.status(400).json({ error: 'ATHRION Pro is free forever on your account, so there is nothing to cancel.' })
+    }
     if (!live) {
       // What was looked up, for the Vercel logs: ids and statuses only, never a key
       console.log('[subscription not found]', JSON.stringify({ user: user.id, mode: keyMode(), row: row ?? null, trace }))

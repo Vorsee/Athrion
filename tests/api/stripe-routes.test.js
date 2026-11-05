@@ -178,6 +178,16 @@ describe('POST /api/cancel-subscription', () => {
     expect(stripe.customers.list).toHaveBeenCalledWith({ email: 'sam@example.com', limit: 10 })
     expect(r.body).toMatchObject({ success: true, status: 'trialing' })
   })
+  it('treats Pro given by hand (no Stripe ids, nothing in Stripe) as free forever', async () => {
+    sb.set('subscriptions', { data: { status: 'pro', stripe_subscription_id: null, stripe_customer_id: null } })
+    let r = res(); await cancel(req({ headers: auth, body: { action: 'status' } }), r)
+    expect(r.statusCode).toBe(200)
+    expect(r.body).toMatchObject({ success: true, lifetime: true, cancelled: false })
+    r = res(); await cancel(req({ headers: auth }), r)
+    expect(r.statusCode).toBe(400)
+    expect(r.body.error).toMatch(/free forever/)
+    expect(stripe.subscriptions.update).not.toHaveBeenCalled()
+  })
   it('says so plainly when Stripe has no live subscription either', async () => {
     sb.set('subscriptions', { data: { status: 'pro', stripe_subscription_id: 'sub_1' } })
     stripe.subscriptions.retrieve.mockResolvedValue({ id: 'sub_1', status: 'canceled' })
