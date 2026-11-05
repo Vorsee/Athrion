@@ -60,8 +60,11 @@ export default async function handler(req, res) {
   try {
     // The row can be missing the subscription id, or hold an old one (a new subscription after a
     // cancelled one, a webhook that didn't arrive): Stripe is the source of truth, so look it up there
-    const live = await findSubscription(row, user)
+    const trace = []
+    const live = await findSubscription(row, user, trace)
     if (!live) {
+      // What was looked up, for the Vercel logs: ids and statuses only, never a key
+      console.log('[subscription not found]', JSON.stringify({ user: user.id, mode: keyMode(), row: row ?? null, trace }))
       return res.status(400).json({ error: `We couldn't find a subscription for ${user.email} in Stripe. If you're being charged, email athrionsportapp@gmail.com and we'll sort it out.` })
     }
     if (live.id !== row?.stripe_subscription_id || row?.status !== 'pro') await repairRow(user.id, live)
@@ -81,22 +84,32 @@ const LIVE = new Set(['active', 'trialing', 'past_due'])
 
 // Their live Stripe subscription: the saved one while it's still live, else the newest live one
 // on their Stripe customer (saved, or found by their sign-in email, which checkout uses)
-async function findSubscription(row, user) {
+// Live or test: Stripe keeps the two apart, so a test key never sees live subscriptions
+function keyMode() {
+  const k = process.env.STRIPE_SECRET_KEY || ''
+  return /^[sr]k_live_/.test(k) ? 'live' : /^[sr]k_test_/.test(k) ? 'test' : 'unknown'
+}
+
+async function findSubscription(row, user, trace = []) {
   if (row?.stripe_subscription_id) {
     try {
       const saved = await stripe.subscriptions.retrieve(row.stripe_subscription_id)
+      trace.push({ saved: row.stripe_subscription_id, status: saved.status })
       if (LIVE.has(saved.status)) return saved
     } catch (err) {
+      trace.push({ saved: row.stripe_subscription_id, error: err?.code || err?.message })
       if (err?.code !== 'resource_missing') throw err
     }
   }
   const customers = row?.stripe_customer_id ? [row.stripe_customer_id] : []
   if (user.email) {
     const found = await stripe.customers.list({ email: user.email, limit: 10 })
+    trace.push({ email: user.email, customers: (found.data ?? []).map(c => c.id) })
     for (const c of found.data ?? []) if (!customers.includes(c.id)) customers.push(c.id)
   }
   for (const customer of customers) {
     const subs = await stripe.subscriptions.list({ customer, status: 'all', limit: 20 })
+    trace.push({ customer, subscriptions: (subs.data ?? []).map(x => `${x.id}:${x.status}`) })
     const newest = (subs.data ?? []).filter(x => LIVE.has(x.status)).sort((a, b) => b.created - a.created)[0]
     if (newest) return newest
   }
