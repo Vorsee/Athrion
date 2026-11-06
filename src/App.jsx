@@ -14,6 +14,7 @@ import { readGuidePick, clearGuidePick } from './lib/guidePlans.js'
 import { rememberInvite, readInvite } from './lib/socialApi.js'
 import { parseShopPath, readShopLink, clearShopLink, shopTarget } from './lib/shopLink.js'
 import { rememberCardioSport } from './lib/cardio.js'
+import { TRAINER_PATH, rememberTrainerInvite, readTrainerInvite, clearTrainerInvite } from './lib/clientsApi.js'
 import { SWIM_INVITE_PATH, rememberSwimInvite, readSwimInvite, rememberSwimStart, readSwimStart, clearSwimStart } from './lib/swim.js'
 import { fetchIsAdmin } from './lib/coachApi.js'
 import { useUnreadCount } from './lib/notifications.js'
@@ -36,6 +37,8 @@ const Plan              = lazy(() => import('./pages/Plan.jsx'))
 const Coach             = lazy(() => import('./pages/Coach.jsx'))
 const Coaches           = lazy(() => import('./pages/Coaches.jsx'))
 const Cardio            = lazy(() => import('./pages/Cardio.jsx')) // Swim and Run
+const Clients           = lazy(() => import('./pages/Clients.jsx')) // a coach's clients (031)
+const JoinTrainerSheet  = lazy(() => import('./components/JoinTrainerSheet.jsx'))
 const ProfileModal      = lazy(() => import('./components/ProfileModal.jsx'))
 const UpgradeSheet      = lazy(() => import('./components/UpgradeSheet.jsx'))
 const NotificationsSheet = lazy(() => import('./components/NotificationsSheet.jsx'))
@@ -54,7 +57,7 @@ const onGuidePath = () => /^\/(workout|guide)\/?$/.test(window.location.pathname
 // athrion.app/add/<nickname>: a friend invite
 const INVITE_PATH = /^\/add\/@?([A-Za-z0-9._-]{3,20})\/?$/
 
-const PAGES = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan, coach: Coach, shop: Coaches, swim: Cardio }
+const PAGES = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan, coach: Coach, shop: Coaches, swim: Cardio, clients: Clients }
 // The coach shop is hidden from everyone but admins while it's being built
 const ADMIN_PAGES = ['shop', 'coach']
 
@@ -65,7 +68,7 @@ export default function App() {
   const [authMode, setAuthMode] = useState(() => {
     if (new URLSearchParams(window.location.search).has('signup')) return 'register'
     if (onGuidePath() || parseShopPath(window.location.pathname)) return null
-    if (INVITE_PATH.test(window.location.pathname) || SWIM_INVITE_PATH.test(window.location.pathname)) {
+    if (INVITE_PATH.test(window.location.pathname) || SWIM_INVITE_PATH.test(window.location.pathname) || TRAINER_PATH.test(window.location.pathname)) {
       try { return localStorage.getItem('athrion_signed_in_before') ? 'login' : 'register' } catch { return 'register' }
     }
     try { return localStorage.getItem('athrion_signed_in_before') ? 'login' : null } catch { return null }
@@ -88,6 +91,12 @@ export default function App() {
     if (m) { rememberSwimInvite(m[1].toLowerCase()); window.history.replaceState(null, '', '/') }
     const invite = readSwimInvite()
     return invite ? { invite } : readSwimStart() ? { start: true } : null
+  })
+  // athrion.app/trainer/<code>: a coach's client invite; asks to join once signed in, through sign-up too
+  const [trainerInvite, setTrainerInvite] = useState(() => {
+    const m = window.location.pathname.match(TRAINER_PATH)
+    if (m) { rememberTrainerInvite(m[1].toLowerCase()); window.history.replaceState(null, '', '/') }
+    return readTrainerInvite()
   })
   const [isAdmin, setIsAdmin] = useState(undefined) // undefined until checked
   const [profile, setProfile]   = useState(undefined) // undefined=loading, null=incomplete, obj=complete
@@ -249,6 +258,7 @@ export default function App() {
     else if (target === 'review') setShowProfile('review')
     else if (target === 'swim') navigate('swim')
     else if (target === 'team') setSwimIntent({ tab: 'team' })
+    else if (target === 'clients') navigate('clients')
     else if (!isAdmin && (target === 'coach' || target?.startsWith('shop'))) clearShopLink()
     else if (target === 'coach') navigate('coach')
     else if (target?.startsWith('shop')) {
@@ -422,6 +432,12 @@ export default function App() {
         </Suspense>
       )}
 
+      {trainerInvite && (
+        <Suspense fallback={null}>
+          <JoinTrainerSheet code={trainerInvite} onClose={() => { clearTrainerInvite(); setTrainerInvite(null) }} />
+        </Suspense>
+      )}
+
       {showWeighIn && (
         <Suspense fallback={null}>
           <WeighInSheet onClose={() => setShowWeighIn(false)} onProfileChange={refreshProfile} />
@@ -456,6 +472,7 @@ export default function App() {
             onEdit={() => { setShowProfile(false); setEditingProfile(true) }}
             onUpgrade={goUpgrade}
             onOpenCoach={isAdmin ? () => { setShowProfile(false); navigate('coach') } : undefined}
+            onOpenClients={() => { setShowProfile(false); navigate('clients') }}
             onEditTargets={() => { setShowProfile(false); setFoodIntent('goals'); navigate('calories') }}
           />
         </Suspense>

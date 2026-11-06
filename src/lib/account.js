@@ -19,6 +19,9 @@ const EXPORT_OTHER = [
   ['coach_purchases', 'buyer_id', '*'],
   ['swim_teams', 'coach_id', 'id, name, created_at'],
   ['swim_practices', 'coach_id', '*'],
+  ['coach_clients', 'client_id', '*'],
+  ['coach_assignments', 'client_id', '*'],
+  ['coach_client_codes', 'coach_id', 'coach_id, created_at'],
 ]
 
 export async function collectMyData() {

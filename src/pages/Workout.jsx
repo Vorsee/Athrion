@@ -22,8 +22,10 @@ import TrainingCalendar from '../components/TrainingCalendar.jsx'
 import { rememberCardioSport } from '../lib/cardio.js'
 import LogPastWorkout from '../components/LogPastWorkout.jsx'
 import InviteFriendsCard from '../components/InviteFriendsCard.jsx'
+import TrainerCard from '../components/TrainerCard.jsx'
+import { markAssignmentStarted, takeStartedAssignment, finishAssignment } from '../lib/clientsApi.js'
 import { CoachNote } from '../components/CoachVideo.jsx'
-import { exerciseMode, isTimedSet, setText, setShort, parseTimeTarget, fmtSecs, roundSecs } from '../lib/sets.js'
+import { exerciseMode, isTimedSet, setText, setShort, parseTimeTarget, fmtSecs, roundSecs, readLogRpe, RPE_SCALE } from '../lib/sets.js'
 import { useBackHandler, useFocusMode, notifySession, readSession, setSessionMinimised, SESSION_LIMIT_MS } from '../lib/shell.js'
 import { HeaderBar } from '../components/Nav.jsx'
 
@@ -185,6 +187,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       // From Plan: sets and rest come from the plan, so skip the config screen
       const pe = pendingWorkout.planExercises
       startPlanWorkout(matchPlanExercises(pe), pendingWorkout.name, pe[0]?.sets ?? 3, pe.map(e => e.restSeconds ?? 60), pe.map(e => e.sets))
+      markAssignmentStarted(pendingWorkout.assignmentId ?? null) // from the coach: marked done once saved
       onClearPending?.()
     } else if (pendingWorkout?.exercises?.length) {
       startWorkout(pendingWorkout.exercises, pendingWorkout.name)
@@ -193,6 +196,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
   }, [pendingWorkout])
 
   function startWorkout(exercises, name) {
+    markAssignmentStarted(null)
     setActiveExercises(exercises)
     setActiveWorkoutName(name)
     setRestPerExercise([])
@@ -205,6 +209,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
   // Skips config screen — sets/rest per exercise pre-determined by AI plan
   // perExSets: each exercise's own set count, when they differ (coach workouts)
   function startPlanWorkout(exercises, name, sets, perExRest, perExSets = []) {
+    markAssignmentStarted(null)
     const counts = perExSets.map(n => (n > 0 ? n : undefined))
     setActiveExercises(exercises)
     setActiveWorkoutName(name)
@@ -229,6 +234,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
   }
 
   function startFreeWorkout() {
+    markAssignmentStarted(null)
     setActiveExercises([])
     setActiveWorkoutName('Free workout')
     setExIdx(0); setSetIdx(0); setLoggedSets([]); setSetCounts([])
@@ -328,6 +334,8 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
     {
       const entry = { date: auto ? localDateKey(new Date(startTime)) : todayKey(), name: activeWorkoutName, duration: `${duration}min`, volume, sets: loggedSets }
       saveHistory(entry)
+      const assignment = takeStartedAssignment()
+      if (assignment) finishAssignment(assignment).catch(() => {})
       // Workout-based badges unlocked by this session (body/photo badges are awarded in Progress)
       if (earnedBadgeIds) {
         const now = computeEarnedBadges({ history: [{ ...entry, created_at: new Date().toISOString() }, ...history] })
@@ -430,6 +438,11 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       pendingCount={pendingCount}
       onRetryPending={retryPending}
       onLogPast={handleLogPast}
+      onStartAssignment={a => {
+        const pe = (a.exercises ?? []).map(e => ({ ...e, coachTip: e.note || undefined })) // the coach's note shows while lifting
+        startPlanWorkout(matchPlanExercises(pe), a.title, pe[0]?.sets ?? 3, pe.map(e => e.restSeconds ?? 90), pe.map(e => e.sets))
+        markAssignmentStarted(a.id)
+      }}
       starterGoal={coachInfo.goal}
       starterPlace={coachInfo.place}
     />
@@ -516,7 +529,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       onEditSet={handleEditSet} onDeleteSet={handleDeleteSet}
       reps={reps} setReps={setReps}
       freeWorkout={freeWorkout}
-      onLog={(stopwatchSecs, { warmup = false } = {}) => {
+      onLog={(stopwatchSecs, { warmup = false, rpe = null } = {}) => {
         const w = toLb(parseFloat(weight) || 0) // typed in the person's unit, stored in lb
         const ex = activeExercises[exIdx]
         const timedMove = exerciseMode(ex) === 'time'
@@ -524,7 +537,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
         const r = stopwatchSecs ?? (timedMove ? roundSecs(reps) : parseInt(reps) || 0)
         const set = timedMove
           ? { ex: ex.name, set: setIdx + 1, weight: w, reps: 0, secs: r }
-          : { ex: ex.name, set: setIdx + 1, weight: w, reps: r }
+          : { ex: ex.name, set: setIdx + 1, weight: w, reps: r, ...(rpe && !warmup && { rpe }) }
         // A warm-up set is kept with the workout but isn't one of the working sets: no rest timer,
         // the set count stays, and the boxes keep the weight to build from
         if (warmup) {
@@ -646,7 +659,7 @@ export function starterSession(done, goal, place) {
   return { title: s.title, starter: true, workout: { exercises: s.exercises.map(e => ({ name: e.name, sets: e.sets, reps: e.reps, restSeconds: restSecs(e.rest) })) } }
 }
 
-function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade, onOpenPage, onOpenGuide, pendingCount = 0, onRetryPending, onLogPast, starterGoal, starterPlace }) {
+function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade, onOpenPage, onOpenGuide, pendingCount = 0, onRetryPending, onLogPast, starterGoal, starterPlace, onStartAssignment }) {
   const { fmtVolume } = useUnit()
   const [selectedSession, setSelectedSession] = useState(null)
   const [loggingDay, setLoggingDay] = useState(null) // 'YYYY-MM-DD' a workout is being added to
@@ -810,6 +823,7 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
       </Card>
       )}
 
+      {ready && <TrainerCard onStart={onStartAssignment} />}
       {ready && <InviteFriendsCard onOpenGroup={onOpenPage ? () => onOpenPage('group') : undefined} />}
 
       <TrainingCalendar history={history} planSchedule={planSchedule} onOpenSession={setSelectedSession} onLogDay={onLogPast ? setLoggingDay : undefined} />
@@ -1042,6 +1056,9 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
   const progress = freeWorkout ? null : (setsDone / setsTotal) * 100
   const prev = loggedSets.filter(s => s.ex === ex.name && !s.warmup).slice(-1)[0]
   const [warmup, setWarmup] = useState(false) // the next set logged is a warm-up
+  const [logRpe] = useState(readLogRpe) // You → Workouts → Log effort
+  const [rpe, setRpe] = useState(null) // how hard the next set felt, 6-10, optional
+  useEffect(() => { setRpe(null) }, [ex.name, setIdx])
   const pastSessions = historyFor(exerciseHistory, ex.name) // also under another name for the same lift
   const lastSession = pastSessions[pastSessions.length - 1]
   const records = pastSessions.length ? getRecords(pastSessions) : null
@@ -1153,7 +1170,26 @@ function TrainingScreen({ exerciseHistory, exercises, exIdx, setIdx, setsFor, lo
           </div>
         )}
         {/* Logging mid-hold stops the clock and logs the exact time */}
-        <Button full icon={warmup ? 'mdi:fire' : 'mdi:check'} onClick={() => { onLog(holding ? stopHold.current?.() : undefined, { warmup }); setWarmup(false) }}
+        {logRpe && mode !== 'time' && !warmup && (
+          <div className="mb-3">
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <span className="text-xs text-muted">How hard was it?</span>
+              <InfoButton title="Effort (RPE)">
+                <div className="space-y-2 text-sm text-ink-2">
+                  <p>RPE is how hard a set felt, out of 10. 10 means you couldn't do one more rep, 8 means about 2 were left, 6 is easy.</p>
+                  <p>Most working sets land around 7 to 9. It's saved with the set. Turn it off in You, Workouts.</p>
+                </div>
+              </InfoButton>
+            </div>
+            <div className="grid grid-cols-5 gap-1.5" role="group" aria-label="Effort, RPE">
+              {RPE_SCALE.map(n => (
+                <button key={n} type="button" onClick={() => setRpe(r => (r === n ? null : n))} aria-pressed={rpe === n}
+                  className={`press min-h-[40px] rounded-xl border text-sm font-semibold tabular-nums transition-colors ${rpe === n ? 'bg-neon text-on-neon border-neon' : 'bg-raised text-ink-2 border-line'}`}>{n}</button>
+              ))}
+            </div>
+          </div>
+        )}
+        <Button full icon={warmup ? 'mdi:fire' : 'mdi:check'} onClick={() => { onLog(holding ? stopHold.current?.() : undefined, { warmup, rpe }); setWarmup(false) }}
           disabled={mode === 'time' && !holding && !(parseFloat(reps) > 0)}>{warmup ? 'Log warm-up set' : `Log set ${setIdx + 1}`}</Button>
         {mode !== 'time' && (
           <button type="button" onClick={() => setWarmup(w => !w)} aria-pressed={warmup}
@@ -1375,7 +1411,7 @@ function LoggedSets({ sets, onEdit, onDelete }) {
                   ? <span className="w-7 h-7 rounded-full border border-line-strong text-muted text-xs font-bold flex items-center justify-center flex-shrink-0" aria-label="Warm-up set">W</span>
                   : <span className="w-7 h-7 rounded-full bg-neon text-on-neon text-xs font-bold flex items-center justify-center flex-shrink-0" aria-label={`Set ${s.set}`}>{s.set}</span>}
                 <span className={`flex-1 text-base font-bold tabular-nums ${s.warmup ? 'text-ink-2' : 'text-ink'}`}>
-                  {setText(s, fmt)}
+                  {setText(s, fmt)}{s.rpe ? <span className="ml-2 text-xs font-semibold text-muted">RPE {s.rpe}</span> : null}
                 </span>
                 <button aria-label={s.warmup ? 'Edit warm-up set' : `Edit set ${s.set}`} onClick={() => { setDraft({ weight: String(fromLb(s.weight)), reps: String(isTimedSet(s) ? s.secs : s.reps), timed: isTimedSet(s) }); setEditing(s.i) }}
                   className="press w-11 h-11 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-raised">

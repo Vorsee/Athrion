@@ -23,6 +23,11 @@ const KIND_ICON = {
   team_removed: 'mdi:account-remove-outline',
   team_left: 'mdi:account-arrow-right-outline',
   team_practice: 'mdi:clipboard-text-outline',
+  client_joined: 'mdi:account-plus-outline',
+  client_left: 'mdi:account-arrow-right-outline',
+  client_removed: 'mdi:account-remove-outline',
+  assignment: 'mdi:clipboard-text-outline',
+  assignment_done: 'mdi:check-circle-outline',
 }
 
 export function timeAgo(iso, now = Date.now()) {

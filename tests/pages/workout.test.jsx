@@ -108,6 +108,28 @@ describe('Workout tab — rest days match the plan', () => {
 })
 
 describe('Workout tab — logging', () => {
+  it('logs effort (RPE) with a set only when it is switched on', async () => {
+    localStorage.setItem('athrion_log_rpe', '1')
+    sb.set('fitness_plans', { data: withWorkoutOn('Friday'), error: null })
+    show()
+    await userEvent.click(await screen.findByText('Start workout'))
+    const [weight, reps] = screen.getAllByPlaceholderText('0')
+    await userEvent.type(weight, '50')
+    await userEvent.type(reps, '8')
+    await userEvent.click(screen.getByRole('button', { name: '8' }))
+    await userEvent.click(screen.getByText(/^Log set \d/))
+    const saved = JSON.parse(localStorage.getItem('athrion_workout'))
+    expect(saved.loggedSets[0]).toMatchObject({ weight: 50, reps: 8, rpe: 8 })
+    localStorage.removeItem('athrion_log_rpe')
+  })
+
+  it('shows no effort buttons by default', async () => {
+    sb.set('fitness_plans', { data: withWorkoutOn('Friday'), error: null })
+    show()
+    await userEvent.click(await screen.findByText('Start workout'))
+    expect(screen.queryByRole('group', { name: 'Effort, RPE' })).toBeNull()
+  })
+
   it('logs a set, starts the rest timer and remembers the workout across reloads', async () => {
     sb.set('fitness_plans', { data: withWorkoutOn('Friday'), error: null })
     show()

@@ -47,3 +47,13 @@ export function parseTimeTarget(reps) {
   const nums = t.match(/\d+/g).map(n => Number(n) * mult)
   return { min: nums[0], max: nums[1] ?? nums[0] }
 }
+
+// Effort (RPE, 6-10) on each working set: off unless switched on in You → Workouts, on this device
+const RPE_KEY = 'athrion_log_rpe'
+export const RPE_SCALE = [6, 7, 8, 9, 10]
+export function readLogRpe() {
+  try { return localStorage.getItem(RPE_KEY) === '1' } catch { return false }
+}
+export function setLogRpe(on) {
+  try { on ? localStorage.setItem(RPE_KEY, '1') : localStorage.removeItem(RPE_KEY) } catch { /* only a convenience */ }
+}

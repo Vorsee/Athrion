@@ -77,7 +77,7 @@ export default function Coach({ onOpenShop }) {
   )
 }
 
-function Review({ coach, onEdit }) {
+export function Review({ coach, onEdit }) {
   const pending = coach.status === 'pending'
   return (
     <>
@@ -92,7 +92,7 @@ function Review({ coach, onEdit }) {
           </div>
         </div>
         {pending ? (
-          <p className="text-sm text-ink-2">We check every coach before they can sell. You'll get a notification when it's done, usually within 2 working days.</p>
+          <p className="text-sm text-ink-2">We check every coach before they can coach or sell on ATHRION. You'll get a notification when it's done, usually within 2 working days.</p>
         ) : coach.status === 'rejected' ? (
           <>
             {coach.review_note && <p className="text-sm text-ink-2"><span className="font-semibold text-ink">Why: </span>{coach.review_note}</p>}
@@ -115,7 +115,7 @@ function Review({ coach, onEdit }) {
 // Profile: the application, and later the public coach page
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ProfileForm({ coach, onSaved, isAdmin, onApplications }) {
+export function ProfileForm({ coach, onSaved, isAdmin, onApplications }) {
   const isNew = !coach
   const [f, setF] = useState({
     display_name: coach?.display_name ?? '', bio: coach?.bio ?? '', credentials: coach?.credentials ?? '',

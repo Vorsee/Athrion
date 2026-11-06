@@ -9,7 +9,9 @@ import { Icon } from '@iconify/react'
 import { tok } from '../lib/tokens.js'
 import Sheet from './Sheet.jsx'
 import { Button, Segmented, ListRow, Card, Tag, Skeleton, InlineError } from './ui/index.js'
-import ReminderSettings from './ReminderSettings.jsx'
+import ReminderSettings, { Toggle } from './ReminderSettings.jsx'
+import { readLogRpe, setLogRpe } from '../lib/sets.js'
+import { fetchMyTrainer, leaveTrainer } from '../lib/clientsApi.js'
 const Progress = lazy(() => import('../pages/Progress.jsx'))
 import { fmtWeight } from '../lib/units.js'
 import { PRO_FEATURES, PLANS, money } from '../lib/pricing.js'
@@ -324,9 +326,46 @@ function ImportScreen({ defaultUnit, onBack }) {
   )
 }
 
+// Effort (RPE) buttons under each working set, for people who train by feel; off by default
+function RpeSetting() {
+  const [on, setOn] = useState(readLogRpe)
+  return (
+    <div className="flex items-center justify-between gap-3 bg-raised rounded-xl px-4 py-3">
+      <div className="min-w-0">
+        <div className="text-sm font-semibold text-ink">Log effort (RPE)</div>
+        <div className="text-xs text-muted">Rate each working set 6 to 10 as you log it</div>
+      </div>
+      <Toggle on={on} onChange={v => { setOn(v); setLogRpe(v) }} label="Log effort (RPE)" />
+    </div>
+  )
+}
+
+// The person's trainer (031), if they have one, with a way to stop
+function MyTrainer() {
+  const [trainer, setTrainer] = useState(null)
+  const [err, setErr] = useState('')
+  useEffect(() => { fetchMyTrainer().then(setTrainer).catch(() => {}) }, [])
+  if (!trainer) return null
+  async function stop() {
+    if (!window.confirm(`Stop training with ${trainer.display_name}? They'll no longer see your workouts or weigh-ins.`)) return
+    try { await leaveTrainer(); setTrainer(null) } catch (e) { setErr(e.message) }
+  }
+  return (
+    <div className="bg-surface border border-line rounded-2xl p-3 mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+      <div className="grow basis-0 min-w-[8rem]">
+        <div className="text-xs text-muted">Your trainer</div>
+        <div className="font-semibold text-ink break-words">{trainer.display_name}</div>
+        <div className="text-xs text-muted">Sees your workouts, weigh-ins and goal</div>
+      </div>
+      <Button size="sm" variant="secondary" onClick={stop}>Stop</Button>
+      {err && <p role="alert" className="w-full text-xs text-danger">{err}</p>}
+    </div>
+  )
+}
+
 // ── Main modal ────────────────────────────────────────────────────────────────
 
-export default function ProfileModal({ session, profile, isPro, theme, onToggleTheme, onClose, onEdit, onUpgrade, onEditTargets, onOpenCoach, onProfileChange, initialScreen = 'profile' }) {
+export default function ProfileModal({ session, profile, isPro, theme, onToggleTheme, onClose, onEdit, onUpgrade, onEditTargets, onOpenCoach, onOpenClients, onProfileChange, initialScreen = 'profile' }) {
   const [pwState, setPwState] = useState('idle')   // idle | loading | sent | error
   const [screen, setScreen]   = useState(initialScreen) // profile | progress | subscription | import | delete | review
   const [exportState, setExportState] = useState('idle') // idle | loading | error
@@ -440,6 +479,12 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
                 onChange={t => { if (t !== theme) onToggleTheme?.() }} label="Theme" kind="choice" />
             </section>
 
+            {/* ── Workouts ── */}
+            <section className="mb-6">
+              <h3 className="text-lg leading-[1.3] font-semibold text-ink mb-2">Workouts</h3>
+              <RpeSetting />
+            </section>
+
             {/* ── Reminders (moved here from Progress) ── */}
             <section className="mb-6">
               <h3 className="text-lg leading-[1.3] font-semibold text-ink mb-2">Reminders</h3>
@@ -478,14 +523,14 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
             </section>
 
             {/* ── Coaching ── */}
-            {onOpenCoach && (
-              <section className="mb-6">
-                <h3 className="text-lg leading-[1.3] font-semibold text-ink mb-2">Coaching</h3>
-                <div className="bg-surface border border-line rounded-2xl p-1">
-                  <ListRow icon="mdi:whistle-outline" tile="neon-ink" title="Coach on ATHRION" meta="Sell your workouts and week plans" chevron onClick={onOpenCoach} />
-                </div>
-              </section>
-            )}
+            <section className="mb-6">
+              <h3 className="text-lg leading-[1.3] font-semibold text-ink mb-2">Coaching</h3>
+              <MyTrainer />
+              <div className="bg-surface border border-line rounded-2xl p-1">
+                {onOpenClients && <ListRow icon="mdi:account-supervisor-outline" tile="neon-ink" title="Coach clients" meta="See their training and send them workouts" chevron onClick={onOpenClients} />}
+                {onOpenCoach && <ListRow icon="mdi:whistle-outline" tile="neon-ink" title="Coach on ATHRION" meta="Sell your workouts and week plans" chevron onClick={onOpenCoach} />}
+              </div>
+            </section>
 
             {/* ── Account ── */}
             <section className="mb-6 space-y-2.5">

@@ -16,7 +16,7 @@ const TABS = [
 ]
 
 // Pages opened from inside a tab, rather than from the bottom bar
-export const PARENT_TAB = { library: 'workout', coach: 'shop' }
+export const PARENT_TAB = { library: 'workout', coach: 'shop', clients: 'workout' }
 
 // Header title per page. `large`: the page shows its own big title at the top of
 // the content, so the bar title only fades in once that has scrolled away.
@@ -29,6 +29,7 @@ const PAGE_META = {
   coach:    { title: 'Coach', large: true },
   shop:     { title: 'Coaches', large: true },
   swim:     { title: 'Cardio', large: true },
+  clients:  { title: 'Clients', large: true },
 }
 
 export const pageTitle = id => PAGE_META[id]?.title ?? ''
