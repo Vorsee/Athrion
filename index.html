@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>ATHRION: training plan, workout log and calories</title>
-    <meta name="description" content="A training plan and calorie targets that adjust every week. Free workout and calorie logging; Pro adds your plan, adaptive targets and photo meal logging." />
+    <meta name="description" content="A personal trainer that plans your week, a workout and calorie log, swim and run tracking, and workouts with friends. Free to start; Pro adds the coaching plan, an AI meal plan and photo meal logging." />
 
     <!-- Link previews -->
     <meta property="og:type" content="website" />
@@ -17,6 +17,9 @@
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="ATHRION" />
     <meta name="twitter:card" content="summary_large_image" />
+    <script type="application/ld+json">
+      {"@context":"https://schema.org","@type":"WebApplication","name":"ATHRION","url":"https://athrion.app/","applicationCategory":"HealthApplication","operatingSystem":"Any (web browser)","description":"A personal trainer that plans your week, a workout and calorie log, swim and run tracking, and workouts with friends.","offers":[{"@type":"Offer","name":"Free","price":"0","priceCurrency":"USD"},{"@type":"Offer","name":"Pro monthly","price":"4.99","priceCurrency":"USD"},{"@type":"Offer","name":"Pro yearly","price":"49.99","priceCurrency":"USD"}]}
+    </script>
 
     <!-- PWA -->
     <link rel="manifest" href="/manifest.json" />
@@ -32,7 +35,15 @@
 
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Shown until the app starts, so a slow connection and a link preview see words, not a blank page -->
+    <div id="root">
+      <main style="min-height:100vh;background:#0B0B0A;color:#F4F2EC;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 16px">
+        <div style="font-weight:800;letter-spacing:0.04em;font-size:20px">ATHRION</div>
+        <h1 style="font-size:44px;line-height:1;margin:28px 0 0;letter-spacing:-0.02em">Train. Eat. <span style="color:#C8F135">Progress.</span></h1>
+        <p style="max-width:520px;margin:20px 0 0;font-size:18px;line-height:1.5;color:#CFCCC2">A personal trainer that plans your week, a workout and calorie log, and swim and run tracking. In one app, free to start.</p>
+        <p style="margin:28px 0 0;font-size:14px;color:#A3A096">Loading...</p>
+      </main>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

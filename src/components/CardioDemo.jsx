@@ -6,11 +6,11 @@ import { Icon } from '@iconify/react'
 // over in step whenever it comes back on screen, rests off screen, and holds its finished
 // state for reduced motion.
 
-const reducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+export const reducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
 // round: goes up each time the card comes on screen, so the scene remounts and its CSS motion
 // and counters start together
-function useOnScreen() {
+export function useOnScreen() {
   const ref = useRef(null)
   const [state, setState] = useState({ visible: false, round: 0 })
   useEffect(() => {

@@ -278,3 +278,8 @@ body {
 
 /* Primary neon buttons need an edge on cream (fill vs cream is only 1.14) */
 .light .bg-neon { box-shadow: inset 0 0 0 1px #6E9400; }
+
+/* Landing photo scan: the line sweeping down the plate */
+@keyframes scanY { from { transform: translateY(-10%); } to { transform: translateY(100%); } }
+.scan-sweep { animation: scanY 1.6s ease-in-out infinite alternate; }
+@media (prefers-reduced-motion: reduce) { .scan-sweep { animation: none; opacity: 0; } }

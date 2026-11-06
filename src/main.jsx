@@ -17,6 +17,12 @@ for (const type of ['gesturestart', 'gesturechange']) document.addEventListener(
 document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault() }, { passive: false })
 window.addEventListener('wheel', e => { if (e.ctrlKey) e.preventDefault() }, { passive: false })
 
+// Signed out (no saved session): start fetching the landing page now, alongside the app,
+// rather than after the session check
+try {
+  if (!Object.keys(localStorage).some(k => k.startsWith('sb-') && k.endsWith('-auth-token'))) import('./pages/Landing.jsx')
+} catch { /* storage blocked: the page still loads, just later */ }
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>
