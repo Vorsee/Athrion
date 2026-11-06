@@ -519,7 +519,7 @@ function TipCard({ tip }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Pro lock: the real page with a sample plan, dimmed behind an upgrade card.
+// Pro lock: an upgrade card, then the real page with a sample plan, dimmed.
 // Labelled as a sample, and without its calories, which would contradict the person's own on Food.
 // ─────────────────────────────────────────────────────────────────────────────
 function LockedPlan({ fp, onUpgrade, onStartSetup }) {
@@ -531,7 +531,7 @@ function LockedPlan({ fp, onUpgrade, onStartSetup }) {
   return (
     <ProLock onUpgrade={onUpgrade} title="Get a plan built for your goal"
       secondary={onStartSetup && { label: 'Answer the questions first, free', onClick: onStartSetup }}
-      description="Behind this is an example. Yours is built for your goal, days and equipment, and coaches you every week."
+      description="Below is an example. Yours is built for your goal, days and equipment, and coaches you every week."
       perks={[
         'Your target on every exercise: the weight and reps to beat',
         'A weekly review: what went well, what to change',

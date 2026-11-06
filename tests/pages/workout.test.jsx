@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { sb } from '../helpers/supabaseMock.js'
+import { sb, USER } from '../helpers/supabaseMock.js'
 import { planRow, withWorkoutOn } from '../helpers/fixtures.js'
 
 vi.mock('../../src/lib/supabase.js', () => ({ supabase: sb.supabase }))
@@ -93,6 +93,17 @@ describe('Workout tab — rest days match the plan', () => {
     expect(screen.getByText('Session A of 3')).toBeInTheDocument()
     expect(screen.queryByText('Fri Workout')).toBeNull()
     expect(screen.getByText('Start workout')).toBeInTheDocument()
+  })
+
+  it('gives a new free account a starter workout for its goal and place, ready to start', async () => {
+    sb.set('fitness_plans', { data: null, error: null })
+    sb.set('fitness_profiles', { data: { user_id: USER.id, primary_goal: 'lose_weight', workout_location: 'home' }, error: null })
+    show({ isPro: false })
+    expect(await screen.findByText('Full body A')).toBeInTheDocument()
+    expect(await screen.findByText('Reverse Lunge')).toBeInTheDocument() // the home session
+    expect(screen.getByText('Start workout')).toBeInTheDocument()
+    expect(screen.queryByText('Your first workout')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Create your own workout' })).toBeInTheDocument()
   })
 })
 

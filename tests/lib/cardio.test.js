@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { cardioUnits, parseDuration, fmtDuration, fmtDistance, paceSecs, cardioSummary } from '../../src/lib/cardio.js'
+import { cardioUnits, parseDuration, fmtDuration, fmtDistance, paceSecs, cardioSummary, firstSport } from '../../src/lib/cardio.js'
 
 describe('cardio', () => {
   it('reads times as minutes, m:ss or h:mm:ss', () => {
@@ -46,5 +46,21 @@ describe('runs for plans and training days', () => {
     const { cardioAsHistory } = await import('../../src/lib/coaching.js')
     const days = cardioAsHistory([{ kind: 'run', date: '2026-11-03' }, { kind: 'swim', date: '2026-11-02' }])
     expect(days.map(d => [d.date, d.name])).toEqual([['2026-11-03', 'Run'], ['2026-11-02', 'Swim']])
+  })
+
+  it('counts a swim of 50 m or more for the fastest pace, the same floor as the PR tiles', () => {
+    const now = new Date('2026-11-04T12:00:00')
+    const logs = [
+      { kind: 'swim', date: '2026-11-03', distance_m: 25, seconds: 15 },
+      { kind: 'swim', date: '2026-11-03', distance_m: 50, seconds: 40 },
+      { kind: 'swim', date: '2026-11-02', distance_m: 400, seconds: 400 },
+    ]
+    expect(cardioSummary(logs, 'swim', now).fastest.distance_m).toBe(50)
+  })
+  it('opens Run first, unless swimming is a goal or they have only swum', () => {
+    expect(firstSport()).toBe('run')
+    expect(firstSport({ goals: ['lose_weight', 'swimming'] })).toBe('swim')
+    expect(firstSport({ logs: [{ kind: 'swim' }] })).toBe('swim')
+    expect(firstSport({ logs: [{ kind: 'swim' }, { kind: 'run' }] })).toBe('run')
   })
 })

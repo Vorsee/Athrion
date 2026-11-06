@@ -1,6 +1,6 @@
 // The Cardio tab: Swim and Run, runs logged as cardio_logs with kind 'run'
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { sb, USER } from '../helpers/supabaseMock.js'
 import { todayKey } from '../../src/lib/data.js'
@@ -54,6 +54,18 @@ describe('Cardio', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Swim' }))
     expect(localStorage.getItem('athrion_cardio_sport')).toBe('swim')
     expect(await screen.findByRole('tab', { name: 'My swims' })).toBeInTheDocument()
+  })
+
+  it('opens Run on a first visit, and Swim when swimming is a goal', async () => {
+    sb.set('cardio_logs', { data: [], error: null })
+    sb.set('fitness_profiles', { data: null, error: null })
+    const { unmount } = render(<Cardio />)
+    expect(screen.getByRole('tab', { name: 'Run' })).toHaveAttribute('aria-selected', 'true')
+    await waitFor(() => expect(localStorage.getItem('athrion_cardio_sport')).toBe('run'))
+    unmount(); localStorage.clear()
+    sb.set('fitness_profiles', { data: { user_id: USER.id, primary_goal: 'swimming', secondary_goals: [] }, error: null })
+    render(<Cardio />)
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Swim' })).toHaveAttribute('aria-selected', 'true'))
   })
 
   it('opens Swim for a team link even when Run was last', async () => {

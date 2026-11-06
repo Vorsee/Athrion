@@ -5,13 +5,23 @@ export const KINDS = {
   swim: { label: 'Swim', icon: 'mdi:swim' },
 }
 
+import { PR_MIN_M } from './swim.js'
+
 const MI = 1609.344, YD = 0.9144
 
 // Which side of the Cardio tab opens: the last one used, on this device. A plan's run day
 // sets it to run before opening the tab.
 const SPORT_KEY = 'athrion_cardio_sport'
+// The sport last opened on this device, or null if Cardio was never opened here
 export function readCardioSport() {
-  try { return localStorage.getItem(SPORT_KEY) === 'run' ? 'run' : 'swim' } catch { return 'swim' }
+  try { const v = localStorage.getItem(SPORT_KEY); return v === 'run' || v === 'swim' ? v : null } catch { return null }
+}
+
+// First visit: Run, unless swimming is one of their goals or they've only ever swum
+export function firstSport({ goals = [], logs = [] } = {}) {
+  if (goals.includes('swimming')) return 'swim'
+  const swims = logs.some(l => l.kind === 'swim'), runs = logs.some(l => l.kind === 'run')
+  return swims && !runs ? 'swim' : 'run'
 }
 export function rememberCardioSport(sport) {
   try { localStorage.setItem(SPORT_KEY, sport) } catch { /* only a convenience */ }
@@ -60,8 +70,9 @@ export function cardioSummary(logs, kind, now = new Date()) {
   const week = mine.filter(l => new Date(`${l.date}T12:00:00`) >= monday)
   const sum = (list, k) => list.reduce((a, l) => a + Number(l[k]), 0)
   const longest = mine.reduce((b, l) => (!b || Number(l.distance_m) > Number(b.distance_m) ? l : b), null)
-  // Fastest pace only counts sessions long enough to mean something
-  const minM = kind === 'run' ? 1000 : 100
+  // Fastest pace only counts sessions long enough to mean something: runs of 1 km, and swims by
+  // the same floor as Swim's PR tiles and the team boards (PR_MIN_M)
+  const minM = kind === 'run' ? 1000 : PR_MIN_M
   const fastest = mine.filter(l => Number(l.distance_m) >= minM)
     .reduce((b, l) => (!b || l.seconds / l.distance_m < b.seconds / b.distance_m ? l : b), null)
   return { count: mine.length, week: { sessions: week.length, distance_m: sum(week, 'distance_m'), seconds: sum(week, 'seconds') }, longest, fastest }

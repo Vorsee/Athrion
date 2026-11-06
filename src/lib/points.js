@@ -1,8 +1,9 @@
 // Monthly points, levels and trophies. The server counts the points (month_points in
-// supabase/schema.sql, 009); these rules must match it.
+// supabase/schema.sql, 009; 029 counts only workouts saved within 2 days of their date, so
+// imports and older catch-up logs don't earn points); these rules must match it.
 
 export const POINT_RULES = [
-  ['mdi:dumbbell', '10', 'per workout day (3+ sets, one a day)'],
+  ['mdi:dumbbell', '10', 'per workout day (3+ sets, one a day, logged within 2 days)'],
   ['mdi:calendar-check-outline', '20', 'per week with 3+ workout days'],
   ['mdi:arrow-up-bold-outline', '5', 'per personal record, up to 10 a month'],
   ['mdi:account-group-outline', '15', 'per day you train in a room with someone'],

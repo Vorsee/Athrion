@@ -21,6 +21,7 @@ import { syncOpenWorkout, clearOpenWorkout } from '../lib/notifications.js'
 import TrainingCalendar from '../components/TrainingCalendar.jsx'
 import { rememberCardioSport } from '../lib/cardio.js'
 import LogPastWorkout from '../components/LogPastWorkout.jsx'
+import InviteFriendsCard from '../components/InviteFriendsCard.jsx'
 import { CoachNote } from '../components/CoachVideo.jsx'
 import { exerciseMode, isTimedSet, setText, setShort, parseTimeTarget, fmtSecs, roundSecs } from '../lib/sets.js'
 import { useBackHandler, useFocusMode, notifySession, readSession, setSessionMinimised, SESSION_LIMIT_MS } from '../lib/shell.js'
@@ -121,7 +122,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
   // The week runs as on Plan (lib/coaching.js): missed workouts moved to free days, and on a
   // lighter week one set less with lighter weights
   const [fetchedPlan, setFetchedPlan] = useState(null)
-  const [coachInfo, setCoachInfo] = useState({ goalStartDate: null, swims: [] })
+  const [coachInfo, setCoachInfo] = useState({ goalStartDate: null, swims: [], goal: null, place: null })
   useEffect(() => {
     let schedule = isPro ? fetchedPlan?.plan_data?.weeklySchedule : null
     if (schedule) {
@@ -142,7 +143,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       fetchCustomWorkouts().then(w => setCustomWorkouts(w)),
       fetchActivePlan().then(plan => setFetchedPlan(plan ?? null)),
       Promise.all([fetchFitnessProfile().catch(() => null), fetchCardio(500).catch(() => [])])
-        .then(([fp, cardio]) => setCoachInfo({ goalStartDate: fp?.goal_start_date ?? null, swims: cardioAsHistory(cardio) })),
+        .then(([fp, cardio]) => setCoachInfo({ goalStartDate: fp?.goal_start_date ?? null, swims: cardioAsHistory(cardio), goal: fp?.primary_goal ?? null, place: fp?.workout_location ?? null })),
     ]).then(() => { setHomeReady(true); retryPending() })
 
     // Restore in-progress workout
@@ -429,6 +430,8 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       pendingCount={pendingCount}
       onRetryPending={retryPending}
       onLogPast={handleLogPast}
+      starterGoal={coachInfo.goal}
+      starterPlace={coachInfo.place}
     />
   )
 
@@ -632,25 +635,27 @@ function upcomingWorkoutDays(schedule) {
 // '90 s' / '2 min' from the free plan → seconds for the rest timer
 const restSecs = r => { const n = parseFloat(r); return /min/.test(r) ? n * 60 : n || 60 }
 
-// Someone with no plan and no saved workouts gets the free plan's beginner sessions, A → B → C
-function starterSession(done) {
-  const sessions = guidePlan('fit', 'gym').days.filter(d => d.type === 'workout')
+// The free plan's scheme for a profile goal: fat loss, muscle (strength and gaining too), else fit
+const STARTER_GOAL = { lose_weight: 'fat', build_muscle: 'muscle', improve_strength: 'muscle', gain_weight: 'muscle' }
+
+// Someone with no plan and no saved workouts gets the free plan's sessions for their goal and
+// place (gym, or home), A → B → C, so there's a workout to start on day one
+export function starterSession(done, goal, place) {
+  const sessions = guidePlan(STARTER_GOAL[goal] ?? 'fit', place === 'home' ? 'home' : 'gym').days.filter(d => d.type === 'workout')
   const s = sessions[done % sessions.length]
   return { title: s.title, starter: true, workout: { exercises: s.exercises.map(e => ({ name: e.name, sets: e.sets, reps: e.reps, restSeconds: restSecs(e.rest) })) } }
 }
 
-function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade, onOpenPage, onOpenGuide, pendingCount = 0, onRetryPending, onLogPast }) {
+function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade, onOpenPage, onOpenGuide, pendingCount = 0, onRetryPending, onLogPast, starterGoal, starterPlace }) {
   const { fmtVolume } = useUnit()
   const [selectedSession, setSelectedSession] = useState(null)
   const [loggingDay, setLoggingDay] = useState(null) // 'YYYY-MM-DD' a workout is being added to
 
   // AI plan (full dayData) takes priority; fall back to custom rotation, then default
   const rotation = [...customWorkouts].reverse()
-  // Free accounts train their own workouts: none yet, and Today asks them to make the first one;
-  // with two or three saved, a different one comes up by the day (the same all day). Pro without
-  // a plan takes turns through them.
+  // No plan and nothing saved: the starter sessions for their goal. Free accounts with two or
+  // three saved get a different one by the day (the same all day); Pro without a plan takes turns.
   const free = !isPro && !planSchedule
-  const needsFirst = free && rotation.length === 0
   const rotationIdx = rotation.length === 0 ? 0 : free ? dayPick(todayKey(), rotation.length) : history.length % rotation.length
   const todayCustom = rotation.length > 0 ? rotation[rotationIdx] : null
   const fallbackExs = todayCustom
@@ -663,7 +668,7 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
   const isRestDay = !!todayPlan && todayPlan.type !== 'workout'
   const otherDays = isRestDay ? upcomingWorkoutDays(planSchedule) : []
   const [pickedDay, setPickedDay] = useState(null)
-  const starter = !free && !planWorkout && !planSchedule && !todayCustom ? starterSession(history.length) : null
+  const starter = !planWorkout && !planSchedule && !todayCustom ? starterSession(history.length, starterGoal, starterPlace) : null
   const fullWorkout = isRestDay ? (pickedDay ?? otherDays[0] ?? null) : planWorkout ?? starter
   // Short on time: a 30 or 20 minute version of the same workout
   const [short, setShort] = useState(null)
@@ -705,7 +710,7 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
           <div className="flex items-start justify-between gap-3 mb-4">
             <div className="min-w-0">
               <div className="text-sm font-semibold text-neon-ink mb-1">Today's training · {TODAY_FULL}</div>
-              <div className="font-bold text-[2rem] xs:text-[2.25rem] text-ink leading-[1.1] tracking-tight break-words">{needsFirst ? 'Your first workout' : isRestDay ? todayPlan.title : shownWorkout ? planName : fallbackName}</div>
+              <div className="font-bold text-[2rem] xs:text-[2.25rem] text-ink leading-[1.1] tracking-tight break-words">{isRestDay ? todayPlan.title : shownWorkout ? planName : fallbackName}</div>
               {starter && (
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   <Fact icon="mdi:sprout-outline">Starter plan</Fact>
@@ -721,7 +726,7 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
             {starter && (
               <InfoButton title="Your starter plan">
                 <div className="space-y-3 text-sm text-ink-2">
-                  <p>Three beginner-friendly full-body sessions that take turns, so every muscle gets trained through the week. Do whichever comes up next, two or three times a week.</p>
+                  <p>Three full-body sessions set up for your goal{starterPlace === 'home' ? ' at home' : ''}, taking turns so every muscle gets trained through the week. Do whichever comes up next, two or three times a week.</p>
                   <p>Want sessions for your goal, or for training at home? Pick a free 7-day plan. Or save your own workout with Set up workout.</p>
                   <p className="text-xs text-muted">General fitness guidance, not medical advice. Stop if something hurts, and check with a doctor first if you're pregnant, injured or have a health condition.</p>
                   {onOpenGuide && <Button full icon="mdi:calendar-week" onClick={onOpenGuide}>Pick a free 7-day plan</Button>}
@@ -733,12 +738,6 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
             )}
           </div>
 
-          {needsFirst ? (
-            <div className="space-y-4">
-              <p className="text-sm text-ink-2">Pick the exercises you like. Your workout shows here every time you train, ready to start in one tap.</p>
-              <Button full icon="mdi:plus" className="h-14 text-base" onClick={onCreateNew}>Create your first workout</Button>
-            </div>
-          ) : <>
           {isRestDay && (
             <div className="mb-4">
               {otherDays.length > 0 && (
@@ -807,10 +806,11 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
             </Button>
             )
           )}
-          </>}
           <Button variant="ghost" full icon="mdi:plus" onClick={onFreeStart} className="mt-2">Free workout</Button>
       </Card>
       )}
+
+      {ready && <InviteFriendsCard onOpenGroup={onOpenPage ? () => onOpenPage('group') : undefined} />}
 
       <TrainingCalendar history={history} planSchedule={planSchedule} onOpenSession={setSelectedSession} onLogDay={onLogPast ? setLoggingDay : undefined} />
       {loggingDay && (
@@ -829,9 +829,7 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
         </>}>My workouts</SectionTitle>
 
         {customWorkouts.length === 0 ? (
-          needsFirst
-            ? <p className="text-sm text-muted">Workouts you save show here. The one above starts your list.</p>
-            : <Button variant="secondary" full icon="mdi:plus" onClick={onCreateNew}>Create your first workout</Button>
+          <Button variant="secondary" full icon="mdi:plus" onClick={onCreateNew}>Create your own workout</Button>
         ) : (
           <div className="space-y-2">
             {customWorkouts.map(w => {
