@@ -40,6 +40,8 @@ export async function uploadMyPhoto(file) {
 export const fetchCoachedTeam = async () => one(must(await supabase.rpc('my_coached_team')))
 export const saveTeam = async name => one(must(await supabase.rpc('save_swim_team', { p_name: name })))
 export const newTeamCode = async () => one(must(await supabase.rpc('new_swim_team_code')))
+// The coach deletes their team (030): swimmers are told, practices go, swims stay theirs
+export const deleteTeam = async () => must(await supabase.rpc('delete_swim_team'))
 export const fetchRoster = async () => must(await supabase.rpc('my_swim_roster')) ?? []
 export const fetchSwimmerSwims = async userId => must(await supabase.rpc('swimmer_swims', { p_user: userId })) ?? []
 // Every swimmer's PR per stroke (020). Before 020 runs there is no leaderboard: empty, not an error

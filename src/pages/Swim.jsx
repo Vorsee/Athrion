@@ -11,7 +11,7 @@ import {
   swimmerName, PRACTICE_PARTS, practiceSuggestions, DRYLAND_MOVES, isDryland, blankItem, practiceTotals, practiceLine, mainStroke,
 } from '../lib/swim.js'
 import {
-  photoUrls, fetchMyPhoto, uploadMyPhoto, fetchCoachedTeam, saveTeam, newTeamCode, fetchRoster, fetchSwimmerSwims,
+  photoUrls, fetchMyPhoto, uploadMyPhoto, fetchCoachedTeam, saveTeam, newTeamCode, deleteTeam, fetchRoster, fetchSwimmerSwims,
   respondToSwimmer, fetchTeamPrs, fetchMyTeam, teamByCode, leaveTeam, searchTeams, joinTeam, setTeamName, accountName,
   fetchTeammates, fetchTeammatesPrs, setTeamVisible,
   fetchPractices, savePractice, deletePractice,
@@ -928,6 +928,7 @@ function CoachView({ team, roster, prs, urls, onChanged, onOpenSwimmer }) {
   const [copied, setCopied] = useState(false)
   const [busy, setBusy] = useState(null)
   const [err, setErr] = useState('')
+  const [deleting, setDeleting] = useState(false)
   const requests = roster.filter(r => r.status === 'pending')
   const swimmers = roster.filter(r => r.status === 'active')
 
@@ -1024,7 +1025,37 @@ function CoachView({ team, roster, prs, urls, onChanged, onOpenSwimmer }) {
       </section>
       {swimmers.length > 0 && <Leaderboard prs={prs} roster={roster} urls={urls} onOpenSwimmer={onOpenSwimmer} />}
       {err && <p role="alert" className="text-xs text-danger">{err}</p>}
+      <Button variant="ghost" full icon="mdi:delete-outline" onClick={() => setDeleting(true)} className="text-danger hover:text-danger">Delete team</Button>
+      {deleting && <DeleteTeamSheet team={team} swimmers={swimmers.length} onClose={() => setDeleting(false)} onDeleted={() => { setDeleting(false); onChanged() }} />}
     </div>
+  )
+}
+
+// Deleting a team asks for its name, since it can't be undone
+function DeleteTeamSheet({ team, swimmers, onClose, onDeleted }) {
+  const [typed, setTyped] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const match = typed.trim().toLowerCase() === team.name.trim().toLowerCase()
+  async function remove() {
+    setBusy(true); setErr('')
+    try { await deleteTeam(); onDeleted() } catch (x) { setErr(x.message); setBusy(false) }
+  }
+  return (
+    <Sheet title="Delete team" onClose={onClose}>
+      <div className="space-y-4">
+        <p className="text-sm text-ink-2">
+          {team.name} and its practices are deleted for good, and its invite link stops working.
+          {swimmers > 0 ? ` Your ${swimmers === 1 ? 'swimmer is' : `${swimmers} swimmers are`} taken off and told.` : ''} Every swim stays with the swimmer who logged it.
+        </p>
+        <label className="block">
+          <span className="text-xs text-muted block mb-1">Type the team name to confirm</span>
+          <input value={typed} onChange={e => setTyped(e.target.value)} placeholder={team.name} autoCapitalize="none" className={inputCls} />
+        </label>
+        {err && <p role="alert" className="text-xs text-danger">{err}</p>}
+        <Button variant="danger" full icon="mdi:delete-outline" disabled={!match || busy} onClick={remove}>{busy ? 'Deleting...' : 'Delete team'}</Button>
+      </div>
+    </Sheet>
   )
 }
 

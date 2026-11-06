@@ -574,7 +574,7 @@ describe('App shell', () => {
     localStorage.clear()
     sb.supabase.auth.getSession.mockResolvedValue({ data: { session: null } })
     render(<P.App />)
-    expect(await screen.findByRole('heading', { level: 1, name: 'Train. Eat. Progress.' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: /Work out\s*together/ })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Tried ATHRION?' })).toBeInTheDocument() // before the first review, an invitation
     expect(screen.getByText('$4.99')).toBeInTheDocument()
     await userEvent.click(screen.getAllByText('Create free account')[0])

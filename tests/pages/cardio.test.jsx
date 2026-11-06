@@ -74,3 +74,23 @@ describe('Cardio', () => {
     expect(screen.getByRole('tab', { name: 'Swim' })).toHaveAttribute('aria-selected', 'true')
   })
 })
+
+describe('Swim team coach', () => {
+  it('deletes the team only after the coach types its name', async () => {
+    const Swim = (await import('../../src/pages/Swim.jsx')).default
+    let gone = false
+    sb.supabase.rpc.mockImplementation(async name => {
+      if (name === 'my_coached_team') return { data: gone ? [] : [{ id: 't1', name: 'Dolphins', code: 'abc123' }], error: null }
+      if (name === 'delete_swim_team') { gone = true; return { data: null, error: null } }
+      return { data: [], error: null }
+    })
+    sb.set('cardio_logs', { data: [], error: null })
+    render(<Swim embedded intent={{ tab: 'team' }} onIntentDone={() => {}} />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete team' }))
+    const confirm = screen.getAllByRole('button', { name: 'Delete team' }).at(-1)
+    expect(confirm).toBeDisabled()
+    await userEvent.type(screen.getByPlaceholderText('Dolphins'), 'dolphins')
+    await userEvent.click(confirm)
+    await waitFor(() => expect(sb.supabase.rpc).toHaveBeenCalledWith('delete_swim_team'))
+  })
+})
