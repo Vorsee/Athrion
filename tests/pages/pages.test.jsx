@@ -600,6 +600,16 @@ describe('App shell', () => {
     render(<P.App />)
     expect(await screen.findByText('Before you start')).toBeInTheDocument()
   })
+  it('keeps a 13 to 15 year old on the waiting screen until a parent approves', async () => {
+    signedIn()
+    sb.supabase.rpc.mockImplementation(async name => (name === 'my_parental_consent'
+      ? { data: [{ status: 'pending', parent_email: 'mom@example.com', child_age: 14, minor: true }], error: null }
+      : { data: null, error: null }))
+    render(<P.App />)
+    expect(await screen.findByText('Waiting for your parent')).toBeInTheDocument()
+    expect(screen.queryByRole('navigation')).toBeNull()
+    sb.supabase.rpc.mockImplementation(async () => ({ data: null, error: null }))
+  })
   it('the test user has agreed to the current terms', () => {
     expect(USER.user_metadata.legal_version).toBe(LEGAL_VERSION)
   })

@@ -13,7 +13,8 @@ const CM_OPTS  = Array.from({ length: 81 },  (_, i) => i + 140)
 const LB_OPTS  = Array.from({ length: 321 }, (_, i) => i + 80)
 const KG_OPTS  = Array.from({ length: 161 }, (_, i) => i + 40)
 // ATHRION is for people 16 and over (Terms of use)
-const AGE_OPTS = Array.from({ length: 65 },  (_, i) => i + 16)
+// 13 and up; 13 to 15 need a parent's approval first (032, onMinor)
+const AGE_OPTS = Array.from({ length: 68 },  (_, i) => i + 13)
 
 const ITEM_H = 44
 const PAD    = 88  // (220 / 2) - (44 / 2)
@@ -299,7 +300,8 @@ function initHeight(iv) {
 }
 
 // name: the account's name, for a nickname suggestion. A new account picks a nickname first.
-export default function Onboarding({ onComplete, initialValues = null, name = '' }) {
+// onMinor(age): an age under 16 without a parent's approval yet; the app asks for it before going on
+export default function Onboarding({ onComplete, initialValues = null, name = '', onMinor }) {
   const iv = initialValues
   const ih = initHeight(iv)
 
@@ -350,7 +352,7 @@ export default function Onboarding({ onComplete, initialValues = null, name = ''
   const back = askNick ? goBack : undefined
   const stats = [
     <SexStep sex={sex} setSex={setSex} onNext={goNext} onBack={back} isEditing={!!initialValues} />,
-    <AgeStep age={age} setAge={setAge} onNext={goNext} onBack={goBack} />,
+    <AgeStep age={age} setAge={setAge} onNext={() => (age < 16 && onMinor ? onMinor(age) : goNext())} onBack={goBack} />,
     <HeightStep unit={heightUnit} setUnit={setHeightUnit}
       ft={ft} setFt={setFt} inches={inches} setInches={setInches}
       cm={cm} setCm={setCm} onNext={goNext} onBack={goBack} />,

@@ -1,5 +1,6 @@
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
+import { isMinor, MINOR_MESSAGE } from './_minor.js'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
@@ -28,6 +29,7 @@ export default async function handler(req, res) {
   if (!token) return res.status(401).json({ error: 'Unauthorized' })
   const { data: { user }, error: authErr } = await supabase.auth.getUser(token)
   if (authErr || !user) return res.status(401).json({ error: 'Invalid token' })
+  if (await isMinor(supabase, user.id)) return res.status(403).json({ error: MINOR_MESSAGE })
 
   let body
   try {

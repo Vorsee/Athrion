@@ -14,6 +14,7 @@ import { readGuidePick, clearGuidePick } from './lib/guidePlans.js'
 import { rememberInvite, readInvite } from './lib/socialApi.js'
 import { parseShopPath, readShopLink, clearShopLink, shopTarget } from './lib/shopLink.js'
 import { rememberCardioSport } from './lib/cardio.js'
+import { PARENT_PATH, fetchParentalConsent } from './lib/parentConsent.js'
 import { TRAINER_PATH, rememberTrainerInvite, readTrainerInvite, clearTrainerInvite } from './lib/clientsApi.js'
 import { SWIM_INVITE_PATH, rememberSwimInvite, readSwimInvite, rememberSwimStart, readSwimStart, clearSwimStart } from './lib/swim.js'
 import { fetchIsAdmin } from './lib/coachApi.js'
@@ -39,6 +40,8 @@ const Coaches           = lazy(() => import('./pages/Coaches.jsx'))
 const Cardio            = lazy(() => import('./pages/Cardio.jsx')) // Swim and Run
 const Clients           = lazy(() => import('./pages/Clients.jsx')) // a coach's clients (031)
 const JoinTrainerSheet  = lazy(() => import('./components/JoinTrainerSheet.jsx'))
+const ParentGate        = lazy(() => import('./components/ParentGate.jsx'))
+const ParentConsent     = lazy(() => import('./pages/ParentConsent.jsx')) // athrion.app/parent/<token>
 const ProfileModal      = lazy(() => import('./components/ProfileModal.jsx'))
 const UpgradeSheet      = lazy(() => import('./components/UpgradeSheet.jsx'))
 const NotificationsSheet = lazy(() => import('./components/NotificationsSheet.jsx'))
@@ -98,6 +101,12 @@ export default function App() {
     if (m) { rememberTrainerInvite(m[1].toLowerCase()); window.history.replaceState(null, '', '/') }
     return readTrainerInvite()
   })
+  // athrion.app/parent/<token>: a parent approving a teen's account, signed in or not
+  const [parentToken, setParentToken] = useState(() => window.location.pathname.match(PARENT_PATH)?.[1] ?? null)
+  // Under 16 (032): undefined while loading, null for no record, else the consent row
+  const [minorConsent, setMinorConsent] = useState(undefined)
+  const [askParentAge, setAskParentAge] = useState(null) // the age a teen picked in onboarding
+  const refreshConsent = () => fetchParentalConsent().then(c => setMinorConsent(c ?? null)).catch(() => setMinorConsent(null))
   const [isAdmin, setIsAdmin] = useState(undefined) // undefined until checked
   const [profile, setProfile]   = useState(undefined) // undefined=loading, null=incomplete, obj=complete
   const [fitnessProfile, setFitnessProfile] = useState(undefined) // undefined=loading, null=not set, obj=loaded
@@ -215,7 +224,8 @@ export default function App() {
 
   useEffect(() => {
     if (session === undefined) return // auth not resolved yet
-    if (!session) { setProfile(null); setFitnessProfile(null); setIsPro(false); return }
+    if (!session) { setProfile(null); setFitnessProfile(null); setIsPro(false); setMinorConsent(null); return }
+    refreshConsent()
     setProfile(undefined)
     setFitnessProfile(undefined)
     fetchUserProfile()
@@ -322,6 +332,12 @@ export default function App() {
     localStorage.setItem('athrion_theme', next)
   }
 
+  if (parentToken) return (
+    <Suspense fallback={<Loading />}>
+      <ParentConsent token={parentToken} onDone={() => { window.history.replaceState(null, '', '/'); setParentToken(null) }} />
+    </Suspense>
+  )
+
   // Show loading while auth, profile, or fitness profile are resolving
   if (session === undefined || (session && (profile === undefined || fitnessProfile === undefined))) return <Loading />
 
@@ -349,6 +365,17 @@ export default function App() {
     </Suspense>
   )
 
+  // Under 16: nothing opens until a parent approves (032)
+  if (session.consented && minorConsent === undefined) return <Loading />
+  if (askParentAge || (minorConsent && minorConsent.status !== 'approved')) return (
+    <Suspense fallback={<Loading />}>
+      <ParentGate consent={minorConsent} age={askParentAge}
+        onChanged={() => refreshConsent().then(() => setAskParentAge(null))}
+        onBack={askParentAge && !minorConsent ? () => setAskParentAge(null) : undefined} />
+    </Suspense>
+  )
+  const isMinor = !!(minorConsent?.status === 'approved' && minorConsent.minor)
+
   const profileComplete = profile && profile.sex && profile.height_cm != null && profile.weight_lb != null && profile.age != null
   if (!profileComplete || editingProfile) return (
     <Suspense fallback={<Loading />}>
@@ -356,6 +383,7 @@ export default function App() {
         initialValues={profile}
         name={session.name}
         onComplete={() => { setEditingProfile(false); refreshProfile() }}
+        onMinor={minorConsent?.status === 'approved' ? undefined : setAskParentAge}
       />
     </Suspense>
   )
@@ -394,10 +422,10 @@ export default function App() {
   const pageProps = {
     workout: { pendingWorkout, onClearPending: () => setPendingWorkout(null), isPro, onUpgrade: goUpgrade, onOpenPage: navigate, onOpenGuide: openGuide, resumeTick },
     library: { onStartWorkout: handleStartFromLibrary },
-    shop: { onStartPlanDay: handleStartPlanDay, onOpenCoach: () => navigate('coach'), shopIntent, onShopIntentDone: () => setShopIntent(null) },
+    shop: { isMinor, onStartPlanDay: handleStartPlanDay, onOpenCoach: () => navigate('coach'), shopIntent, onShopIntentDone: () => setShopIntent(null) },
     coach: { onOpenShop: () => navigate('shop') },
     calories: { profile, isPro, onUpgrade: goUpgrade, onGoToPlan: () => navigate('plan'), intent: foodIntent, onIntentHandled: () => setFoodIntent(null) },
-    group: { session, intent: groupIntent, onIntentDone: () => setGroupIntent(null) },
+    group: { session, intent: groupIntent, onIntentDone: () => setGroupIntent(null), isMinor },
     swim: { intent: swimIntent, onIntentDone: () => setSwimIntent(null), isPro, onUpgrade: goUpgrade },
     plan: { isPro, onUpgrade: goUpgrade, onStartSetup: () => setPlanSetup(true), onGoToWorkout: () => navigate('workout'), onStartWorkout: handleStartPlanDay, onOpenSwim: () => { rememberCardioSport('swim'); navigate('swim') }, onOpenRun: () => { rememberCardioSport('run'); navigate('swim') }, profile, onProfileChange: () => { refreshProfile(); refreshFitnessProfile() } },
   }
@@ -453,7 +481,7 @@ export default function App() {
 
       {checkout.open && (
         <Suspense fallback={null}>
-          <UpgradeSheet busy={checkout.busy} error={checkout.error} onCheckout={startCheckout}
+          <UpgradeSheet busy={checkout.busy} error={checkout.error} onCheckout={startCheckout} minor={isMinor}
             onClose={() => setCheckout({ open: false, busy: false, error: '' })} />
         </Suspense>
       )}

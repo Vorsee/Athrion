@@ -244,7 +244,7 @@ const TRUST = [
   ['mdi:eye-off-outline', 'No third-party trackers'],
   ['mdi:download-outline', 'Download or delete your data'],
   ['mdi:import', 'Import from Strong or Hevy'],
-  ['mdi:account-check-outline', 'Ages 16 and up'],
+  ['mdi:account-check-outline', 'Under 16 only with a parent\'s OK'],
 ]
 const INSTALL = [
   ['iPhone', 'mdi:apple-ios', 'Open athrion.app in Safari, tap Share, then Add to Home Screen.'],

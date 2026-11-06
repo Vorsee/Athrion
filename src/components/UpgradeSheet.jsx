@@ -6,7 +6,8 @@ import { fetchTrialEligible } from '../lib/api.js'
 import { PLANS, PRO_FEATURES, TRIAL_DAYS, annualPerMonth, annualSavingPct, money } from '../lib/pricing.js'
 
 // Shown before Stripe: what Pro gives, which plan, and exactly when the first charge happens
-export default function UpgradeSheet({ onClose, onCheckout, busy = false, error = '' }) {
+// minor: an account under 16 (032) can't buy; the sheet says so instead of offering checkout
+export default function UpgradeSheet({ onClose, onCheckout, busy = false, error = '', minor = false }) {
   const [plan, setPlan] = useState('annual')
   const [trial, setTrial] = useState(true)
 
@@ -51,6 +52,9 @@ export default function UpgradeSheet({ onClose, onCheckout, busy = false, error 
 
       {error && <div role="alert" className="text-sm text-danger">{error}</div>}
 
+      {minor ? (
+        <p role="status" className="text-sm text-ink-2 bg-raised rounded-xl p-3">Pro can't be bought on an account under 16. Everything free stays open to you.</p>
+      ) : (
       <div>
         <Button full onClick={() => onCheckout(plan)} disabled={busy}>
           {busy ? 'Opening secure checkout…' : trial ? `Start ${TRIAL_DAYS}-day free trial` : 'Continue to payment'}
@@ -65,6 +69,7 @@ export default function UpgradeSheet({ onClose, onCheckout, busy = false, error 
         </p>
         <p className="text-xs text-muted text-center mt-1">Workout logging, calorie logging and progress stay free.</p>
       </div>
+      )}
     </Sheet>
   )
 }

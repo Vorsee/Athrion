@@ -88,7 +88,7 @@ function PointsInfo() {
   )
 }
 
-export function LeaderboardTab({ me, onMeChange, onAddFriends }) {
+export function LeaderboardTab({ me, onMeChange, onAddFriends, minor = false }) {
   const [scope, setScope]   = useState('friends')
   const [rows, setRows]     = useState({})   // scope → rows
   const [mine, setMine]     = useState(null)
@@ -173,7 +173,10 @@ export function LeaderboardTab({ me, onMeChange, onAddFriends }) {
           </ol>
         )}
 
-      {scope === 'everyone' && (
+      {scope === 'everyone' && minor && (
+        <p className="text-xs text-muted bg-surface border border-line rounded-2xl px-4 py-3">You join the Everyone board, and its monthly prize, when you turn 16.</p>
+      )}
+      {scope === 'everyone' && !minor && (
         <div className="flex items-center justify-between gap-3 bg-surface border border-line rounded-2xl px-4 py-3">
           <div>
             <div className="text-sm font-semibold text-ink">Show me on Everyone</div>

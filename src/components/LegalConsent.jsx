@@ -21,7 +21,7 @@ export function ConsentChecks({ value, onChange }) {
   return (
     <div className="space-y-1">
       <Check checked={value.terms} onChange={v => onChange({ ...value, terms: v })}>
-        I'm 16 or older and agree to the <a href="/terms.html" target="_blank" rel="noreferrer" className={LINK}>Terms of use</a> and{' '}
+        I'm 13 or older (under 16, a parent approves next) and agree to the <a href="/terms.html" target="_blank" rel="noreferrer" className={LINK}>Terms of use</a> and{' '}
         <a href="/privacypolicy.html" target="_blank" rel="noreferrer" className={LINK}>Privacy policy</a>.
       </Check>
       <Check checked={value.health} onChange={v => onChange({ ...value, health: v })}>

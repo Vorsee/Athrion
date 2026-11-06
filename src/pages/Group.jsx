@@ -47,7 +47,8 @@ const TABS = [['rooms', 'Rooms'], ['friends', 'Friends'], ['ranks', 'Leaderboard
 const SESSION_SCREENS = ['training', 'rest', 'picker']
 
 // intent: { tab, invite } from App, e.g. after opening an athrion.app/add/<nickname> link
-export default function Group({ session, intent, onIntentDone }) {
+// isMinor: an account under 16 (032): no rooms or friends (the server refuses them too)
+export default function Group({ session, intent, onIntentDone, isMinor = false }) {
   const { toLb } = useUnit()
   const [screen, setScreen] = useState('home')
   const [joinCode, setJoinCode] = useState('')
@@ -404,7 +405,12 @@ export default function Group({ session, intent, onIntentDone }) {
         </>} />
       <Segmented label="Train together" options={TABS} value={tab} onChange={t => { setTab(t); setEditingNick(false) }} />
 
-      {tab === 'rooms' ? (
+      {isMinor && tab !== 'ranks' ? (
+        <Card className="space-y-2">
+          <div className="font-bold text-lg text-ink">Opens when you're 16</div>
+          <p className="text-sm text-ink-2">Rooms and friends aren't on accounts under 16. Your workouts still earn points, shown to you on Leaderboard.</p>
+        </Card>
+      ) : tab === 'rooms' ? (
         <HomeScreen
           joinCode={joinCode}
           setJoinCode={setJoinCode}
@@ -419,7 +425,7 @@ export default function Group({ session, intent, onIntentDone }) {
         <NicknameCard current={me?.nickname} onSaved={m => { setMe(m); setEditingNick(false) }}
           onCancel={me ? () => setEditingNick(false) : null} />
       ) : tab === 'ranks' ? (
-        <LeaderboardTab me={me} onMeChange={setMe} onAddFriends={() => setTab('friends')} />
+        <LeaderboardTab me={me} onMeChange={setMe} onAddFriends={() => setTab('friends')} minor={isMinor} />
       ) : (
         <FriendsTab me={me} invite={invite} onInviteDone={inviteDone} onEditNickname={() => setEditingNick(true)} />
       )}
