@@ -335,7 +335,7 @@ export default function App() {
 
   if (!session.consented) return (
     <Suspense fallback={<Loading />}>
-      <ConsentScreen />
+      <ConsentScreen agreedBefore={session.agreedBefore} />
     </Suspense>
   )
 
@@ -471,5 +471,8 @@ function toProfile(session) {
     name: session.user.user_metadata?.full_name || session.user.email.split('@')[0],
     email: session.user.email,
     consented: hasConsented(session.user),
+    // Agreed to an older version, or an email account from before the terms; a Google or Apple
+    // account that never agreed is a new sign-up
+    agreedBefore: !!session.user?.user_metadata?.legal_version || (session.user?.app_metadata?.provider ?? 'email') === 'email',
   }
 }

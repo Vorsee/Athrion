@@ -169,6 +169,7 @@ export default function Auth({ initialMode = 'login', onBack }) {
                   </button>
                 )}
               </form>
+              <SocialSignIn onError={setError} />
             </>
           )}
         </div>
@@ -179,6 +180,37 @@ export default function Auth({ initialMode = 'login', onBack }) {
           {' · '}
           <a href="/terms.html" className="underline underline-offset-2 hover:text-ink-2">Terms of use</a>
         </p>
+      </div>
+    </div>
+  )
+}
+
+// Google and Apple sign-in, shown only for the providers switched on in Supabase and listed in
+// VITE_OAUTH_PROVIDERS (e.g. "google,apple"). A new account made this way agrees to the terms
+// and health-data use on the one-time consent screen, which reads user_metadata as usual.
+export const OAUTH = [['google', 'Continue with Google', 'mdi:google'], ['apple', 'Continue with Apple', 'mdi:apple']]
+export const oauthProviders = (env = import.meta.env.VITE_OAUTH_PROVIDERS) =>
+  OAUTH.filter(([id]) => String(env || '').split(',').map(s => s.trim().toLowerCase()).includes(id))
+
+function SocialSignIn({ onError }) {
+  const list = oauthProviders()
+  const [busy, setBusy] = useState(null)
+  if (!list.length) return null
+  async function go(provider) {
+    setBusy(provider); onError('')
+    const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.origin } })
+    if (error) { onError(error.message || 'Could not open sign-in'); setBusy(null) }
+  }
+  return (
+    <div className="mt-5">
+      <div className="flex items-center gap-3 text-xs text-muted mb-3"><span className="grow h-px bg-line" />or<span className="grow h-px bg-line" /></div>
+      <div className="space-y-2">
+        {list.map(([id, label, icon]) => (
+          <button key={id} type="button" onClick={() => go(id)} disabled={!!busy}
+            className="press w-full min-h-[48px] px-4 rounded-xl border border-line-strong bg-raised text-ink text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
+            <Icon icon={icon} width={20} aria-hidden="true" />{busy === id ? 'Opening...' : label}
+          </button>
+        ))}
       </div>
     </div>
   )

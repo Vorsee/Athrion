@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { sb } from '../helpers/supabaseMock.js'
-import { parseCsv, parseWhen, matchExercise, detectFormat, toWorkouts, importWorkouts } from '../../src/lib/importWorkouts.js'
+import { parseCsv, parseWhen, matchExercise, detectFormat, toWorkouts, importWorkouts, newWorkouts, heaviestSet } from '../../src/lib/importWorkouts.js'
 
 vi.mock('../../src/lib/supabase.js', () => ({ supabase: sb.supabase }))
 beforeEach(() => sb.reset())
@@ -65,5 +65,18 @@ describe('CSV import', () => {
     const rows = sb.op(sb.queriesFor('workout_logs')[0], 'insert')[0]
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ user_id: 'user-1', name: 'Legs', date: '2024-03-07' })
+  })
+})
+
+describe('importing again and same-name workouts', () => {
+  const w = (date, name, sets = [{ ex: 'Squat', weight: 100, reps: 5 }]) => ({ date, name, sets })
+  it('adds a second workout with the same name on one day, and nothing on a second import', () => {
+    const file = [w('2026-10-01', 'Push'), w('2026-10-01', 'Push'), w('2026-10-02', 'Legs')]
+    expect(newWorkouts(file, [w('2026-10-01', 'Push')])).toEqual([file[1], file[2]])
+    expect(newWorkouts(file, file)).toEqual([])
+  })
+  it('finds the heaviest set, to check the unit before saving', () => {
+    expect(heaviestSet([w('d', 'A', [{ ex: 'Squat', weight: 225, reps: 5 }, { ex: 'Deadlift', weight: 315, reps: 3 }])])).toMatchObject({ ex: 'Deadlift', weight: 315 })
+    expect(heaviestSet([])).toBeNull()
   })
 })

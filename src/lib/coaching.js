@@ -64,25 +64,29 @@ export function startableDay(day, deload) {
   return { ...day, workout: { ...day.workout, exercises } }
 }
 
-// Short on time: the day cut to fit 30 or 20 minutes, about 2.5 minutes a set with rest. The
-// exercises keep their order (the big lifts come first), with at most 3 sets each (2 for 20 minutes).
+// Short on time: the day cut to fit 30 or 20 minutes. Each set takes about 45 s of work plus
+// that exercise's rest (90 s when the plan doesn't say), so heavy lifts with long rests get
+// fewer sets. The exercises keep their order (the big lifts come first), with at most 3 sets
+// each (2 for 20 minutes), and at least 2 sets of anything that's kept.
 export const SHORT_MINUTES = [30, 20]
-export const MIN_PER_SET = 2.5
+export const WORK_SECS = 45
+export const setMinutes = e => (WORK_SECS + (Number(e?.restSeconds) || 90)) / 60
 export const daySets = day => (day?.workout?.exercises ?? []).reduce((a, e) => a + (Number(e.sets) || 3), 0)
+const dayMinutes = day => (day?.workout?.exercises ?? []).reduce((a, e) => a + (Number(e.sets) || 3) * setMinutes(e), 0)
 export function shortVersion(day, minutes) {
-  let budget = Math.floor(minutes / MIN_PER_SET)
+  let budget = minutes
   const exercises = []
   for (const e of day?.workout?.exercises ?? []) {
-    if (budget < 2) break
-    const sets = Math.min(Number(e.sets) || 3, minutes <= 20 ? 2 : 3, budget)
+    const sets = Math.min(Number(e.sets) || 3, minutes <= 20 ? 2 : 3, Math.floor(budget / setMinutes(e) + 1e-9))
+    if (sets < 2) break
     exercises.push({ ...e, sets })
-    budget -= sets
+    budget -= sets * setMinutes(e)
   }
   return { ...day, durationMinutes: minutes, short: minutes, workout: { ...day.workout, exercises } }
 }
 // The shorter lengths worth offering for a day: only when it's a gym day longer than them
 export const shortOptions = day => (day?.sport === 'swim' || day?.sport === 'run' || (day?.workout?.exercises ?? []).some(e => timedReps(e.reps)) ? []
-  : SHORT_MINUTES.filter(m => m < (day?.durationMinutes || daySets(day) * MIN_PER_SET)))
+  : SHORT_MINUTES.filter(m => m < (day?.durationMinutes || dayMinutes(day))))
 
 /**
  * Missed workouts this week move to the next free days from today on, in order, so the

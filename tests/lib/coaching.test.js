@@ -20,6 +20,10 @@ describe('short on time', () => {
     expect(s.workout.exercises.reduce((a, e) => a + e.sets, 0)).toBe(8)
     expect(s.workout.exercises.every(e => e.sets === 2)).toBe(true)
   })
+  it('counts each exercise\'s rest, so long-rest lifts get fewer sets', () => {
+    const heavy = day([{ ...ex('Squat'), restSeconds: 180 }, { ...ex('Bench Press'), restSeconds: 180 }, { ...ex('Row'), restSeconds: 180 }])
+    expect(shortVersion(heavy, 30).workout.exercises.map(e => e.sets)).toEqual([3, 3, 2]) // 3.75 min a set
+  })
   it('is offered only for gym days longer than the short lengths', () => {
     expect(shortOptions(full)).toEqual([30, 20])
     expect(shortOptions(day([ex('Bench Press')], { durationMinutes: 25 }))).toEqual([20])

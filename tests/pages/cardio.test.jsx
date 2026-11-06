@@ -43,6 +43,23 @@ describe('Run', () => {
   })
 })
 
+describe('Run from a file', () => {
+  it('fills Log a run from a GPX export, in the person\'s units', async () => {
+    sb.set('cardio_logs', { data: [], error: null })
+    render(<Run />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Log a run' }))
+    const xml = '<gpx xmlns="http://www.topografix.com/GPX/1/1"><trk><trkseg>' +
+      '<trkpt lat="40" lon="-74"><time>2026-11-01T12:00:00Z</time></trkpt>' +
+      '<trkpt lat="40.02" lon="-74"><time>2026-11-01T12:12:00Z</time></trkpt></trkseg></trk></gpx>'
+    const file = new File([xml], 'morning.gpx', { type: 'application/gpx+xml' })
+    file.text = async () => xml
+    await userEvent.upload(screen.getByLabelText('Run file (GPX or TCX)'), file)
+    expect(await screen.findByText('Filled from morning.gpx')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('3.1')).toHaveValue(1.38) // 2.22 km in miles
+    expect(screen.getByPlaceholderText('28:30')).toHaveValue('12:00')
+  })
+})
+
 describe('Cardio', () => {
   it('switches between Swim and Run and remembers the last one', async () => {
     localStorage.setItem('athrion_cardio_sport', 'run')

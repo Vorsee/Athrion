@@ -5,8 +5,11 @@ import { fromLb, toLb, fmtWeight } from './units.js'
 import { fmtSecs } from './sets.js'
 
 // Epley estimated one-rep max
+// Estimated 1RM (Epley). Only sets of 12 reps or fewer count: past that the estimate runs well
+// above what someone can really lift, so a set of 20 never sets the 1RM or a 1RM record.
+export const E1RM_MAX_REPS = 12
 export function e1rm(weight, reps) {
-  if (!weight || !reps) return 0
+  if (!weight || !reps || reps > E1RM_MAX_REPS) return 0
   return reps === 1 ? weight : weight * (1 + reps / 30)
 }
 

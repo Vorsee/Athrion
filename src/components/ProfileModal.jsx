@@ -4,7 +4,7 @@ import { cancelSubscription, resumeSubscription, fetchSubscriptionDetails } from
 import { signOut } from '../lib/session.js'
 import { fetchProState, fetchWorkoutHistory } from '../lib/api.js'
 import { downloadMyData, deleteAccount } from '../lib/account.js'
-import { parseCsv, detectFormat, toWorkouts, importWorkouts } from '../lib/importWorkouts.js'
+import { parseCsv, detectFormat, toWorkouts, importWorkouts, heaviestSet } from '../lib/importWorkouts.js'
 import { Icon } from '@iconify/react'
 import { tok } from '../lib/tokens.js'
 import Sheet from './Sheet.jsx'
@@ -248,6 +248,7 @@ function ImportScreen({ defaultUnit, onBack }) {
   try { workouts = rows ? toWorkouts(rows, { strongUnit: unit }) : [] } catch {}
   const sets = workouts.reduce((a, w) => a + w.sets.length, 0)
   const range = workouts.length ? `${fmtDate(workouts[0].created_at)} to ${fmtDate(workouts.at(-1).created_at)}` : ''
+  const top = heaviestSet(workouts)
 
   async function run() {
     setStep('working'); setErrMsg('')
@@ -300,6 +301,13 @@ function ImportScreen({ defaultUnit, onBack }) {
                 <div className="mt-4">
                   <div className="text-sm text-ink-2 mb-2">Which unit did you use in Strong?</div>
                   <Segmented options={[['lb', 'lb'], ['kg', 'kg']]} value={unit} onChange={setUnit} label="Strong weight unit" kind="choice" />
+                </div>
+              )}
+              {top && (
+                <div className="mt-4 bg-raised rounded-xl px-3 py-2.5">
+                  <div className="text-xs text-muted">Heaviest set in the file</div>
+                  <div className="font-semibold text-ink break-words">{top.ex} · {fmtWeight(top.weight, defaultUnit)} × {top.reps}</div>
+                  {format === 'strong' && <div className="text-xs text-muted mt-1">Looks off? Switch the unit above before importing.</div>}
                 </div>
               )}
             </Card>

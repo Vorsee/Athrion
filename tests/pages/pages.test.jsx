@@ -593,6 +593,13 @@ describe('App shell', () => {
     await userEvent.click(agree)
     expect(sb.supabase.auth.updateUser).toHaveBeenCalledWith({ data: expect.objectContaining({ legal_version: LEGAL_VERSION }) })
   })
+  it('asks a new Google or Apple account to agree before it starts', async () => {
+    signedIn()
+    const fresh = { ...USER, user_metadata: { full_name: 'Sam' }, app_metadata: { provider: 'google' } }
+    sb.supabase.auth.getSession.mockResolvedValue({ data: { session: { user: fresh, access_token: 't' } } })
+    render(<P.App />)
+    expect(await screen.findByText('Before you start')).toBeInTheDocument()
+  })
   it('the test user has agreed to the current terms', () => {
     expect(USER.user_metadata.legal_version).toBe(LEGAL_VERSION)
   })

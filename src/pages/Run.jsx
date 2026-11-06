@@ -4,7 +4,8 @@ import { Button, Card, SectionTitle, EmptyState, SkeletonRows, StatTiles, Sheet 
 import { fetchCardio, saveCardio, deleteCardio } from '../lib/progressApi.js'
 import { cardioUnits, cardioSummary, parseDuration, fmtDuration, fmtDistance, paceSecs } from '../lib/cardio.js'
 import { cardContent } from '../lib/shareCard.js'
-import { todayKey } from '../lib/data.js'
+import { todayKey, localDateKey } from '../lib/data.js'
+import { parseTrack } from '../lib/gpx.js'
 import { useUnit } from '../lib/units.js'
 import ShareSheet from '../components/ShareSheet.jsx'
 import LineChart from '../components/LineChart.jsx'
@@ -35,6 +36,22 @@ function LogRun({ onSaved }) {
   const seconds = parseDuration(form.time)
   const preview = distance > 0 && seconds ? pace({ seconds, distance_m: u.toM(distance) }, u) : null
   const change = key => e => setForm(f => ({ ...f, [key]: key === 'time' ? e.target.value.replace(/[^\d:]/g, '').slice(0, 8) : e.target.value }))
+  const [fromFile, setFromFile] = useState('')
+
+  // A GPX or TCX export from a watch or Strava fills the form; the person checks it and saves
+  async function readTrack(file) {
+    if (!file) return
+    setErr(''); setFromFile('')
+    try {
+      const t = parseTrack(await file.text())
+      const day = localDateKey(t.start)
+      setForm(f => ({ ...f, distance: String(Math.round(u.fromM(t.distance_m) * 100) / 100), time: fmtDuration(t.seconds),
+        date: day > todayKey() ? todayKey() : day, notes: f.notes || 'From a GPX file' }))
+      setFromFile(file.name)
+    } catch (e) {
+      setErr(e.message || "This file couldn't be read")
+    }
+  }
 
   async function save() {
     setSaving(true); setErr('')
@@ -51,6 +68,12 @@ function LogRun({ onSaved }) {
 
   return (
     <div className="space-y-3">
+      <label className="press w-full min-h-[48px] px-3 rounded-xl border border-dashed border-line-strong text-sm font-semibold text-ink-2 hover:text-ink hover:border-neon-stroke flex items-center justify-center gap-2 cursor-pointer text-center">
+        <Icon icon="mdi:file-upload-outline" width={18} aria-hidden="true" />
+        {fromFile ? `Filled from ${fromFile}` : 'From a watch or Strava: GPX or TCX file'}
+        <input type="file" accept=".gpx,.tcx,application/gpx+xml,application/xml,text/xml" className="sr-only" aria-label="Run file (GPX or TCX)"
+          onChange={e => { readTrack(e.target.files?.[0]); e.target.value = '' }} />
+      </label>
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 8rem), 1fr))' }}>
         <label className="block">
           <span className="text-xs text-muted">Distance ({u.dist})</span>

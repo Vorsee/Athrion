@@ -33,7 +33,8 @@ export function ConsentChecks({ value, onChange }) {
 }
 
 // Accounts made before the consent boxes existed see this once
-export default function ConsentScreen() {
+// agreedBefore: they agreed to an older version; otherwise it's a new account from Google or Apple
+export default function ConsentScreen({ agreedBefore = true }) {
   const [value, setValue] = useState({ terms: false, health: false })
   const [busy, setBusy]   = useState(false)
   const [error, setError] = useState('')
@@ -48,9 +49,11 @@ export default function ConsentScreen() {
   return (
     <div className="min-h-screen bg-canvas flex items-center justify-center px-4 pt-safe-10 pb-safe-10">
       <div className="w-full max-w-sm slide-up">
-        <div className="font-bold text-[2rem] leading-tight text-ink">Before you continue</div>
+        <div className="font-bold text-[2rem] leading-tight text-ink">{agreedBefore ? 'Before you continue' : 'Before you start'}</div>
         <p className="text-sm text-muted mt-2 mb-6">
-          We've published our Terms of use and an updated Privacy policy. Please read and agree to keep using ATHRION.
+          {agreedBefore
+            ? "We've published our Terms of use and an updated Privacy policy. Please read and agree to keep using ATHRION."
+            : 'Please read the Terms of use and Privacy policy, and agree to start using ATHRION.'}
         </p>
         <div className="bg-surface border border-line rounded-2xl p-4 mb-4">
           <ConsentChecks value={value} onChange={setValue} />

@@ -28,3 +28,12 @@ describe('signOut', () => {
     expect(sb.supabase.auth.signOut).toHaveBeenCalled()
   })
 })
+
+describe('Google and Apple sign-in', () => {
+  it('shows only the providers listed in VITE_OAUTH_PROVIDERS', async () => {
+    const { oauthProviders } = await import('../../src/pages/Auth.jsx')
+    expect(oauthProviders('').map(p => p[0])).toEqual([])
+    expect(oauthProviders('google').map(p => p[0])).toEqual(['google'])
+    expect(oauthProviders(' Apple , google').map(p => p[0])).toEqual(['google', 'apple'])
+  })
+})

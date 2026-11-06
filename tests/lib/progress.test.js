@@ -8,6 +8,7 @@ const session = (created_at, sets) => ({ created_at, date: created_at.slice(0, 1
 describe('e1rm', () => {
   it('uses the Epley formula', () => expect(e1rm(100, 10)).toBeCloseTo(133.33, 1))
   it('returns the weight itself for a single rep', () => expect(e1rm(200, 1)).toBe(200))
+  it('leaves sets over 12 reps out, where the estimate runs too high', () => { expect(e1rm(100, 12)).toBeCloseTo(140, 1); expect(e1rm(100, 20)).toBe(0) })
   it('is 0 for missing weight or reps', () => {
     expect(e1rm(0, 5)).toBe(0)
     expect(e1rm(100, 0)).toBe(0)

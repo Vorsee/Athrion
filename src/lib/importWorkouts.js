@@ -108,12 +108,31 @@ export function toWorkouts(rows, { strongUnit = 'lb' } = {}) {
     }))
 }
 
-// Saves workouts not already logged (same day and name), in batches. Returns how many were added.
+// The workouts not logged yet. Matched by day and name, counting: two "Push" workouts on one day
+// in the file and one already here adds the second, and importing the same file again adds none.
+export function newWorkouts(workouts, existing = []) {
+  const have = new Map()
+  for (const w of existing) { const k = `${w.date}|${w.name}`; have.set(k, (have.get(k) ?? 0) + 1) }
+  return workouts.filter(w => {
+    const k = `${w.date}|${w.name}`
+    const left = have.get(k) ?? 0
+    if (left > 0) { have.set(k, left - 1); return false }
+    return true
+  })
+}
+
+// The heaviest set in the file, to check the unit before saving
+export function heaviestSet(workouts = []) {
+  let top = null
+  for (const w of workouts) for (const s of w.sets) if (!top || s.weight > top.weight) top = s
+  return top
+}
+
+// Saves workouts not already logged (see newWorkouts), in batches. Returns how many were added.
 export async function importWorkouts(workouts, existing = []) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not logged in')
-  const have = new Set(existing.map(w => `${w.date}|${w.name}`))
-  const fresh = workouts.filter(w => !have.has(`${w.date}|${w.name}`))
+  const fresh = newWorkouts(workouts, existing)
   for (let i = 0; i < fresh.length; i += 200) {
     const { error } = await supabase.from('workout_logs').insert(fresh.slice(i, i + 200).map(w => ({ ...w, user_id: user.id })))
     if (error) throw error
