@@ -10,20 +10,22 @@ function makeCode() {
   return code
 }
 
+// Most people in one room (034 enforces it when joining)
+export const ROOM_SIZE = 6
+
 export async function createGroupSession({ displayName }) {
   const { data: { user } } = await supabase.auth.getUser()
-  const code = makeCode()
 
-  const { data: session, error } = await supabase
-    .from('group_sessions')
-    .insert({
-      host_id: user.id,
-      code,
-      status: 'lobby',
-    })
-    .select()
-    .single()
-
+  // Codes are unique for good: on the rare clash, try a new one
+  let session, error
+  for (let tries = 0; tries < 5; tries++) {
+    ({ data: session, error } = await supabase
+      .from('group_sessions')
+      .insert({ host_id: user.id, code: makeCode(), status: 'lobby' })
+      .select()
+      .single())
+    if (!error || error.code !== '23505') break
+  }
   if (error) throw error
 
   const { error: pErr } = await supabase
@@ -41,8 +43,35 @@ export async function joinGroupSession(code, displayName) {
     p_code: code.trim().toUpperCase(),
     p_display_name: displayName,
   })
-  if (error) throw new Error(error.code === 'P0002' ? 'Room not found — check the code and try again' : error.message)
+  if (error) throw roomError(error)
   return data
+}
+
+// What a failed join says, and whether to offer starting your own room
+const JOIN_ERRORS = {
+  P0002: ['Room not found. Check the code and try again.', false],
+  P0003: ['This room has ended. Start your own.', true],
+  P0004: [`This room is full: ${ROOM_SIZE} people already.`, true],
+  P0005: ['The host removed you from this room.', true],
+}
+export function roomError(error) {
+  const [message, startOwn] = JOIN_ERRORS[error?.code] ?? [error?.message || "Couldn't join the room. Try again.", false]
+  return Object.assign(new Error(message), { code: error?.code, startOwn })
+}
+
+// The host takes someone out of the room; they can't join it again (034)
+export async function removeRoomMember(sessionId, userId) {
+  const { error } = await supabase.rpc('remove_room_member', { p_session: sessionId, p_user: userId })
+  if (error) throw error
+}
+
+// Leaving: from the lobby the seat goes too; finished (keepSeat) stays to see the standings.
+// A host hands over to the earliest joiner, or the room ends with no one left (034).
+// Throws before 034 (no function yet), so a finishing host can end the room the old way.
+export async function leaveGroupSession(sessionId, { keepSeat = false } = {}) {
+  const { data, error } = await supabase.rpc('leave_group_session', { p_session: sessionId, p_keep_seat: keepSeat })
+  if (error) throw error
+  return data ?? null
 }
 
 // The set-by-set plan (013) plus the old columns, so older app versions in the room still follow along.

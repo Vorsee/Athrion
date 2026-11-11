@@ -17,6 +17,9 @@ import {
   logGroupSet,
   subscribeToGroupSession,
   currentUserId,
+  removeRoomMember,
+  leaveGroupSession,
+  ROOM_SIZE,
 } from '../lib/groupApi.js'
 import { standings, mergeSets } from '../lib/groupStandings.js'
 import { planFrom, makeSets, totalSets as countSets, setsDone, restAfter, restLabel, setsSummary, REST_OPTIONS, MAX_SETS, freePlan, freeRoom, FREE_SET_OPTIONS, FREE_REST_OPTIONS } from '../lib/groupPlan.js'
@@ -76,6 +79,9 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
   // The name a room was joined with stays fixed for that room, even if the nickname changes
   const [roomName, setRoomName] = useState(null)
   const [myId, setMyId] = useState(null)
+  const myIdRef = useRef(null)
+  myIdRef.current = myId
+  const missingRef = useRef(0)
   // Read at save time, so a set that arrived after a timer started still counts
   const allSetsRef = useRef(allSets)
   allSetsRef.current = allSets
@@ -101,7 +107,7 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
   }
   const firstScreen = sess => (freeRoom(sess?.plan) ? 'picker' : 'training')
   // Back from the lobby leaves the room, as its Back button did
-  useBackHandler(screen === 'lobby', () => handleHome(), 'Train together')
+  useBackHandler(screen === 'lobby', () => leaveLobby(), 'Train together')
 
   const exercises = plan.map(p => EXERCISES.find(e => e.name === p.name) ?? { name: p.name, muscle: '', icon: 'mdi:dumbbell' })
 
@@ -168,6 +174,7 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
       },
       onSessionUpdate: (updated) => {
         setGroupSession(updated)
+        if (myIdRef.current) setIsHost(updated.host_id === myIdRef.current)
         // The host's edits show in everyone's lobby; once training, the plan stays as it started
         if (screenRef.current === 'lobby' && !hostEditing.current) applyRoom(updated)
         // Transition everyone from lobby → training (or the picker, in a free room) when host starts
@@ -191,12 +198,17 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
         const [parts, sets, sess] = await Promise.all([
           fetchParticipants(groupSession.id),
           fetchGroupSets(groupSession.id),
-          screen === 'lobby' ? fetchGroupSession(groupSession.id) : null,
+          fetchGroupSession(groupSession.id).catch(() => null),
         ])
+        // Out of the room (the host removed you): twice in a row, so a slow first read can't do it
+        if (parts && myIdRef.current && screenRef.current !== 'done' && !parts.some(p => p.user_id === myIdRef.current)) {
+          if (++missingRef.current >= 2) { handleHome(); setJoinError('The host removed you from this room.'); return }
+        } else missingRef.current = 0
         if (parts) setParticipants(parts)
         if (sets) setAllSets(prev => mergeSets(prev, sets))
         if (sess) {
           setGroupSession(sess)
+          if (myIdRef.current) setIsHost(sess.host_id === myIdRef.current)
           if (screenRef.current === 'lobby' && !hostEditing.current) applyRoom(sess)
           if (sess.status === 'active' && screenRef.current === 'lobby') {
             setStartTime(Date.now())
@@ -367,7 +379,10 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
     localStorage.removeItem('athrion_group_rest_end')
     goScreen('done') // first, so the 4-hour timer can't fire twice
     await saveGroupWorkoutToHistory(auto)
-    try { if (isHost && groupSession?.id) await endGroupSession(groupSession.id) } catch {}
+    if (isHost && groupSession?.id) {
+      try { await leaveGroupSession(groupSession.id, { keepSeat: true }) }
+      catch { try { await endGroupSession(groupSession.id) } catch {} } // before 034
+    }
     localStorage.removeItem(SESSION_PERSIST_KEY)
   }
 
@@ -387,6 +402,12 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
     setJoinCode(''); setJoinError(''); setConfirmEnd(false); setRoomName(null); setAutoEnded(false)
     localStorage.removeItem('athrion_group_rest_end')
     localStorage.removeItem(SESSION_PERSIST_KEY)
+  }
+
+  function leaveLobby() {
+    const id = groupSession?.id
+    handleHome()
+    if (id) leaveGroupSession(id).catch(() => {})
   }
 
   function inviteDone() {
@@ -441,7 +462,11 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
       free={free}
       onChange={editPlan}
       onStart={handleStartWorkout}
-      onBack={handleHome}
+      onRemove={async userId => {
+        await removeRoomMember(groupSession.id, userId)
+        setParticipants(prev => prev.filter(p => p.user_id !== userId))
+      }}
+      onBack={leaveLobby}
     />
   )
 
@@ -552,11 +577,13 @@ function HomeScreen({ joinCode, setJoinCode, joinError, loading, onCreate, onJoi
 // Lobby
 // ─────────────────────────────────────────────────────────────────────────────
 
-function LobbyScreen({ groupSession, participants, isHost, plan, free, onChange, onStart, onBack }) {
+function LobbyScreen({ groupSession, participants, isHost, plan, free, onChange, onStart, onRemove, onBack }) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('All')
   const [copied, setCopied] = useState(false)
   const [open, setOpen] = useState(null) // index of the exercise whose sets are being edited
+  const [removing, setRemoving] = useState(null) // user_id asked "Remove?"
+  const [removeError, setRemoveError] = useState('')
 
   const filtered = EXERCISES.filter(e => {
     const matchSearch = e.name.toLowerCase().includes(search.toLowerCase()) || e.muscle.toLowerCase().includes(search.toLowerCase())
@@ -615,17 +642,33 @@ function LobbyScreen({ groupSession, participants, isHost, plan, free, onChange,
 
       {/* Participants */}
       <Card>
-        <SectionTitle action={<Fact icon="mdi:account-multiple">{participants.length}</Fact>}>Participants</SectionTitle>
+        <SectionTitle action={<Fact icon="mdi:account-multiple">{participants.length} of {ROOM_SIZE}</Fact>}>Participants</SectionTitle>
         <div className="space-y-2">
-          {participants.map((p, i) => (
-            <div key={i} className="flex items-center gap-3 bg-raised rounded-xl px-3 py-2.5">
-              <div className="w-7 h-7 rounded-lg bg-neon/15 border border-neon-stroke/20 flex items-center justify-center flex-shrink-0">
-                <span className="font-bold text-xs text-neon-ink leading-none">{(p.display_name || '?')[0].toUpperCase()}</span>
+          {participants.map(p => {
+            const host = p.user_id === groupSession?.host_id
+            return (
+              <div key={p.user_id} className="flex flex-wrap items-center gap-x-3 gap-y-2 bg-raised rounded-xl px-3 py-2.5">
+                <div className="w-7 h-7 rounded-lg bg-neon/15 border border-neon-stroke/20 flex items-center justify-center flex-shrink-0">
+                  <span className="font-bold text-xs text-neon-ink leading-none">{(p.display_name || '?')[0].toUpperCase()}</span>
+                </div>
+                <span className="text-sm font-semibold text-ink flex-1 min-w-0 break-words">{p.display_name}</span>
+                {host && <Fact>Host</Fact>}
+                {isHost && !host && (removing === p.user_id ? (
+                  <span className="flex gap-1.5 ml-auto">
+                    <Button size="sm" variant="ghost" onClick={() => setRemoving(null)}>Keep</Button>
+                    <Button size="sm" variant="danger" onClick={async () => {
+                      setRemoveError('')
+                      try { await onRemove(p.user_id) } catch { setRemoveError(`Couldn't remove ${p.display_name}. Try again.`) }
+                      setRemoving(null)
+                    }}>Remove</Button>
+                  </span>
+                ) : (
+                  <IconButton icon="mdi:account-remove-outline" label={`Remove ${p.display_name}`} onClick={() => setRemoving(p.user_id)} className="w-9 h-9" />
+                ))}
               </div>
-              <span className="text-sm font-semibold text-ink flex-1">{p.display_name}</span>
-              {p.user_id === groupSession?.host_id && <Fact>Host</Fact>}
-            </div>
-          ))}
+            )
+          })}
+          {removeError && <div className="text-danger text-xs">{removeError}</div>}
           {participants.length === 0 && (
             <div className="text-xs text-muted text-center py-2">Waiting for participants...</div>
           )}

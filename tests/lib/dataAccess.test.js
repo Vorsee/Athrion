@@ -203,6 +203,35 @@ describe('groupApi.js', () => {
     sb.supabase.rpc.mockResolvedValueOnce({ data: null, error: { code: 'P0002', message: 'x' } })
     await expect(group.joinGroupSession('ZZZZZZ', 'Kim')).rejects.toThrow('Room not found')
   })
+  it('says why a join failed: ended, full or removed rooms offer starting your own (034)', async () => {
+    for (const [code, text] of [['P0003', 'This room has ended. Start your own.'], ['P0004', `This room is full: ${group.ROOM_SIZE} people already.`], ['P0005', 'The host removed you from this room.']]) {
+      sb.supabase.rpc.mockResolvedValueOnce({ data: null, error: { code, message: 'x' } })
+      const err = await group.joinGroupSession('ABC123', 'Kim').catch(e => e)
+      expect(err.message).toBe(text)
+      expect(err.startOwn).toBe(true)
+    }
+    // A minor's refusal (032) keeps the server's own words
+    sb.supabase.rpc.mockResolvedValueOnce({ data: null, error: { code: 'P0001', message: 'Train together rooms open at 16 on ATHRION' } })
+    await expect(group.joinGroupSession('ABC123', 'Kim')).rejects.toThrow('Train together rooms open at 16 on ATHRION')
+  })
+  it('tries a new code when one is already taken', async () => {
+    let calls = 0
+    sb.set('group_sessions', () => (++calls === 1 ? { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "group_sessions_code_key"' } } : { data: { id: 's2' }, error: null }))
+    sb.set('group_participants', ok(null))
+    expect(await group.createGroupSession({ displayName: 'Sam' })).toEqual({ id: 's2' })
+    expect(calls).toBe(2)
+  })
+  it('removes someone and leaves rooms through the 034 functions', async () => {
+    sb.supabase.rpc.mockResolvedValueOnce({ data: null, error: null })
+    await group.removeRoomMember('s1', 'u2')
+    expect(sb.supabase.rpc).toHaveBeenLastCalledWith('remove_room_member', { p_session: 's1', p_user: 'u2' })
+    sb.supabase.rpc.mockResolvedValueOnce({ data: 'u2', error: null })
+    expect(await group.leaveGroupSession('s1', { keepSeat: true })).toBe('u2')
+    expect(sb.supabase.rpc).toHaveBeenLastCalledWith('leave_group_session', { p_session: 's1', p_keep_seat: true })
+    // Before 034 it throws, so a finishing host ends the room the old way
+    sb.supabase.rpc.mockResolvedValueOnce({ data: null, error: { code: 'PGRST202', message: 'not found' } })
+    await expect(group.leaveGroupSession('s1')).rejects.toBeTruthy()
+  })
   it('updates, starts and ends sessions and logs sets', async () => {
     sb.set('group_sessions', ok({ id: 's1' }))
     const plan = [{ name: 'A', sets: [{ reps: 5, rest: 90 }, { reps: 5, rest: 60 }] }, { name: 'B', sets: [{ reps: null, rest: 30 }] }]

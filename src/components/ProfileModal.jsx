@@ -6,7 +6,6 @@ import { fetchProState, fetchWorkoutHistory } from '../lib/api.js'
 import { downloadMyData, deleteAccount } from '../lib/account.js'
 import { parseCsv, detectFormat, toWorkouts, importWorkouts, heaviestSet } from '../lib/importWorkouts.js'
 import { Icon } from '@iconify/react'
-import { tok } from '../lib/tokens.js'
 import Sheet from './Sheet.jsx'
 import { Button, Segmented, ListRow, Card, Tag, Skeleton, InlineError } from './ui/index.js'
 import ReminderSettings, { Toggle } from './ReminderSettings.jsx'
@@ -25,19 +24,6 @@ function fmtHeight(cm, unit) {
   const ft = Math.floor(totalIn / 12)
   const inches = totalIn % 12
   return `${ft}' ${inches}"`
-}
-
-function calcBMI(height_cm, weight_lb) {
-  const kg = weight_lb / 2.20462
-  const m  = height_cm / 100
-  return kg / (m * m)
-}
-
-function bmiInfo(bmi) {
-  if (bmi < 18.5) return { label: 'Underweight', color: 'info' }
-  if (bmi < 25)   return { label: 'Normal',      color: 'neon-ink' }
-  if (bmi < 30)   return { label: 'Overweight',  color: 'warn' }
-  return               { label: 'Obese',       color: 'danger' }
 }
 
 function fmtDate(iso) {
@@ -370,10 +356,6 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
   const [screen, setScreen]   = useState(initialScreen) // profile | progress | subscription | import | delete | review
   const [exportState, setExportState] = useState('idle') // idle | loading | error
 
-  const bmi     = profile ? calcBMI(profile.height_cm, profile.weight_lb) : null
-  const cat     = bmi ? bmiInfo(bmi) : null
-  // BMI 15-40 across the bar; bands start at 18.5 (14%), 25 (40%) and 30 (60%)
-  const bmiPct  = bmi ? Math.min(98, Math.max(2, ((bmi - 15) / (40 - 15)) * 100)) : 0
 
   const initial = session?.name?.[0]?.toUpperCase() || '?'
 
@@ -434,7 +416,6 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
                     ['Height', fmtHeight(profile.height_cm, profile.weight_unit)],
                     ['Weight', fmtWeight(profile.weight_lb, profile.weight_unit === 'kg' ? 'kg' : 'lb')],
                     ['Age',    profile.age ? `${profile.age} yr` : '—'],
-                    ['BMI',    bmi.toFixed(1)],
                     ['Sex',    profile.sex === 'other' ? 'N/A'
                       : profile.sex.charAt(0).toUpperCase() + profile.sex.slice(1)],
                   ].map(([label, val]) => (
@@ -443,31 +424,6 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
                       <div className="text-xs text-muted mt-0.5">{label}</div>
                     </div>
                   ))}
-                </div>
-
-                {/* ── BMI gauge ── */}
-                <div className="bg-inset rounded-2xl p-4 mb-6">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="text-lg leading-[1.3] font-semibold text-ink">Body mass index</div>
-                    <div className="text-xs font-bold px-2 py-0.5 rounded-full"
-                      style={{ background: tok(cat.color, 0.12), color: tok(cat.color) }}>
-                      {cat.label}
-                    </div>
-                  </div>
-
-                  <div className="relative h-3 rounded-full mb-3" style={{
-                    background: `linear-gradient(to right, ${tok('info')} 0%, ${tok('info')} 14%, ${tok('neon-stroke')} 14%, ${tok('neon-stroke')} 40%, ${tok('warn')} 40%, ${tok('warn')} 60%, ${tok('danger')} 60%)`,
-                  }}>
-                    <div className="absolute top-1/2 -translate-y-1/2 w-5 h-5 rounded-full border-2 border-surface -translate-x-1/2 transition-all duration-700"
-                      style={{ left: `${bmiPct}%`, background: tok(cat.color) }} />
-                  </div>
-
-                  <div className="grid grid-cols-4 text-2xs text-muted">
-                    <span>Under</span>
-                    <span className="text-center">Normal</span>
-                    <span className="text-center">Over</span>
-                    <span className="text-right">Obese</span>
-                  </div>
                 </div>
               </>
             )}
