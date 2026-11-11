@@ -134,12 +134,12 @@ function fmtClock(sec) {
 
 // What the minimised session is doing, from the saved workout state
 function sessionStatus(s) {
-  if (s.screen === 'exercise-picker') return { title: s.name || 'Free workout', status: 'Pick your next exercise' }
+  const end = parseInt(localStorage.getItem('athrion_rest_end') || '0')
+  const left = end ? Math.ceil((end - Date.now()) / 1000) : 0
+  if (s.screen === 'exercise-picker') return { title: s.name || 'Free workout', status: left > 0 ? `Rest ${fmtClock(left)} · pick your next exercise` : 'Pick your next exercise' }
   const name = s.exerciseNames?.[s.exIdx] ?? s.name ?? 'Workout'
   if (s.screen === 'rest') {
-    const end = parseInt(localStorage.getItem('athrion_rest_end') || '0')
-    const left = end ? Math.ceil((end - Date.now()) / 1000) : 0
-    return { title: name, status: left > 0 ? `Rest ${fmtClock(left)}` : 'Rest done' }
+    return { title: s.upNext ? `Next: ${s.upNext.name}` : name, status: left > 0 ? `Rest ${fmtClock(left)}` : 'Rest done' }
   }
   const total = s.setCounts?.[s.exIdx] ?? s.totalSets ?? 3
   return { title: name, status: `Set ${(s.setIdx ?? 0) + 1} of ${total}` }

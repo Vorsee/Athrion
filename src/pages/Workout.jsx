@@ -66,6 +66,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
   const [customWorkouts, setCustomWorkouts]   = useState([])
   const [editingWorkout, setEditingWorkout]   = useState(null)
   const [freeWorkout, setFreeWorkout]         = useState(false)
+  const [upNext, setUpNext]                   = useState(null) // free workout: picked during the rest, starts when it ends
   const [planWorkout, setPlanWorkout]         = useState(null)
   const [planSchedule, setPlanSchedule]       = useState(null) // full week, so rest days match the Plan tab
   const [homeReady, setHomeReady]             = useState(false) // today's workout data loaded
@@ -108,6 +109,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       setCounts: overrides.setCounts ?? setCounts,
       startTime,
       freeWorkout,
+      upNext: 'upNext' in overrides ? overrides.upNext : upNext,
     }
     localStorage.setItem('athrion_workout', JSON.stringify(state))
     syncOpenWorkout(state) // so the server can say "your workout is still open"
@@ -170,6 +172,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       setSetCounts(s.setCounts || [])
       setStartTime(s.startTime)
       setFreeWorkout(s.freeWorkout || false)
+      setUpNext(s.upNext ?? null)
       // A minimised session stays minimised: the session bar brings it back
       if (!s.minimised) setScreen(resumeScreen(s))
     } catch {}
@@ -503,17 +506,31 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
     </>
   )
 
+  const currentRest = restPerExercise[exIdx] ?? restDuration
+
+  function startFreeExercise(ex) {
+    localStorage.removeItem('athrion_rest_end')
+    const newExercises = [...activeExercises, ex]
+    setActiveExercises(newExercises)
+    const nextIdx = newExercises.length - 1
+    setExIdx(nextIdx); setSetIdx(0); setWeight(''); setReps(''); setUpNext(null)
+    persistWorkout({ screen: 'training', exIdx: nextIdx, setIdx: 0, exerciseNames: newExercises.map(e => e.name), exercises: newExercises, upNext: null })
+    setScreen('training')
+  }
+
   if (screen === 'exercise-picker') return session(
     <ExercisePickerScreen
       activeExercises={activeExercises}
       loggedSets={loggedSets}
+      restDuration={currentRest}
       onPick={ex => {
-        const newExercises = [...activeExercises, ex]
-        setActiveExercises(newExercises)
-        const nextIdx = newExercises.length - 1
-        setExIdx(nextIdx); setSetIdx(0); setWeight(''); setReps('')
-        persistWorkout({ screen: 'training', exIdx: nextIdx, setIdx: 0, exerciseNames: newExercises.map(e => e.name), exercises: newExercises })
-        setScreen('training')
+        if (restRunning()) {
+          setUpNext(ex)
+          persistWorkout({ screen: 'rest', upNext: ex })
+          setScreen('rest')
+          return
+        }
+        startFreeExercise(ex)
       }}
       onEnd={() => handleEndWorkout()}
     />
@@ -550,20 +567,32 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
         setLoggedSets(newLog)
         const thisRest = restPerExercise[exIdx] ?? restDuration
         localStorage.setItem('athrion_rest_end', String(Date.now() + thisRest * 1000))
+        // Free workout, last set of this exercise: pick the next one while the rest runs
+        if (freeWorkout && setIdx + 1 >= setsFor(exIdx)) {
+          setWeight(''); setReps('')
+          persistWorkout({ screen: 'exercise-picker', loggedSets: newLog, upNext: null })
+          setUpNext(null)
+          setScreen('exercise-picker')
+          return
+        }
         persistWorkout({ screen: 'rest', loggedSets: newLog })
         setScreen('rest')
       }}
     />
   )
 
-  const currentRest = restPerExercise[exIdx] ?? restDuration
-
   if (screen === 'rest') return session(
     <RestScreen
       exercises={activeExercises}
       restDuration={currentRest} exIdx={exIdx} setIdx={setIdx} totalSets={setsFor(exIdx)}
       freeWorkout={freeWorkout}
+      upNext={upNext}
+      onChangeNext={() => {
+        persistWorkout({ screen: 'exercise-picker' })
+        setScreen('exercise-picker')
+      }}
       onAdvance={() => {
+        if (freeWorkout && upNext) return startFreeExercise(upNext)
         localStorage.removeItem('athrion_rest_end')
         const nextSet = setIdx + 1
         if (nextSet >= setsFor(exIdx)) {
@@ -1433,7 +1462,53 @@ function LoggedSets({ sets, onEdit, onDelete }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Exercise Picker (free workout)
 // ─────────────────────────────────────────────────────────────────────────────
-function ExercisePickerScreen({ activeExercises, loggedSets, onPick, onEnd }) {
+function restRunning() {
+  return parseInt(localStorage.getItem('athrion_rest_end') || '0') > Date.now()
+}
+
+// A rest still running (free workout: the last set's rest, while picking the next exercise).
+// Gone once it ends or is skipped.
+function useRestLeft() {
+  const read = () => {
+    const end = parseInt(localStorage.getItem('athrion_rest_end') || '0')
+    return end ? Math.max(0, Math.ceil((end - Date.now()) / 1000)) : 0
+  }
+  const [left, setLeft] = useState(read)
+  useEffect(() => {
+    if (!left) return
+    const id = setInterval(() => {
+      const l = read()
+      setLeft(l)
+      if (!l) localStorage.removeItem('athrion_rest_end')
+    }, 500)
+    return () => clearInterval(id)
+  }, [left > 0])
+  const skip = () => { localStorage.removeItem('athrion_rest_end'); setLeft(0) }
+  return [left, skip]
+}
+
+function RestBar({ duration }) {
+  const [left, skip] = useRestLeft()
+  if (!left) return null
+  const pct = Math.min(1, left / Math.max(1, duration)) * 100
+  return (
+    <div role="timer" aria-label={`Rest ${fmtTime(left)} left`} className="bg-raised border border-line rounded-2xl px-4 py-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <Icon icon="mdi:timer-sand" width={20} className="text-neon-ink flex-shrink-0" />
+        <div className="grow min-w-0">
+          <div className="text-xs font-semibold text-muted">Rest</div>
+          <div className="font-bold text-2xl leading-none text-neon-ink tabular-nums">{fmtTime(left)}</div>
+        </div>
+        <Button size="sm" variant="secondary" onClick={skip}>Skip rest</Button>
+      </div>
+      <div className="mt-3 h-1.5 rounded-full bg-line overflow-hidden">
+        <div className="h-full bg-neon rounded-full" style={{ width: `${pct}%`, transition: 'width 0.5s linear' }} />
+      </div>
+    </div>
+  )
+}
+
+function ExercisePickerScreen({ activeExercises, loggedSets, restDuration, onPick, onEnd }) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('All')
 
@@ -1453,6 +1528,8 @@ function ExercisePickerScreen({ activeExercises, loggedSets, onPick, onEnd }) {
           <Fact icon="mdi:dumbbell">{activeExercises.length} done</Fact>
           <Fact icon="mdi:check">{loggedSets.length} sets</Fact>
         </>} />
+
+      <RestBar duration={restDuration} />
 
       {loggedSets.length > 0 && (
         <Button full icon="mdi:flag-checkered" onClick={onEnd}>Finish workout</Button>
@@ -1492,7 +1569,7 @@ function ExercisePickerScreen({ activeExercises, loggedSets, onPick, onEnd }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Rest
 // ─────────────────────────────────────────────────────────────────────────────
-function RestScreen({ exercises, restDuration, exIdx, setIdx, totalSets, onAdvance, freeWorkout }) {
+function RestScreen({ exercises, restDuration, exIdx, setIdx, totalSets, onAdvance, freeWorkout, upNext, onChangeNext }) {
   const [restLeft, setRestLeft] = useState(() => {
     const end = parseInt(localStorage.getItem('athrion_rest_end') || '0')
     return end ? Math.max(0, Math.ceil((end - Date.now()) / 1000)) : restDuration
@@ -1519,7 +1596,7 @@ function RestScreen({ exercises, restDuration, exIdx, setIdx, totalSets, onAdvan
   const isLastSet = nextSetIdx >= totalSets
   const isLastEx  = exIdx >= exercises.length - 1
   const nextLabel = freeWorkout
-    ? (isLastSet ? 'Pick next exercise' : `Set ${nextSetIdx + 1} of ${totalSets}`)
+    ? (upNext ? upNext.name : isLastSet ? 'Pick next exercise' : `Set ${nextSetIdx + 1} of ${totalSets}`)
     : isLastSet
       ? (isLastEx ? 'Finish workout' : `Next: ${exercises[exIdx + 1]?.name}`)
       : `Set ${nextSetIdx + 1} of ${totalSets}`
@@ -1552,9 +1629,13 @@ function RestScreen({ exercises, restDuration, exIdx, setIdx, totalSets, onAdvan
       <div className="text-center">
         <div className="text-xs font-semibold text-neon-ink mb-1">Up next</div>
         <div className="font-bold text-xl text-ink">{nextLabel}</div>
+        {upNext && <div className="text-sm text-muted mt-1">Starts when the rest ends</div>}
       </div>
 
-      <Button variant="secondary" onClick={onAdvance}>Skip rest</Button>
+      <div className="flex flex-wrap justify-center gap-2">
+        {upNext && <Button variant="ghost" icon="mdi:swap-horizontal" onClick={onChangeNext}>Change exercise</Button>}
+        <Button variant="secondary" onClick={onAdvance}>Skip rest</Button>
+      </div>
     </div>
   )
 }

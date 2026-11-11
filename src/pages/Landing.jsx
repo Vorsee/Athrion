@@ -2,13 +2,14 @@ import { Icon } from '@iconify/react'
 import { LandingReviews } from '../components/Reviews.jsx'
 import { Button } from '../components/ui/index.js'
 import { PLANS, PRO_FEATURES, TRIAL_DAYS, FREE_WORKOUT_LIMIT, money, annualPerMonth, annualSavingPct } from '../lib/pricing.js'
+import { POINT_RULES, LEVELS, PRIZE_PLACES } from '../lib/points.js'
 import Brand from '../components/Brand.jsx'
 import FriendsWorkoutDemo from '../components/FriendsWorkoutDemo.jsx'
 import LeaderboardDemo from '../components/LeaderboardDemo.jsx'
 import { SwimDemo, RunDemo } from '../components/CardioDemo.jsx'
 import { PlanDemo, ScanDemo } from '../components/PlanScanDemo.jsx'
 
-const FREE = ['A starter workout for your goal', 'Workout log with PRs', 'Calorie logging, barcode and a food library', 'Progress and weight tracking', 'Swim and run logs, swim teams', 'Train with friends and the monthly leaderboard']
+const FREE = ['Live rooms with your friends', 'Friends and the monthly leaderboard', 'A starter workout for your goal', 'Workout log with PRs', 'Calorie logging, barcode and a food library', 'Progress and weight tracking', 'Swim and run logs, swim teams']
 
 // The public page in front of sign-in: what ATHRION is and what it costs
 export default function Landing({ onCreateAccount, onSignIn }) {
@@ -17,7 +18,7 @@ export default function Landing({ onCreateAccount, onSignIn }) {
       <header className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
         <Brand />
         <nav aria-label="On this page" className="ml-auto mr-2 hidden sm:flex items-center">
-          {[['#pricing', 'Pricing'], ['#questions', 'Questions']].map(([href, label]) => (
+          {[['#how', 'How it works'], ['#pricing', 'Pricing'], ['#questions', 'Questions']].map(([href, label]) => (
             <a key={href} href={href} className="min-h-[44px] px-3 inline-flex items-center text-sm font-semibold text-ink-2 hover:text-ink">{label}</a>
           ))}
         </nav>
@@ -29,23 +30,27 @@ export default function Landing({ onCreateAccount, onSignIn }) {
         <section className="max-w-5xl mx-auto px-4 pt-10 pb-20 grid gap-12 md:gap-10 md:grid-cols-2 md:items-center text-center md:text-left">
           <div>
             <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-neon-ink border border-neon-stroke/30 rounded-full px-3 py-1">
-              <Icon icon="mdi:account-group-outline" width={18} aria-hidden="true" />Free with every account
+              <Icon icon="mdi:account-group-outline" width={18} aria-hidden="true" />Rooms, friends and the board are free
             </span>
             <h1 className="font-bold text-[3rem] xs:text-6xl lg:text-7xl leading-[0.98] tracking-tight mt-5">
-              Work out <span className="text-neon-ink">together</span>.
+              Train with your <span className="text-neon-ink">friends</span>.
             </h1>
             <p className="mt-6 text-lg xs:text-xl text-ink-2 max-w-md mx-auto md:mx-0">
-              One room, your friends in it, every set showing up live. Plus a personal trainer, calories, swim and run, in one app.
+              Open a room, send the code, and watch every set your friends finish, live. Same gym or different cities.
             </p>
             <div className="mt-8 max-w-xs mx-auto md:mx-0">
               <Button full onClick={onCreateAccount}>Create free account</Button>
-              <p className="text-sm text-muted mt-3">No card needed. Pro is optional, with a {TRIAL_DAYS}-day free trial.</p>
+              <p className="text-sm text-muted mt-3">No card needed. Your friends don't need Pro to train with you.</p>
             </div>
           </div>
           <FriendsWorkoutDemo />
         </section>
 
+        <HowItWorks />
+
         <TrainTogether />
+
+        <Crew />
 
         <PlanAndScan onStart={onCreateAccount} />
 
@@ -60,7 +65,7 @@ export default function Landing({ onCreateAccount, onSignIn }) {
               <ul className="mt-5 space-y-2.5">
                 {FREE.map(f => <Check key={f}>{f}</Check>)}
               </ul>
-              <p className="text-xs text-muted mt-5">Free accounts save up to {FREE_WORKOUT_LIMIT} workouts and get one photo scan a day.</p>
+              <p className="text-xs text-muted mt-5">Free accounts save up to {FREE_WORKOUT_LIMIT} workouts and get one photo scan a day. Rooms and friends have no limit.</p>
             </div>
             <div className="bg-surface border border-neon-stroke/40 rounded-2xl p-6">
               <div className="flex items-center justify-between gap-2">
@@ -97,7 +102,10 @@ export default function Landing({ onCreateAccount, onSignIn }) {
         {/* Closing */}
         <section className="bg-surface border-t border-line">
           <div className="max-w-5xl mx-auto px-4 py-14 flex flex-wrap items-center justify-between gap-6">
-            <h2 className="font-bold text-3xl">Your first workout is free.</h2>
+            <div>
+              <h2 className="font-bold text-3xl">Bring a friend to your next workout.</h2>
+              <p className="text-ink-2 mt-2">Free for both of you. Takes a minute to start.</p>
+            </div>
             <div className="w-full max-w-xs">
               <Button full onClick={onCreateAccount}>Create free account</Button>
             </div>
@@ -115,13 +123,91 @@ export default function Landing({ onCreateAccount, onSignIn }) {
   )
 }
 
-const TOGETHER_STEPS = [
-  ['mdi:door-open', 'Open a room, send the link'],
-  ['mdi:account-group-outline', 'Lift together, live'],
-  ['mdi:trophy-outline', 'Climb the monthly board'],
+const STEPS = [
+  { icon: 'mdi:account-plus-outline', title: 'Add your friends',
+    body: 'Pick a nickname and send your link. Friends who open it can add you in one tap.', Visual: InviteVisual },
+  { icon: 'mdi:door-open', title: 'Open a room',
+    body: 'Plan the exercises set by set, or make it a free workout where everyone picks their own. Share the six-letter code.', Visual: RoomVisual },
+  { icon: 'mdi:lightning-bolt-outline', title: 'Train live',
+    body: 'Each on your own phone, every set shows up for everyone as it lands. Training together earns extra points.', Visual: FeedVisual },
 ]
 
-// How a room works, and the monthly race that keeps everyone coming back
+// Three steps from sign-up to a shared workout, each with a small drawn piece of the app
+function HowItWorks() {
+  return (
+    <section id="how" className="max-w-5xl mx-auto px-4 pb-20 scroll-mt-4" aria-labelledby="how-title">
+      <h2 id="how-title" className="font-bold text-4xl xs:text-5xl leading-[1.05] tracking-tight text-center">
+        Three steps to a <span className="text-neon-ink">shared</span> workout.
+      </h2>
+      <ol className="mt-12 grid gap-10 md:gap-6 md:grid-cols-3">
+        {STEPS.map(({ icon, title, body, Visual }, i) => (
+          <li key={title} className="flex flex-col">
+            <div className="flex items-center gap-3">
+              <span className="w-12 h-12 rounded-2xl bg-neon text-on-neon font-bold text-xl flex items-center justify-center flex-shrink-0" aria-hidden="true">{i + 1}</span>
+              <h3 className="font-bold text-2xl leading-tight">{title}</h3>
+              <Icon icon={icon} width={24} className="text-neon-ink ml-auto flex-shrink-0" aria-hidden="true" />
+            </div>
+            <p className="text-ink-2 mt-3">{body}</p>
+            <div className="mt-5 grow flex"><Visual /></div>
+          </li>
+        ))}
+      </ol>
+    </section>
+  )
+}
+
+function VisualCard({ children }) {
+  return <div aria-hidden="true" className="w-full bg-surface border border-line rounded-3xl p-4 space-y-2.5 self-stretch">{children}</div>
+}
+
+function InviteVisual() {
+  return (
+    <VisualCard>
+      <div className="text-xs font-semibold text-muted">Your link</div>
+      <div className="flex flex-wrap items-center gap-2 bg-raised rounded-2xl px-3 py-2.5">
+        <span className="font-semibold text-ink break-all grow min-w-0">athrion.app/add/you</span>
+        <span className="inline-flex items-center gap-1 text-xs font-bold text-on-neon bg-neon rounded-lg px-2 py-1"><Icon icon="mdi:share-variant-outline" width={14} />Share</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 bg-raised rounded-2xl px-3 py-2.5">
+        <span className="w-9 h-9 rounded-full bg-info text-on-neon font-bold flex items-center justify-center flex-shrink-0">S</span>
+        <span className="grow min-w-0 text-sm text-ink-2"><span className="font-semibold text-ink">@sam</span> added you</span>
+        <span className="text-xs font-semibold text-neon-ink">Friends</span>
+      </div>
+    </VisualCard>
+  )
+}
+
+function RoomVisual() {
+  return (
+    <VisualCard>
+      <div className="text-xs font-semibold text-muted">Room code</div>
+      <div className="font-bold text-3xl tracking-[0.2em] text-neon-ink tabular-nums">K7P2QX</div>
+      <div className="grid grid-cols-2 gap-1 bg-raised rounded-xl p-1 text-sm font-semibold text-center">
+        <span className="rounded-lg bg-neon text-on-neon py-1.5">Planned</span>
+        <span className="rounded-lg text-ink-2 py-1.5">Free workout</span>
+      </div>
+      <div className="text-sm text-ink-2">Squat · 4 sets · 90 s rest</div>
+    </VisualCard>
+  )
+}
+
+function FeedVisual() {
+  const rows = [['Maya', 'bg-rose', 'Squat · 135 lb × 5'], ['Leo', 'bg-lilac', 'Squat · 185 lb × 5'], ['You', 'bg-neon', 'Squat · 155 lb × 5']]
+  return (
+    <VisualCard>
+      {rows.map(([name, tone, set]) => (
+        <div key={name} className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-raised rounded-2xl px-3 py-2.5">
+          <span className={`w-9 h-9 rounded-full ${tone} text-on-neon font-bold flex items-center justify-center flex-shrink-0`}>{name[0]}</span>
+          <span className="grow min-w-0 text-sm"><span className="font-semibold text-ink">{name}</span> <span className="text-ink-2">{set}</span></span>
+          <Icon icon="mdi:check-circle" width={18} className="text-neon-ink flex-shrink-0" />
+        </div>
+      ))}
+      <div className="text-sm font-semibold text-neon-ink">+15 points · trained together</div>
+    </VisualCard>
+  )
+}
+
+// The monthly race that keeps everyone coming back, with the real point rules
 function TrainTogether() {
   return (
     <section className="bg-surface border-y border-line" aria-labelledby="together">
@@ -131,21 +217,54 @@ function TrainTogether() {
             Race your <span className="text-neon-ink">friends</span>.
           </h2>
           <p className="text-lg text-ink-2 mt-4 max-w-md mx-auto md:mx-0">
-            Every workout earns points, more when you train in a room together. The top 3 each month win a free month of Pro.
+            Every workout counts, alone or together. Points reset on the 1st, and the top {PRIZE_PLACES} on the Everyone board win a free month of Pro.
           </p>
-          <ul className="mt-6 space-y-3 max-w-xs mx-auto md:mx-0 text-left">
-            {TOGETHER_STEPS.map(([icon, label]) => (
-              <li key={label} className="flex items-center gap-3">
-                <span className="w-11 h-11 rounded-xl bg-neon/10 border border-neon-stroke/30 flex items-center justify-center flex-shrink-0">
-                  <Icon icon={icon} width={22} className="text-neon-ink" aria-hidden="true" />
-                </span>
-                <span className="text-lg font-semibold text-ink">{label}</span>
+          <ul className="mt-6 space-y-2.5 max-w-sm mx-auto md:mx-0 text-left" aria-label="How points are earned">
+            {POINT_RULES.map(([icon, pts, rule]) => (
+              <li key={rule} className="flex items-center gap-3 bg-raised rounded-2xl px-3 py-2.5">
+                <Icon icon={icon} width={20} className="text-neon-ink flex-shrink-0" aria-hidden="true" />
+                <span className="font-bold text-lg text-ink tabular-nums w-8 flex-shrink-0">{pts}</span>
+                <span className="text-sm text-ink-2 min-w-0">{rule}</span>
               </li>
             ))}
           </ul>
+          <p className="text-sm text-muted mt-4 max-w-sm mx-auto md:mx-0">
+            Your points add up to a level, from {LEVELS[0].name} to {LEVELS.at(-1).name}.
+          </p>
         </div>
         <div className="md:order-1"><LeaderboardDemo /></div>
       </div>
+    </section>
+  )
+}
+
+const CREW = [
+  { icon: 'mdi:account-multiple-outline', title: 'Friends',
+    body: 'A friends board of your own, every month. Outside a room they see your nickname, points and level, never your weight or meals.' },
+  { icon: 'mdi:swim', title: 'Swim teams',
+    body: 'Your coach posts the day\'s practice, you log it in one tap, and see teammates and team results.' },
+  { icon: 'mdi:whistle-outline', title: 'Your trainer',
+    body: 'Working with a coach? They send a link, assign your workouts, and see how you are doing.' },
+]
+
+// The other ways ATHRION is shared: friends, swim teams and a trainer
+function Crew() {
+  return (
+    <section className="max-w-5xl mx-auto px-4 py-20" aria-labelledby="crew">
+      <h2 id="crew" className="font-bold text-4xl xs:text-5xl leading-[1.05] tracking-tight text-center">
+        Bring your whole <span className="text-neon-ink">crew</span>.
+      </h2>
+      <ul className="mt-10 grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 16rem), 1fr))' }}>
+        {CREW.map(({ icon, title, body }) => (
+          <li key={title} className="bg-surface border border-line rounded-2xl p-5">
+            <span className="w-12 h-12 rounded-2xl bg-neon/10 border border-neon-stroke/30 flex items-center justify-center">
+              <Icon icon={icon} width={26} className="text-neon-ink" aria-hidden="true" />
+            </span>
+            <h3 className="font-bold text-2xl mt-4">{title}</h3>
+            <p className="text-ink-2 mt-2">{body}</p>
+          </li>
+        ))}
+      </ul>
     </section>
   )
 }
@@ -218,6 +337,7 @@ function PlanAndScan({ onStart }) {
         <h2 id="showcase" className="font-bold text-4xl xs:text-5xl leading-[1.05] tracking-tight mt-4">
           A coach in your <span className="text-neon-ink">pocket</span>.
         </h2>
+        <p className="text-lg text-ink-2 mt-4 max-w-lg mx-auto">For the days you train alone: a plan that knows what you lifted, and meals logged from a photo.</p>
       </div>
       <div className="mt-12 grid gap-14 md:gap-8 md:grid-cols-2">
         {SHOWCASE.map(({ icon, title, body, Demo }) => (
@@ -284,6 +404,9 @@ function InstallAndTrust() {
 }
 
 export const FAQ = [
+  ['Do my friends need Pro to train with me?', 'No. Rooms, friends and the leaderboard are free for everyone, with no limit on rooms.'],
+  ['Do we have to be at the same gym?', 'No. Each of you trains on your own phone, wherever you are, and every set shows up in the room as it happens.'],
+  ['What do my friends see?', 'Your nickname, monthly points, workout days and level. In a room you share, they also see the sets you log there. Your weight, meals and body stats stay private. You can hide from the Everyone board and still show up for friends.'],
   ['Is it really free?', `Yes. The workout log, a starter workout for your goal, calorie logging with barcode and the food library, progress and weight tracking, swim and run logs, swim teams and training with friends are free. Pro adds the coaching plan, the AI meal plan, calorie targets that follow your weight, unlimited photo scans and unlimited saved workouts.`],
   ['Do I need a gym?', 'No. Tell ATHRION where you train, at a gym, at home or outdoors, and your workouts are built for it.'],
   ['Is there an app?', 'ATHRION runs in your phone\'s browser and adds to your home screen like an app. App Store and Google Play versions are not out yet.'],

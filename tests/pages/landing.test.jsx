@@ -5,6 +5,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { sb } from '../helpers/supabaseMock.js'
 import { PLANS, money, annualPerMonth, annualSavingPct } from '../../src/lib/pricing.js'
+import { POINT_RULES } from '../../src/lib/points.js'
 
 vi.mock('../../src/lib/supabase.js', () => ({ supabase: sb.supabase }))
 vi.mock('@iconify/react', () => ({ Icon: () => null }))
@@ -17,9 +18,14 @@ describe('Landing', () => {
     sb.set('app_reviews', { data: [], error: null })
     const start = vi.fn()
     render(<Landing onCreateAccount={start} onSignIn={() => {}} />)
-    expect(screen.getByRole('heading', { level: 1, name: /Work out\s*together/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: /Train with your\s*friends/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Three steps to a\s*shared\s*workout/ })).toBeInTheDocument()
+    for (const step of ['Add your friends', 'Open a room', 'Train live']) expect(screen.getByRole('heading', { name: step })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Bring your whole\s*crew/ })).toBeInTheDocument()
     expect(screen.queryByText('Eat.')).toBeNull()
     expect(screen.getByRole('heading', { name: /Race your\s*friends/ })).toBeInTheDocument()
+    // The point rules come from points.js, so the page can't drift from the server's
+    for (const [, , rule] of POINT_RULES) expect(screen.getByText(rule)).toBeInTheDocument()
     expect(screen.getByText(/No card needed/)).toBeInTheDocument()
     expect(screen.getByText(money(PLANS.monthly.price))).toBeInTheDocument()
     expect(screen.getByText(`Yearly works out at ${money(annualPerMonth)} a month, ${annualSavingPct}% less.`)).toBeInTheDocument()
