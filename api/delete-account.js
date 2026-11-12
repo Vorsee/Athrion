@@ -13,6 +13,8 @@ const BUCKETS = ['progress-photos', 'coach-videos', 'coach-avatars', 'swimmer-ph
 // Every table with the person's rows, children before parents. Most also cascade from
 // auth.users, but group_sets doesn't, and deleting explicitly doesn't depend on the schema.
 const USER_ROWS = [
+  ['group_reactions', 'from_user'], ['group_reactions', 'to_user'], ['user_blocks', 'blocker'], ['user_blocks', 'blocked'],
+  ['user_reports', 'reporter'], ['user_reports', 'reported'],
   ['coach_assignments', 'client_id'], ['coach_assignments', 'coach_id'], ['coach_clients', 'client_id'], ['coach_clients', 'coach_id'], ['coach_client_codes', 'coach_id'],
   ['meal_plans', 'user_id'], ['swim_practices', 'coach_id'], ['meal_scans', 'user_id'],
   ['app_reviews', 'user_id'], ['swim_team_members', 'user_id'], ['swim_teams', 'coach_id'], ['swim_profiles', 'user_id'],

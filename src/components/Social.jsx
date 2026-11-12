@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { Button, Card, Segmented, SectionTitle, IconButton, ExerciseRow, BigNumber, StatTiles, InfoButton, Fact, EmptyState, SkeletonRows, Skeleton, InlineError, RankChip, Avatar } from './ui/index.js'
 import { Toggle } from './ReminderSettings.jsx'
+import PersonSafetySheet from './PersonSafetySheet.jsx'
+import { fetchBlocks, unblockUser } from '../lib/safetyApi.js'
 import {
   saveNickname, setOnLeaderboard, searchNicknames, sendFriendRequest, respondFriendRequest, removeFriend,
   fetchFriends, fetchLeaderboard, fetchMyPoints, fetchMyMonths, inviteUrl,
@@ -267,6 +269,10 @@ export function FriendsTab({ me, invite, onInviteDone, onEditNickname, onTrainNo
   const [confirm, setConfirm] = useState(null)  // friendship id being removed
   const [shared, setShared]   = useState(false)
   const [trainNow, setTrainNow] = useState(null) // { nickname, friends }: offer a room right after friending
+  const [safety, setSafety]   = useState(null)    // { nickname, name } being reported or blocked
+  const [blocks, setBlocks]   = useState([])
+  const loadBlocks = () => fetchBlocks().then(setBlocks).catch(() => {})
+  useEffect(() => { loadBlocks() }, [])
 
   const load = () => fetchFriends().then(f => { setFriends(f); setError(false) }).catch(() => setError(true))
   useEffect(() => { load() }, [])
@@ -404,6 +410,7 @@ export function FriendsTab({ me, invite, onInviteDone, onEditNickname, onTrainNo
           <div className="space-y-1.5">
             {incoming.map((f, i) => (
               <PersonRow key={f.id} name={f.nickname} meta="Wants to be friends" i={i} highlight>
+                <IconButton icon="mdi:dots-vertical" label={`More for @${f.nickname}`} onClick={() => setSafety({ nickname: f.nickname, name: f.nickname })} />
                 <IconButton icon="mdi:close" tone="danger" label={`Decline @${f.nickname}`} onClick={() => act(() => respondFriendRequest(f.id, false))} />
                 <Button size="sm" icon="mdi:check" aria-label={`Accept @${f.nickname}`} onClick={() => act(async () => { await respondFriendRequest(f.id, true); setTrainNow({ nickname: f.nickname, friends: true }) })}>Accept</Button>
               </PersonRow>
@@ -427,7 +434,10 @@ export function FriendsTab({ me, invite, onInviteDone, onEditNickname, onTrainNo
                     <Button size="sm" variant="ghost" onClick={() => setConfirm(null)}>Keep</Button>
                     <Button size="sm" variant="danger" onClick={() => act(() => removeFriend(f.id))}>Remove</Button>
                   </> : (
-                    <IconButton icon="mdi:account-remove-outline" tone="danger" label={`Remove @${f.nickname}`} onClick={() => setConfirm(f.id)} />
+                    <>
+                      <IconButton icon="mdi:account-remove-outline" tone="danger" label={`Remove @${f.nickname}`} onClick={() => setConfirm(f.id)} />
+                      <IconButton icon="mdi:dots-vertical" label={`More for @${f.nickname}`} onClick={() => setSafety({ nickname: f.nickname, name: f.nickname })} />
+                    </>
                   )}
                 </PersonRow>
               ))}
@@ -448,6 +458,22 @@ export function FriendsTab({ me, invite, onInviteDone, onEditNickname, onTrainNo
           </div>
         </section>
       )}
+
+      {blocks.length > 0 && (
+        <section>
+          <SectionTitle>Blocked</SectionTitle>
+          <div className="space-y-1.5">
+            {blocks.map((b, i) => (
+              <PersonRow key={b.user_id} name={b.nickname || 'someone'} meta="Can't add you or join your rooms" i={i} muted>
+                <Button size="sm" variant="secondary" aria-label={`Unblock @${b.nickname || 'someone'}`}
+                  onClick={async () => { try { await unblockUser(b.user_id); loadBlocks() } catch {} }}>Unblock</Button>
+              </PersonRow>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {safety && <PersonSafetySheet person={safety} onClose={() => setSafety(null)} onBlocked={() => { load(); loadBlocks() }} />}
     </div>
   )
 }

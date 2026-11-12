@@ -15,6 +15,8 @@ const EXPORT_TABLES = [
 // Tables keyed by another column, or (coach_profiles) only readable column by column
 const EXPORT_OTHER = [
   ['coach_profiles', 'user_id', COACH_COLUMNS],
+  ['user_blocks', 'blocker', 'blocked, created_at'],
+  ['group_reactions', 'from_user', 'session_id, set_id, kind, created_at'],
   ['coach_products', 'coach_id', '*'],
   ['coach_purchases', 'buyer_id', '*'],
   ['swim_teams', 'coach_id', 'id, name, created_at'],

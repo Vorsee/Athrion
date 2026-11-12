@@ -21,11 +21,15 @@ import {
   removeRoomMember,
   leaveGroupSession,
   ROOM_SIZE,
+  REACTIONS,
+  sendReaction,
+  fetchReactions,
 } from '../lib/groupApi.js'
 import { standings, mergeSets } from '../lib/groupStandings.js'
 import { newClientId, queueSet, loadQueued, flushQueued, pendingRow } from '../lib/roomQueue.js'
 import { roomUrl, roomShareText } from '../lib/roomLink.js'
 import { shareLink } from '../lib/shopLink.js'
+import PersonSafetySheet from '../components/PersonSafetySheet.jsx'
 import { planFrom, makeSets, totalSets as countSets, setsDone, restAfter, restLabel, setsSummary, REST_OPTIONS, MAX_SETS, freePlan, freeRoom, FREE_SET_OPTIONS, FREE_REST_OPTIONS } from '../lib/groupPlan.js'
 import { saveWorkoutEntry } from '../lib/api.js'
 import { useUnit } from '../lib/units.js'
@@ -96,6 +100,12 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
   const allSetsRef = useRef(allSets)
   allSetsRef.current = allSets
   const flushing = useRef(null)
+  // Reactions (037): null before it runs (no buttons then)
+  const [reactions, setReactions] = useState([])
+  const [toast, setToast] = useState(null) // { id, name, kind, exercise } a reaction to one of my sets
+  const [buzz, setBuzz] = useState(() => { try { return localStorage.getItem('athrion_room_buzz') !== 'off' } catch { return true } })
+  const [safety, setSafety] = useState(null) // { id, name } being reported or blocked
+  const seen = useRef({ sets: null, reactions: null })
 
   // Sends every queued room set (any room: one finished offline is sent too). One run at a time;
   // a call while one runs waits for it and then sends what's left.
@@ -208,10 +218,19 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
     if (!groupSession?.id) return
 
     fetchParticipants(groupSession.id).then(setParticipants).catch(() => {})
-    fetchGroupSets(groupSession.id).then(sets => setAllSets(prev => mergeSets(prev, sets))).catch(() => {})
+    // What's already there on arrival is marked seen: no buzz or toast for it
+    fetchGroupSets(groupSession.id).then(sets => {
+      seen.current.sets = new Set(sets.map(x => x.id))
+      setAllSets(prev => mergeSets(prev, sets))
+    }).catch(() => {})
+    fetchReactions(groupSession.id).then(r => {
+      seen.current.reactions = new Set((r ?? []).map(x => x.id))
+      setReactions(prev => mergeById(prev, r))
+    }).catch(() => {})
 
     const unsub = subscribeToGroupSession(groupSession.id, {
       onSet: (row) => setAllSets(prev => mergeSets(prev, [row])),
+      onReaction: (row) => setReactions(prev => mergeById(prev, [row])),
       onParticipant: (row) => {
         setParticipants(prev =>
           prev.some(p => p.user_id === row.user_id) ? prev : [...prev, row]
@@ -233,6 +252,45 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
     return unsub
   }, [groupSession?.id])
 
+  // A partner's new set: a short buzz (where the phone allows it, and unless turned off).
+  // A reaction to one of my sets: a toast and a buzz. Nothing for what was there on arrival.
+  useEffect(() => {
+    if (!seen.current.sets) return
+    const real = allSets.filter(s => !s.pending)
+    const fresh = real.filter(s => !seen.current.sets.has(s.id))
+    fresh.forEach(s => seen.current.sets.add(s.id))
+    if (buzz && fresh.some(s => s.user_id !== myIdRef.current) && SESSION_SCREENS.includes(screenRef.current)) navigator.vibrate?.(20)
+  }, [allSets])
+  useEffect(() => {
+    if (!Array.isArray(reactions) || !seen.current.reactions) return
+    const fresh = reactions.filter(r => !seen.current.reactions.has(r.id))
+    fresh.forEach(r => seen.current.reactions.add(r.id))
+    const mine = fresh.filter(r => r.to_user === myIdRef.current && r.from_user !== myIdRef.current).at(-1)
+    if (!mine) return
+    const set = allSetsRef.current.find(s => s.id === mine.set_id)
+    setToast({ id: mine.id, name: mine.from_name, kind: mine.kind, exercise: set?.exercise })
+    navigator.vibrate?.([15, 60, 15])
+  }, [reactions])
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 3500)
+    return () => clearTimeout(t)
+  }, [toast])
+
+  function toggleBuzz() {
+    setBuzz(b => { try { localStorage.setItem('athrion_room_buzz', b ? 'off' : 'on') } catch {} return !b })
+  }
+  async function react(set, kind) {
+    const temp = { id: `local-${set.id}-${kind}`, set_id: set.id, from_user: myId, to_user: set.user_id, kind, pending: true }
+    setReactions(prev => (Array.isArray(prev) ? [...prev, temp] : prev))
+    try {
+      const row = await sendReaction({ sessionId: groupSession.id, set, kind, fromName: displayName })
+      setReactions(prev => mergeById(prev.filter(r => r.id !== temp.id), row ? [row] : []))
+    } catch (e) {
+      setReactions(prev => (['42P01', 'PGRST205'].includes(e?.code) ? null : prev.filter(r => r.id !== temp.id)))
+    }
+  }
+
   // My sets still waiting to be sent (after a reload, too)
   useEffect(() => {
     if (!groupSession?.id || !myId) return
@@ -248,11 +306,13 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
     const poll = setInterval(async () => {
       if (loadQueued(groupSession.id).length) sendQueued()
       try {
-        const [parts, sets, sess] = await Promise.all([
+        const [parts, sets, sess, reacts] = await Promise.all([
           fetchParticipants(groupSession.id),
           fetchGroupSets(groupSession.id),
           fetchGroupSession(groupSession.id).catch(() => null),
+          fetchReactions(groupSession.id).catch(() => []),
         ])
+        setReactions(prev => mergeById(prev, reacts))
         // Out of the room (the host removed you): twice in a row, so a slow first read can't do it
         if (parts && myIdRef.current && screenRef.current !== 'done' && !parts.some(p => p.user_id === myIdRef.current)) {
           if (++missingRef.current >= 2) { handleHome(); setJoinError('The host removed you from this room.'); return }
@@ -483,6 +543,18 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
   }
 
   const waiting = allSets.filter(s => s.pending && s.session_id === groupSession?.id).length
+  const safetySheet = safety && (
+    <PersonSafetySheet person={safety} sessionId={groupSession?.id} onClose={() => setSafety(null)}
+      onBlocked={p => setParticipants(prev => (isHost ? prev.filter(x => x.user_id !== p.id) : prev))} />
+  )
+  const feed = (
+    <>
+      <PartnerFeed sets={allSets} reactions={reactions} myId={myId} buzz={buzz} onToggleBuzz={toggleBuzz}
+        onReact={react} onPerson={setSafety} />
+      {toast && <ReactionToast toast={toast} />}
+      {safetySheet}
+    </>
+  )
 
   if (screen === 'home') return (
     <div className="space-y-4 py-4">
@@ -536,6 +608,9 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
         setParticipants(prev => prev.filter(p => p.user_id !== userId))
       }}
       onBack={leaveLobby}
+      onPerson={setSafety}
+      safetySheet={safetySheet}
+      myId={myId}
     />
   )
 
@@ -543,6 +618,7 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
     <>
     <WaitingNote count={waiting} />
     <PickerScreen
+      feed={feed}
       picked={plan}
       free={free}
       allSets={allSets}
@@ -558,6 +634,7 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
     <>
     <WaitingNote count={waiting} />
     <TrainingScreen
+      feed={feed}
       plan={plan}
       free={free}
       onNextExercise={toPicker}
@@ -583,6 +660,7 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
     <>
     <WaitingNote count={waiting} />
     <RestScreen
+      feed={feed}
       plan={plan}
       free={free}
       exIdx={exIdx}
@@ -611,8 +689,96 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
       myId={myId}
       startTime={startTime}
       onHome={handleHome}
+      onPerson={setSafety}
+      safetySheet={safetySheet}
     />
     </>
+  )
+}
+
+// Rows from realtime and polling, once each by id. null stays null (reactions not available)
+function mergeById(prev, rows) {
+  if (rows === null) return null
+  if (!Array.isArray(prev)) return prev
+  const byId = new Map(prev.map(r => [r.id, r]))
+  for (const r of rows ?? []) if (r?.id) byId.set(r.id, r)
+  return [...byId.values()]
+}
+
+const REACTION_WORD = { laugh: 'laughed at', like: 'liked', lift: 'cheered' }
+
+// Partners' latest sets, newest first, each with the three reactions. The vibrate switch is here.
+function PartnerFeed({ sets, reactions, myId, buzz, onToggleBuzz, onReact, onPerson }) {
+  const { fmt } = useUnit()
+  const now = useNow()
+  const theirs = sets.filter(s => !s.pending && s.user_id && s.user_id !== myId).slice(-5).reverse()
+  const canReact = Array.isArray(reactions)
+  return (
+    <Card>
+      <SectionTitle action={
+        <IconButton icon={buzz ? 'mdi:vibrate' : 'mdi:vibrate-off'} onClick={onToggleBuzz}
+          label={`Vibrate when a partner logs a set: ${buzz ? 'on' : 'off'}`} className={buzz ? 'text-neon-ink' : ''} />
+      }>Partners' sets</SectionTitle>
+      {theirs.length === 0 ? (
+        <p className="text-sm text-muted">Sets your partners log show up here. Tap a reaction to cheer them on.</p>
+      ) : (
+        <ul className="space-y-2" aria-label="Partners' latest sets">
+          {theirs.map(s => {
+            const on = canReact ? reactions.filter(r => r.set_id === s.id) : []
+            const ago = Math.max(0, Math.round((now - new Date(s.logged_at).getTime()) / 60000))
+            return (
+              <li key={s.id} className="slide-in bg-raised rounded-xl px-3 py-2.5">
+                <div className="flex items-center gap-3">
+                  <Avatar name={s.display_name} size="sm" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-ink break-words"><span className="font-semibold">{s.display_name}</span> · {s.exercise}</div>
+                    <div className="text-xs text-muted tabular-nums">
+                      {Number(s.weight) ? `${fmt(s.weight)} × ${s.reps}` : `${s.reps} reps`} · {ago < 1 ? 'just now' : `${ago} min ago`}
+                    </div>
+                  </div>
+                  <IconButton icon="mdi:dots-vertical" label={`More for ${s.display_name}`} className="w-9 h-9"
+                    onClick={() => onPerson({ id: s.user_id, name: s.display_name })} />
+                </div>
+                {canReact && (
+                  <div className="flex flex-wrap gap-1.5 mt-2 pl-11" role="group" aria-label={`React to ${s.display_name}'s set`}>
+                    {REACTIONS.map(([kind, icon, label]) => {
+                      const n = on.filter(r => r.kind === kind).length
+                      const mine = on.some(r => r.kind === kind && r.from_user === myId)
+                      return (
+                        <button key={kind} type="button" aria-pressed={mine} disabled={mine}
+                          aria-label={`${label}${n ? `, ${n}` : ''}`} onClick={() => onReact(s, kind)}
+                          className={`press min-h-[36px] min-w-[44px] px-2.5 rounded-full border inline-flex items-center justify-center gap-1 text-sm font-semibold tabular-nums transition-colors ${
+                            mine ? 'bg-neon-tint border-neon-stroke/50 text-neon-ink' : 'bg-surface border-line text-ink-2 hover:border-neon-stroke/30'}`}>
+                          <Icon key={mine ? 'on' : 'off'} icon={icon} width={20} className={mine ? 'pop-in' : ''} aria-hidden="true" />
+                          {n > 0 && <span>{n}</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </Card>
+  )
+}
+
+// Someone reacted to one of my sets: a short note at the top of the screen
+function ReactionToast({ toast }) {
+  const icon = REACTIONS.find(([k]) => k === toast.kind)?.[1] ?? 'mdi:thumb-up-outline'
+  return (
+    <div role="status" className="fixed left-1/2 -translate-x-1/2 z-50 w-[min(92vw,24rem)] pointer-events-none" style={{ top: 'calc(env(safe-area-inset-top) + 4.5rem)' }}>
+      <div key={toast.id} className="slide-up flex items-center gap-3 bg-overlay border border-neon-stroke/40 rounded-2xl px-4 py-3" style={{ boxShadow: 'var(--sheet-shadow)' }}>
+        <span className="w-9 h-9 rounded-full bg-neon text-on-neon flex items-center justify-center flex-shrink-0 pop-in">
+          <Icon icon={icon} width={20} aria-hidden="true" />
+        </span>
+        <span className="text-sm text-ink break-words">
+          <span className="font-semibold">{toast.name}</span> {REACTION_WORD[toast.kind] ?? 'reacted to'} your {toast.exercise ? `${toast.exercise.toLowerCase()} ` : ''}set
+        </span>
+      </div>
+    </div>
   )
 }
 
@@ -786,7 +952,7 @@ function ShortcutTile({ label, value, meta, onClick, children }) {
 // Lobby
 // ─────────────────────────────────────────────────────────────────────────────
 
-function LobbyScreen({ groupSession, participants, isHost, plan, free, onChange, onStart, onRemove, onBack }) {
+function LobbyScreen({ groupSession, participants, isHost, plan, free, onChange, onStart, onRemove, onBack, onPerson, safetySheet, myId }) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('All')
   const [copied, setCopied] = useState(false)
@@ -876,6 +1042,10 @@ function LobbyScreen({ groupSession, participants, isHost, plan, free, onChange,
                 <Avatar name={p.display_name} size="sm" className="pop-in" />
                 <span className="text-sm font-semibold text-ink flex-1 min-w-0 break-words">{p.display_name}</span>
                 {host && <Fact>Host</Fact>}
+                {myId && p.user_id !== myId && onPerson && (
+                  <IconButton icon="mdi:dots-vertical" label={`More for ${p.display_name}`} className="w-9 h-9"
+                    onClick={() => onPerson({ id: p.user_id, name: p.display_name })} />
+                )}
                 {isHost && !host && (removing === p.user_id ? (
                   <span className="flex gap-1.5 ml-auto">
                     <Button size="sm" variant="ghost" onClick={() => setRemoving(null)}>Keep</Button>
@@ -1040,6 +1210,7 @@ function LobbyScreen({ groupSession, participants, isHost, plan, free, onChange,
           <span className="text-sm text-muted">Waiting for host to start...</span>
         </div>
       )}
+      {safetySheet}
     </div>
   )
 }
@@ -1160,7 +1331,7 @@ function EndEarly({ onEnd, confirm, setConfirm, label = 'End workout early' }) {
 // Training
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TrainingScreen({ plan, free, onNextExercise, exercises, exIdx, setIdx, participants, allSets, myId, weight, setWeight, reps, setReps, onLog, onEnd, confirmEnd, setConfirmEnd }) {
+function TrainingScreen({ feed, plan, free, onNextExercise, exercises, exIdx, setIdx, participants, allSets, myId, weight, setWeight, reps, setReps, onLog, onEnd, confirmEnd, setConfirmEnd }) {
   const { unit } = useUnit()
   const now = useNow()
   const ex = exercises[exIdx]
@@ -1246,6 +1417,7 @@ function TrainingScreen({ plan, free, onNextExercise, exercises, exIdx, setIdx, 
       </Card>
 
       <LiveBoard rows={rows} myId={myId} title="Live standings" />
+      {feed}
 
       <EndEarly onEnd={onEnd} confirm={confirmEnd} setConfirm={setConfirmEnd} />
     </div>
@@ -1256,7 +1428,7 @@ function TrainingScreen({ plan, free, onNextExercise, exercises, exIdx, setIdx, 
 // Free room: pick the next exercise (as on Train's free workout), or finish
 // ─────────────────────────────────────────────────────────────────────────────
 
-function PickerScreen({ picked, free, allSets, participants, myId, onPick, onEnd }) {
+function PickerScreen({ feed, picked, free, allSets, participants, myId, onPick, onEnd }) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('All')
   const [confirmEnd, setConfirmEnd] = useState(false)
@@ -1303,6 +1475,7 @@ function PickerScreen({ picked, free, allSets, participants, myId, onPick, onEnd
       </Card>
 
       <LiveBoard rows={rows} myId={myId} title="Live standings" />
+      {feed}
 
       {mySets === 0 && <EndEarly onEnd={onEnd} confirm={confirmEnd} setConfirm={setConfirmEnd} label="End workout" />}
     </div>
@@ -1313,7 +1486,7 @@ function PickerScreen({ picked, free, allSets, participants, myId, onPick, onEnd
 // Rest: the timer, then everyone's standing
 // ─────────────────────────────────────────────────────────────────────────────
 
-function RestScreen({ plan, free, exIdx, setIdx, restLeft, restSecs, allSets, participants, myId, onSkip, onEnd }) {
+function RestScreen({ feed, plan, free, exIdx, setIdx, restLeft, restSecs, allSets, participants, myId, onSkip, onEnd }) {
   const [confirmEnd, setConfirmEnd] = useState(false)
   const now = useNow()
   const ex = plan[exIdx]
@@ -1352,6 +1525,7 @@ function RestScreen({ plan, free, exIdx, setIdx, restLeft, restSecs, allSets, pa
       </div>
 
       <LiveBoard rows={rows} myId={myId} title="Live standings" detailed />
+      {feed}
 
       <EndEarly onEnd={onEnd} confirm={confirmEnd} setConfirm={setConfirmEnd} />
     </div>
@@ -1362,7 +1536,7 @@ function RestScreen({ plan, free, exIdx, setIdx, restLeft, restSecs, allSets, pa
 // Done: final standings, updating while others finish
 // ─────────────────────────────────────────────────────────────────────────────
 
-function DoneScreen({ allSets, plan, free, autoEnded = false, exercises: planned, participants, myId, startTime, onHome }) {
+function DoneScreen({ allSets, plan, free, autoEnded = false, exercises: planned, participants, myId, startTime, onHome, onPerson, safetySheet }) {
   const { fmtVolume } = useUnit()
   const now = useNow()
   const duration = startTime ? Math.round((Math.min(now, startTime + SESSION_LIMIT_MS) - startTime) / 60000) : 0
@@ -1427,7 +1601,8 @@ function DoneScreen({ allSets, plan, free, autoEnded = false, exercises: planned
         </Card>
       )}
 
-      <RoomMates participants={participants} myId={myId} />
+      <RoomMates participants={participants} myId={myId} onPerson={onPerson} />
+      {safetySheet}
 
       <Button full onClick={onHome}>Back to home</Button>
     </div>
@@ -1435,7 +1610,7 @@ function DoneScreen({ allSets, plan, free, autoEnded = false, exercises: planned
 }
 
 // Who you trained with: add them as friends from here (they accept, as with any request)
-function RoomMates({ participants, myId }) {
+function RoomMates({ participants, myId, onPerson }) {
   const others = participants.filter(p => p.user_id !== myId && NICKNAME_RE.test(p.display_name || ''))
   const [state, setState] = useState({}) // nickname → 'friends' | 'sent' | 'busy' | 'error'
   useEffect(() => {
@@ -1469,6 +1644,10 @@ function RoomMates({ participants, myId }) {
                 <div className="text-sm font-semibold text-ink break-words">@{p.display_name}</div>
                 {st === 'error' && <div className="text-xs text-danger">Couldn't send. Try again.</div>}
               </div>
+              {onPerson && (
+                <IconButton icon="mdi:dots-vertical" label={`More for ${p.display_name}`} className="w-9 h-9 order-last"
+                  onClick={() => onPerson({ id: p.user_id, name: p.display_name })} />
+              )}
               {st === 'friends' ? (
                 <span className="ml-auto inline-flex items-center gap-1 text-sm font-semibold text-neon-ink"><Icon icon="mdi:account-check-outline" width={18} aria-hidden="true" />Friends</span>
               ) : st === 'sent' ? (

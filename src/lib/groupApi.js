@@ -167,7 +167,27 @@ export async function fetchGroupSets(sessionId) {
   return data || []
 }
 
-export function subscribeToGroupSession(sessionId, { onSet, onParticipant, onSessionUpdate }) {
+// Reactions on someone's set (037): laughing, like, dumbbell
+export const REACTIONS = [['laugh', 'mdi:emoticon-lol-outline', 'Laughing'], ['like', 'mdi:thumb-up-outline', 'Like'], ['lift', 'mdi:dumbbell', 'Strong']]
+
+export async function sendReaction({ sessionId, set, kind, fromName }) {
+  const { data: { user } } = await supabase.auth.getUser()
+  const { data, error } = await supabase.from('group_reactions')
+    .insert({ session_id: sessionId, set_id: set.id, to_user: set.user_id, from_user: user.id, from_name: fromName, kind })
+    .select().single()
+  if (error?.code === '23505') return null // already sent this one
+  if (error) throw error
+  return data
+}
+
+// null before 037 (no table yet): the room then shows no reaction buttons
+export async function fetchReactions(sessionId) {
+  const { data, error } = await supabase.from('group_reactions').select('*').eq('session_id', sessionId).order('created_at', { ascending: true })
+  if (error) return ['42P01', 'PGRST205'].includes(error.code) ? null : []
+  return data || []
+}
+
+export function subscribeToGroupSession(sessionId, { onSet, onParticipant, onSessionUpdate, onReaction }) {
   const channel = supabase
     .channel(`group-session-${sessionId}`)
     .on(
@@ -184,6 +204,11 @@ export function subscribeToGroupSession(sessionId, { onSet, onParticipant, onSes
       'postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'group_sessions', filter: `id=eq.${sessionId}` },
       payload => onSessionUpdate(payload.new)
+    )
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'group_reactions', filter: `session_id=eq.${sessionId}` },
+      payload => onReaction?.(payload.new)
     )
     .subscribe()
 

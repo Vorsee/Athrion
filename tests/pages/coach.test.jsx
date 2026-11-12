@@ -1,6 +1,6 @@
 // Coaches and the shop (014), and Train together rooms planned set by set (013)
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { sb, USER } from '../helpers/supabaseMock.js'
 
@@ -134,6 +134,33 @@ describe('Train together: sets one by one', () => {
     render(<Group session={{ name: 'Sam' }} intent={{ tab: 'rooms', join: 'K7M4QX' }} onIntentDone={() => {}} />)
     expect(await screen.findByText('Room code')).toBeInTheDocument()
     expect(sb.supabase.rpc).toHaveBeenCalledWith('join_group_session', expect.objectContaining({ p_code: 'K7M4QX' }))
+  })
+
+  it("shows partners' sets, sends a reaction, and pops a note when someone reacts to mine", async () => {
+    const plan = [{ name: 'Front Squat', sets: [{ reps: 5, rest: 60 }, { reps: 5, rest: 60 }] }]
+    sb.set('group_sessions', { data: { id: 's1', code: 'ABC234', host_id: USER.id, status: 'active', plan, exercises: ['Front Squat'], total_sets: 2, rest_secs: 60 }, error: null })
+    const now = new Date().toISOString()
+    sb.set('group_sets', { data: [
+      { id: 'g1', session_id: 's1', user_id: 'x2', display_name: 'alex', exercise: 'Front Squat', set_num: 1, weight: 200, reps: 5, logged_at: now },
+      { id: 'g2', session_id: 's1', user_id: USER.id, display_name: 'sam', exercise: 'Front Squat', set_num: 1, weight: 150, reps: 5, logged_at: now },
+    ], error: null })
+    sb.set('group_reactions', q => (sb.op(q, 'insert') ? { data: { ...sb.op(q, 'insert')[0], id: 'r1' }, error: null } : { data: [], error: null }))
+    const vibrate = vi.fn()
+    vi.stubGlobal('navigator', { ...navigator, vibrate })
+    localStorage.setItem('athrion_group_session_state', JSON.stringify({ sessionId: 's1', screen: 'training', isHost: true, exIdx: 0, setIdx: 1, startTime: Date.now() }))
+    render(<Group session={{ name: 'Sam' }} intent={{ tab: 'rooms' }} />)
+    const feed = await screen.findByRole('list', { name: "Partners' latest sets" })
+    expect(within(feed).getByText(/alex/)).toBeInTheDocument()
+    expect(within(feed).queryByText(/sam/)).toBeNull() // only partners' sets
+    await userEvent.click(within(feed).getByRole('button', { name: 'Like' }))
+    const sent = sb.queriesFor('group_reactions').map(q => sb.op(q, 'insert')?.[0]).find(Boolean)
+    expect(sent).toMatchObject({ session_id: 's1', set_id: 'g1', to_user: 'x2', from_user: USER.id, kind: 'like' })
+    expect(await within(feed).findByRole('button', { name: 'Like, 1' })).toHaveAttribute('aria-pressed', 'true')
+
+    const onReaction = sb.channel.on.mock.calls.find(c => c[1].table === 'group_reactions')[2]
+    act(() => onReaction({ new: { id: 'r9', session_id: 's1', set_id: 'g2', from_user: 'x2', to_user: USER.id, from_name: 'alex', kind: 'laugh', created_at: now } }))
+    expect(await screen.findByText(/laughed at your front squat set/)).toBeInTheDocument()
+    expect(vibrate).toHaveBeenCalled()
   })
 
   it('ends a room workout by itself 4 hours after it started', async () => {
