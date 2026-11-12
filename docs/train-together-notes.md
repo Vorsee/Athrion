@@ -149,11 +149,10 @@ Each one is its own commit set on `progress-update-v1`. Each runs the tests befo
 8. **Realtime:** 012 has been run.
 
 ## 6. Progress
-- **R0** (rooms that end cleanly): app side done; `supabase/034_rooms_solid.sql` written, **not yet run**.
+- **R0** (rooms that end cleanly): done; 034 applied Nov 12 2026 and folded into `schema.sql`.
   - 12 hours of no activity ends a room: checked on join, plus an hourly `end-stale-rooms` cron.
   - 6 people at most.
   - The host can remove someone from the lobby, and they can't rejoin.
   - Leaving the lobby gives up your seat. A host who leaves or finishes hands the room to the earliest joiner, or it ends if nobody's left.
   - Code clashes retry.
   - Clear messages for ended, full and removed rooms, and for minors.
-  - Until 034 runs, the app behaves as before.
