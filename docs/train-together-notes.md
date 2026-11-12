@@ -156,12 +156,11 @@ Each one is its own commit set on `progress-update-v1`. Each runs the tests befo
   - Leaving the lobby gives up your seat. A host who leaves or finishes hands the room to the earliest joiner, or it ends if nobody's left.
   - Code clashes retry.
   - Clear messages for ended, full and removed rooms, and for minors.
-- **R1** (sets logged without signal): app side done; `supabase/035_room_sets_offline.sql` written, **not yet run**.
+- **R1** (sets logged without signal): done; 035 applied Nov 12 2026.
   - A set shows in the room and the rest starts the moment it's logged; it's sent in the background.
   - Without signal it waits on the phone (survives a reload) with a "waiting for signal" note, and is sent in order once back online.
   - Each set has its own id from the phone, so a set sent twice is stored once (after 035).
   - A queued set keeps the time it was logged, never later than now or before the room was made.
-  - Before 035 runs, sets are sent without the id (no duplicate protection), as before.
 - **R2** (room links): done.
   - `athrion.app/r/CODE`: signed out, a preview ("@alex invited you", the workout, how many are in) with Join free; an ended room says so and offers your own.
   - The code is kept through sign-up on the phone and in the new account (for an email confirmed on another device), for 12 hours; the room opens right after onboarding.

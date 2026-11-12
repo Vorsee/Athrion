@@ -136,6 +136,20 @@ describe('Train together tabs', () => {
     expect(rpcCalls('respond_friend_request')).toEqual([{ p_id: 'f1', p_accept: true }])
   })
 
+  it('offers a room straight after becoming friends, and opens one', async () => {
+    rpcs({ my_friends: [{ id: 'f1', nickname: 'jo', status: 'pending', incoming: true }], respond_friend_request: null })
+    sb.set('group_sessions', { data: { id: 's1', code: 'ABC234', exercises: [], status: 'lobby' }, error: null })
+    sb.set('group_participants', { data: [], error: null })
+    sb.set('group_sets', { data: [], error: null })
+    render(<Group session={{ name: 'Sam' }} />)
+    await userEvent.click(screen.getByRole('tab', { name: 'Friends' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Accept @jo' }))
+    expect(await screen.findByText('Train together now?')).toBeInTheDocument()
+    expect(screen.getByText(/You and @jo are friends/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Open a room' }))
+    expect(await screen.findByText('Room code')).toBeInTheDocument()
+  })
+
   it('shows an invite from a link and adds the person', async () => {
     rpcs({ my_friends: [], send_friend_request: 'friends' })
     const onIntentDone = vi.fn()
@@ -157,5 +171,23 @@ describe('Train together tabs', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Create a room' }))
     const join = sb.queriesFor('group_participants').map(q => sb.op(q, 'insert')).find(Boolean)
     expect(join[0]).toMatchObject({ display_name: 'sam' })
+  })
+})
+
+describe('trained with', () => {
+  it('adds a room-mate as a friend from the done screen', async () => {
+    const ID = (await import('../helpers/supabaseMock.js')).USER.id
+    rpcs({ my_friends: [{ id: 'f9', nickname: 'leo', status: 'accepted', incoming: false }], send_friend_request: 'pending' })
+    const plan = [{ name: 'Squat', sets: [{ reps: 5, rest: 60 }] }]
+    sb.set('group_sessions', { data: { id: 's1', code: 'ABC234', host_id: 'other', status: 'active', plan, exercises: ['Squat'] }, error: null })
+    sb.set('group_participants', { data: [{ user_id: ID, display_name: 'sam' }, { user_id: 'u2', display_name: 'maya' }, { user_id: 'u3', display_name: 'leo' }], error: null })
+    sb.set('group_sets', { data: [], error: null })
+    localStorage.setItem('athrion_group_session_state', JSON.stringify({ sessionId: 's1', screen: 'training', isHost: false, exIdx: 0, setIdx: 0, startTime: Date.now() - 5 * 3600e3 }))
+    render(<Group session={{ name: 'Sam' }} intent={{ tab: 'rooms' }} />)
+    expect(await screen.findByText('Trained with')).toBeInTheDocument()
+    expect(await screen.findByText('Friends')).toBeInTheDocument() // leo already is
+    await userEvent.click(screen.getByRole('button', { name: 'Add @maya as a friend' }))
+    expect(await screen.findByText('Requested')).toBeInTheDocument()
+    expect(rpcCalls('send_friend_request')).toEqual([{ p_nickname: 'maya' }])
   })
 })

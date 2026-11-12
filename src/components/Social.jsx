@@ -257,7 +257,7 @@ function BoardRow({ row, i = 0 }) {
 
 // ── Friends ──────────────────────────────────────────────────────────────────
 
-export function FriendsTab({ me, invite, onInviteDone, onEditNickname }) {
+export function FriendsTab({ me, invite, onInviteDone, onEditNickname, onTrainNow }) {
   const [friends, setFriends] = useState(null)
   const [error, setError]     = useState(false)
   const [query, setQuery]     = useState('')
@@ -266,6 +266,7 @@ export function FriendsTab({ me, invite, onInviteDone, onEditNickname }) {
   const [busy, setBusy]       = useState(false)
   const [confirm, setConfirm] = useState(null)  // friendship id being removed
   const [shared, setShared]   = useState(false)
+  const [trainNow, setTrainNow] = useState(null) // { nickname, friends }: offer a room right after friending
 
   const load = () => fetchFriends().then(f => { setFriends(f); setError(false) }).catch(() => setError(true))
   useEffect(() => { load() }, [])
@@ -278,13 +279,14 @@ export function FriendsTab({ me, invite, onInviteDone, onEditNickname }) {
     return () => clearTimeout(t)
   }, [query, me.nickname])
 
-  async function add(nickname) {
+  async function add(nickname, fromInvite = false) {
     const nick = cleanNickname(nickname)
     if (!nick) return
     setBusy(true); setMsg(null)
     try {
       const res = await sendFriendRequest(nick)
       setMsg({ ok: true, text: res === 'friends' ? `You and @${nick} are friends` : `Request sent to @${nick}` })
+      if (fromInvite || res === 'friends') setTrainNow({ nickname: nick, friends: res === 'friends' })
       setQuery(''); setHits([])
       load()
     } catch (e) {
@@ -339,7 +341,25 @@ export function FriendsTab({ me, invite, onInviteDone, onEditNickname }) {
           </div>
           <div className="flex gap-2 mt-3">
             <Button variant="secondary" className="flex-1" onClick={onInviteDone}>Not now</Button>
-            <Button className="flex-1" disabled={busy} onClick={async () => { await add(invite); onInviteDone() }}>Add @{invite}</Button>
+            <Button className="flex-1" disabled={busy} onClick={async () => { await add(invite, true); onInviteDone() }}>Add @{invite}</Button>
+          </div>
+        </Card>
+      )}
+
+      {trainNow && onTrainNow && (
+        <Card tone="neon" className="pop-in">
+          <div className="flex items-center gap-3">
+            <Avatar name={trainNow.nickname} />
+            <div className="min-w-0">
+              <div className="font-bold text-lg text-ink leading-tight">Train together now?</div>
+              <div className="text-sm text-ink-2 break-words">
+                {trainNow.friends ? `You and @${trainNow.nickname} are friends.` : `Your request is with @${trainNow.nickname}.`} Open a room and send them the link.
+              </div>
+            </div>
+          </div>
+          <div className="grid gap-2 mt-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 8rem), 1fr))' }}>
+            <Button variant="secondary" onClick={() => setTrainNow(null)}>Not now</Button>
+            <Button icon="mdi:account-group-outline" onClick={() => { setTrainNow(null); onTrainNow() }}>Open a room</Button>
           </div>
         </Card>
       )}
@@ -385,7 +405,7 @@ export function FriendsTab({ me, invite, onInviteDone, onEditNickname }) {
             {incoming.map((f, i) => (
               <PersonRow key={f.id} name={f.nickname} meta="Wants to be friends" i={i} highlight>
                 <IconButton icon="mdi:close" tone="danger" label={`Decline @${f.nickname}`} onClick={() => act(() => respondFriendRequest(f.id, false))} />
-                <Button size="sm" icon="mdi:check" aria-label={`Accept @${f.nickname}`} onClick={() => act(() => respondFriendRequest(f.id, true))}>Accept</Button>
+                <Button size="sm" icon="mdi:check" aria-label={`Accept @${f.nickname}`} onClick={() => act(async () => { await respondFriendRequest(f.id, true); setTrainNow({ nickname: f.nickname, friends: true }) })}>Accept</Button>
               </PersonRow>
             ))}
           </div>

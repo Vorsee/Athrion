@@ -3,7 +3,8 @@ import { Icon } from '@iconify/react'
 import { useBackHandler, SESSION_LIMIT_MS } from '../lib/shell.js'
 import { Button, Card, Chip, Segmented, PageHeader, SectionTitle, Fact, InfoButton, IconButton, ExerciseRow, RankChip, SkeletonRows, Avatar, AvatarStack } from '../components/ui/index.js'
 import { NicknameCard, LeaderboardTab, FriendsTab } from '../components/Social.jsx'
-import { fetchMySocial, clearInvite, fetchFriends, fetchMyPoints, fetchLeaderboard } from '../lib/socialApi.js'
+import { fetchMySocial, clearInvite, fetchFriends, fetchMyPoints, fetchLeaderboard, sendFriendRequest } from '../lib/socialApi.js'
+import { NICKNAME_RE } from '../lib/points.js'
 import { EXERCISES, MUSCLES, getExerciseIcon, todayKey, localDateKey } from '../lib/data.js'
 import {
   createGroupSession,
@@ -514,7 +515,8 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
       ) : tab === 'ranks' ? (
         <LeaderboardTab me={me} onMeChange={setMe} onAddFriends={() => pickTab('friends')} minor={isMinor} />
       ) : (
-        <FriendsTab me={me} invite={invite} onInviteDone={inviteDone} onEditNickname={() => setEditingNick(true)} />
+        <FriendsTab me={me} invite={invite} onInviteDone={inviteDone} onEditNickname={() => setEditingNick(true)}
+          onTrainNow={() => handleCreate({ share: true })} />
       )}
       </div>
     </div>
@@ -1425,7 +1427,60 @@ function DoneScreen({ allSets, plan, free, autoEnded = false, exercises: planned
         </Card>
       )}
 
+      <RoomMates participants={participants} myId={myId} />
+
       <Button full onClick={onHome}>Back to home</Button>
     </div>
+  )
+}
+
+// Who you trained with: add them as friends from here (they accept, as with any request)
+function RoomMates({ participants, myId }) {
+  const others = participants.filter(p => p.user_id !== myId && NICKNAME_RE.test(p.display_name || ''))
+  const [state, setState] = useState({}) // nickname → 'friends' | 'sent' | 'busy' | 'error'
+  useEffect(() => {
+    if (!others.length) return
+    fetchFriends().then(list => setState(prev => {
+      const next = { ...prev }
+      for (const f of list) next[f.nickname] = f.status === 'accepted' ? 'friends' : 'sent'
+      return next
+    })).catch(() => {})
+  }, [others.length])
+  if (!others.length) return null
+
+  async function add(nick) {
+    setState(s => ({ ...s, [nick]: 'busy' }))
+    try {
+      const res = await sendFriendRequest(nick)
+      setState(s => ({ ...s, [nick]: res === 'friends' ? 'friends' : 'sent' }))
+    } catch { setState(s => ({ ...s, [nick]: 'error' })) }
+  }
+
+  return (
+    <Card className="rise">
+      <SectionTitle>Trained with</SectionTitle>
+      <div className="space-y-2">
+        {others.map((p, i) => {
+          const st = state[p.display_name]
+          return (
+            <div key={p.user_id} className="rise flex flex-wrap items-center gap-x-3 gap-y-1 bg-raised rounded-xl px-3 py-2.5" style={{ '--i': i }}>
+              <Avatar name={p.display_name} size="md" />
+              <div className="grow basis-0 min-w-[5.5rem]">
+                <div className="text-sm font-semibold text-ink break-words">@{p.display_name}</div>
+                {st === 'error' && <div className="text-xs text-danger">Couldn't send. Try again.</div>}
+              </div>
+              {st === 'friends' ? (
+                <span className="ml-auto inline-flex items-center gap-1 text-sm font-semibold text-neon-ink"><Icon icon="mdi:account-check-outline" width={18} aria-hidden="true" />Friends</span>
+              ) : st === 'sent' ? (
+                <span className="ml-auto inline-flex items-center gap-1 text-sm text-muted"><Icon icon="mdi:account-clock-outline" width={18} aria-hidden="true" />Requested</span>
+              ) : (
+                <Button size="sm" variant="secondary" icon="mdi:account-plus-outline" className="ml-auto" disabled={st === 'busy'}
+                  aria-label={`Add @${p.display_name} as a friend`} onClick={() => add(p.display_name)}>Add friend</Button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </Card>
   )
 }
