@@ -214,3 +214,32 @@ export function subscribeToGroupSession(sessionId, { onSet, onParticipant, onSes
 
   return () => supabase.removeChannel(channel)
 }
+
+// ── Same time next week (038) ───────────────────────────────────────────────
+const missingFn = e => e?.code === 'PGRST202' || /could not find the function/i.test(e?.message || '')
+
+// Books the next session for everyone in this room; returns its id
+export async function scheduleNextSession(sessionId, startsAt) {
+  const { data, error } = await supabase.rpc('schedule_next_session', { p_session: sessionId, p_starts_at: startsAt.toISOString() })
+  if (error) throw Object.assign(new Error(missingFn(error) ? "Booking isn't available yet." : error.message), { missing: missingFn(error) })
+  return data
+}
+
+// [{ id, starts_at, names, plan, room_code, created_by }], or null before 038
+export async function fetchNextSessions() {
+  const { data, error } = await supabase.rpc('my_next_sessions')
+  if (error) { if (missingFn(error)) return null; throw error }
+  return data || []
+}
+
+// The room for a booked session: the code of the one already open, or the one just made
+export async function setNextSessionRoom(id, code) {
+  const { data, error } = await supabase.rpc('set_next_session_room', { p_id: id, p_code: code })
+  if (error) throw error
+  return data
+}
+
+export async function leaveNextSession(id) {
+  const { error } = await supabase.rpc('leave_next_session', { p_id: id })
+  if (error) throw error
+}

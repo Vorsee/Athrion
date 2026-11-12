@@ -17,6 +17,8 @@ const MARK_BARS = [[150, 348, 51, 126], [204, 282, 51, 192], [258, 396, 51, 78]]
  * workout: { kind: 'workout', title, date, minutes, volume, sets, lifts: ['Bench Press 185 lb × 5'], records }
  *   (volume already formatted in the person's unit)
  * swim / run: { kind: 'swim' | 'run', title, date, distance, time, pace }
+ * room: { kind: 'room', names: ['sam', 'alex'], date, minutes, volume, sets, best: ['alex · Squat 225 lb × 5'] }
+ *   (a Train together room: everyone's names, the room's totals, each person's best set)
  * @returns { eyebrow, title, stats: [[label, value]], lines: [], highlight }
  */
 export function cardContent(a) {
@@ -27,6 +29,13 @@ export function cardContent(a) {
     stats: [['Distance', a.distance], ['Time', a.time], ['Pace', a.pace]].filter(([, v]) => v),
     lines: [],
     highlight: a.highlight ?? null,
+  }
+  if (a.kind === 'room') return {
+    eyebrow: `Trained together · ${date}`,
+    title: roomNames(a.names),
+    stats: [['Time', `${a.minutes} min`], ['Volume', a.volume], ['Sets', String(a.sets)]].filter(([, v]) => v && !/^0( |$)/.test(v)),
+    lines: (a.best ?? []).slice(0, 3),
+    highlight: 'Train with us on athrion.app',
   }
   return {
     eyebrow: `Workout · ${date}`,
@@ -185,4 +194,12 @@ export async function shareOrSave(file) {
   a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 5000)
   return 'saved'
+}
+
+// "@sam and @alex", "@sam, @alex and @maya", "@sam and 4 friends"
+export function roomNames(names = []) {
+  const at = names.filter(Boolean).map(n => `@${String(n).replace(/^@/, '')}`)
+  if (at.length <= 1) return at[0] ?? 'Trained together'
+  if (at.length <= 3) return `${at.slice(0, -1).join(', ')} and ${at.at(-1)}`
+  return `${at[0]} and ${at.length - 1} friends`
 }

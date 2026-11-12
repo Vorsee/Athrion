@@ -174,3 +174,7 @@ Each one is its own commit set on `progress-update-v1`. Each runs the tests befo
   - A reaction to your set: a note at the top and a vibration (Android; iPhone browsers don't vibrate). A partner's set vibrates too, with an off switch in the feed.
   - Report and block from the ⋮ next to a person in the room, the waiting room, "Trained with" and Friends. Reports notify every admin; blocks end the friendship, keep them out of your rooms and stop requests either way. Friends shows a Blocked list with Unblock.
   - Until 037 runs, there are no reaction buttons and block / report say they aren't available yet.
+- **R7** (end of the session): app side done; `supabase/038_next_sessions.sql` written, **not yet run**.
+  - Share to your story: a 1080 x 1920 card with everyone's names, time, volume, sets, each person's best set and athrion.app.
+  - Beat it next time: on each exercise you shared, your best set next to the best partner's, and who's ahead.
+  - Same time next week?: one tap books it for everyone in the room with the same workout; everyone gets a push an hour before; it shows on Rooms as "Up next" and opens from an hour before (the first to open makes the room, the rest join it; "Can't make it" leaves it).

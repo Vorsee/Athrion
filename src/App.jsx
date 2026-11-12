@@ -282,6 +282,7 @@ export default function App() {
   function openTarget(target) {
     setShowInbox(false)
     if (target === 'friends' || target === 'ranks') setGroupIntent({ tab: target })
+    else if (target === 'next') setGroupIntent({ tab: 'rooms' }) // a booked session's reminder: Rooms shows it on top
     else if (target === 'workout') resumeWorkout()
     else if (target === 'progress') setShowProfile('progress') // Progress lives in the You sheet
     else if (target === 'notifications') setShowInbox(true)

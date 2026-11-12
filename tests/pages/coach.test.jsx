@@ -163,6 +163,43 @@ describe('Train together: sets one by one', () => {
     expect(vibrate).toHaveBeenCalled()
   })
 
+  it('books the same time next week for everyone, and shows who to beat', async () => {
+    const plan = [{ name: 'Front Squat', sets: [{ reps: 5, rest: 60 }] }]
+    sb.set('group_sessions', { data: { id: 's1', code: 'ABC234', host_id: 'other', status: 'active', plan, exercises: ['Front Squat'], total_sets: 1, rest_secs: 60 }, error: null })
+    sb.set('group_participants', { data: [{ user_id: USER.id, display_name: 'sam' }, { user_id: 'x2', display_name: 'alex' }], error: null })
+    sb.set('group_sets', { data: [
+      { id: 'g1', session_id: 's1', user_id: 'x2', display_name: 'alex', exercise: 'Front Squat', set_num: 1, weight: 200, reps: 5, logged_at: new Date().toISOString() },
+      { id: 'g2', session_id: 's1', user_id: USER.id, display_name: 'sam', exercise: 'Front Squat', set_num: 1, weight: 150, reps: 5, logged_at: new Date().toISOString() },
+    ], error: null })
+    sb.supabase.rpc.mockImplementation(async fn => ({ data: fn === 'schedule_next_session' ? 'n1' : [], error: null }))
+    localStorage.setItem('athrion_group_session_state', JSON.stringify({ sessionId: 's1', screen: 'training', isHost: false, exIdx: 0, setIdx: 0, startTime: Date.now() - 5 * 3600e3 }))
+    render(<Group session={{ name: 'Sam' }} intent={{ tab: 'rooms' }} />)
+    expect(await screen.findByText('Beat it next time')).toBeInTheDocument()
+    expect(screen.getByText('alex is ahead. Your target for next time.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Share to your story' })).toBeInTheDocument()
+    expect(screen.getByText('Same time next week?')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Book it' }))
+    expect(await screen.findByText('Booked')).toBeInTheDocument()
+    const [, args] = sb.supabase.rpc.mock.calls.find(c => c[0] === 'schedule_next_session')
+    expect(args.p_session).toBe('s1')
+    expect(new Date(args.p_starts_at).getTime()).toBeGreaterThan(Date.now() + 6 * 864e5)
+  })
+
+  it('shows a booked session on Rooms and opens its room an hour before', async () => {
+    const plan = [{ name: 'Front Squat', sets: [{ reps: 5, rest: 60 }] }]
+    sb.supabase.rpc.mockImplementation(async fn => (
+      fn === 'my_next_sessions' ? { data: [{ id: 'n1', starts_at: new Date(Date.now() + 20 * 60000).toISOString(), names: ['sam', 'alex'], plan, room_code: null }], error: null }
+      : fn === 'set_next_session_room' ? { data: 'ABC234', error: null }
+      : { data: [], error: null }))
+    render(<Group session={{ name: 'Sam' }} intent={{ tab: 'rooms' }} />)
+    expect(await screen.findByText(/Up next · In 20 min/)).toBeInTheDocument()
+    expect(screen.getByText('With @alex')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Open the room' }))
+    expect(await screen.findByText('Room code')).toBeInTheDocument()
+    expect(sb.supabase.rpc).toHaveBeenCalledWith('set_next_session_room', { p_id: 'n1', p_code: 'ABC234' })
+    await vi.waitFor(() => expect(updates('group_sessions').at(-1)?.plan).toEqual(plan))
+  })
+
   it('ends a room workout by itself 4 hours after it started', async () => {
     const plan = [{ name: 'Front Squat', sets: [{ reps: 5, rest: 60 }] }]
     sb.set('group_sessions', { data: { id: 's1', code: 'ABC234', host_id: USER.id, status: 'active', plan, exercises: ['Front Squat'], total_sets: 1, rest_secs: 60 }, error: null })

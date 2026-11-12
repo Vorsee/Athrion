@@ -24,12 +24,19 @@ import {
   REACTIONS,
   sendReaction,
   fetchReactions,
+  scheduleNextSession,
+  fetchNextSessions,
+  setNextSessionRoom,
+  leaveNextSession,
 } from '../lib/groupApi.js'
 import { standings, mergeSets } from '../lib/groupStandings.js'
 import { newClientId, queueSet, loadQueued, flushQueued, pendingRow } from '../lib/roomQueue.js'
 import { roomUrl, roomShareText } from '../lib/roomLink.js'
 import { shareLink } from '../lib/shopLink.js'
 import PersonSafetySheet from '../components/PersonSafetySheet.jsx'
+import ShareSheet from '../components/ShareSheet.jsx'
+import { cardContent } from '../lib/shareCard.js'
+import { bestSetEach, beatItRows } from '../lib/roomSummary.js'
 import { planFrom, makeSets, totalSets as countSets, setsDone, restAfter, restLabel, setsSummary, REST_OPTIONS, MAX_SETS, freePlan, freeRoom, FREE_SET_OPTIONS, FREE_REST_OPTIONS } from '../lib/groupPlan.js'
 import { saveWorkoutEntry } from '../lib/api.js'
 import { useUnit } from '../lib/units.js'
@@ -417,7 +424,15 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
       setPlan(picked ?? []); setFree(host?.free ? { sets: 3, rest: 60, ...host.free } : null)
       goScreen('lobby')
       if (host?.free || picked) saveSessionPlan(sess.id, host.free ? freePlan({ sets: 3, rest: 60, ...host.free }) : picked).catch(() => {})
-      if (host) shareLink(roomUrl(sess.code), roomShareText(sess.code))
+      if (host?.next) {
+        // A booked session: the room everyone joins. If someone opened it first, go to theirs.
+        const code = await setNextSessionRoom(host.next, sess.code).catch(() => sess.code)
+        if (code && code !== sess.code) {
+          leaveGroupSession(sess.id).catch(() => {})
+          setLoading(false)
+          return handleJoin(code)
+        }
+      } else if (host) shareLink(roomUrl(sess.code), roomShareText(sess.code))
     } catch (err) {
       setJoinError(err.message)
     } finally {
@@ -578,6 +593,11 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
           onJoin={handleJoin}
           nickname={me?.nickname}
           onTab={pickTab}
+          onOpenNext={n => {
+            if (n.room_code) { setJoinCode(n.room_code); return handleJoin(n.room_code) }
+            const fr = freeRoom(n.plan)
+            handleCreate(fr ? { free: fr, next: n.id } : { plan: planFrom({ plan: n.plan }), next: n.id })
+          }}
         />
       ) : me === undefined ? (
         <SkeletonRows rows={3} />
@@ -689,6 +709,7 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
       myId={myId}
       startTime={startTime}
       onHome={handleHome}
+      sessionId={groupSession?.id}
       onPerson={setSafety}
       safetySheet={safetySheet}
     />
@@ -797,7 +818,7 @@ function WaitingNote({ count }) {
 // Home
 // ─────────────────────────────────────────────────────────────────────────────
 
-function HomeScreen({ joinCode, setJoinCode, joinError, startOwn, loading, onCreate, onJoin, nickname, onTab }) {
+function HomeScreen({ joinCode, setJoinCode, joinError, startOwn, loading, onCreate, onJoin, nickname, onTab, onOpenNext }) {
   const [friends, setFriends] = useState(null)
   const [board, setBoard] = useState(null) // { points, place }
   useEffect(() => {
@@ -807,11 +828,17 @@ function HomeScreen({ joinCode, setJoinCode, joinError, startOwn, loading, onCre
       .catch(() => {})
   }, [])
 
+  const [upcoming, setUpcoming] = useState([])
+  useEffect(() => { fetchNextSessions().then(n => setUpcoming(n ?? [])).catch(() => {}) }, [])
   const crew = (friends ?? []).slice(0, 4).map(f => f.nickname)
   const seats = Math.max(0, Math.min(ROOM_SIZE, 4) - 1 - crew.length)
 
   return (
     <div className="space-y-4">
+      {upcoming.map(n => (
+        <UpNext key={n.id} session={n} me={nickname} busy={loading} onOpen={() => onOpenNext(n)}
+          onSkip={() => leaveNextSession(n.id).then(() => setUpcoming(u => u.filter(x => x.id !== n.id))).catch(() => {})} />
+      ))}
       <Card hero className="rise">
         <div className="flex items-center gap-2 text-xs font-semibold text-neon-ink">
           <span className="relative flex w-2 h-2" aria-hidden="true">
@@ -870,6 +897,33 @@ function HomeScreen({ joinCode, setJoinCode, joinError, startOwn, loading, onCre
         </ShortcutTile>
       </div>
     </div>
+  )
+}
+
+// A booked session (038): when and who, open (or join) the room from an hour before
+function UpNext({ session, me, busy, onOpen, onSkip }) {
+  const now = useNow(30000)
+  const at = new Date(session.starts_at)
+  const mins = Math.round((at - now) / 60000)
+  const soon = mins <= 60
+  const others = (session.names ?? []).filter(n => n && n !== me)
+  const when = mins <= 0 ? 'Now' : mins <= 60 ? `In ${mins} min` : at.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })
+  return (
+    <Card tone="neon" className="rise">
+      <div className="flex items-center gap-3">
+        <AvatarStack names={others.slice(0, 3)} />
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-semibold text-neon-ink">Up next · {when}</div>
+          <div className="text-sm font-semibold text-ink break-words">With {others.map(n => `@${n}`).join(', ') || 'your friends'}</div>
+        </div>
+      </div>
+      <div className="grid gap-2 mt-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 8rem), 1fr))' }}>
+        <Button variant="ghost" onClick={onSkip}>Can't make it</Button>
+        <Button icon={session.room_code ? 'mdi:door-open' : 'mdi:account-group-outline'} disabled={!soon || busy} onClick={onOpen}>
+          {session.room_code ? 'Join the room' : soon ? 'Open the room' : 'Opens an hour before'}
+        </Button>
+      </div>
+    </Card>
   )
 }
 
@@ -1536,7 +1590,7 @@ function RestScreen({ feed, plan, free, exIdx, setIdx, restLeft, restSecs, allSe
 // Done: final standings, updating while others finish
 // ─────────────────────────────────────────────────────────────────────────────
 
-function DoneScreen({ allSets, plan, free, autoEnded = false, exercises: planned, participants, myId, startTime, onHome, onPerson, safetySheet }) {
+function DoneScreen({ allSets, plan, free, autoEnded = false, exercises: planned, participants, myId, startTime, onHome, onPerson, safetySheet, sessionId }) {
   const { fmtVolume } = useUnit()
   const now = useNow()
   const duration = startTime ? Math.round((Math.min(now, startTime + SESSION_LIMIT_MS) - startTime) / 60000) : 0
@@ -1601,11 +1655,106 @@ function DoneScreen({ allSets, plan, free, autoEnded = false, exercises: planned
         </Card>
       )}
 
+      <ShareRoom allSets={allSets} participants={participants} startTime={startTime} duration={duration} />
+      <BeatIt sets={allSets} myId={myId} />
+      {sessionId && participants.length > 1 && <NextWeek sessionId={sessionId} startTime={startTime} others={participants.filter(p => p.user_id !== myId)} />}
       <RoomMates participants={participants} myId={myId} onPerson={onPerson} />
       {safetySheet}
 
       <Button full onClick={onHome}>Back to home</Button>
     </div>
+  )
+}
+
+// The room as a story image: everyone's names, the totals, each person's best set
+function ShareRoom({ allSets, participants, startTime, duration }) {
+  const { fmt, fmtVolume } = useUnit()
+  const [content, setContent] = useState(null)
+  const real = allSets.filter(s => s.user_id)
+  if (!real.length) return null
+  function open() {
+    const names = participants.map(p => p.display_name)
+    const volume = real.reduce((a, s) => a + (Number(s.weight) || 0) * (Number(s.reps) || 0), 0)
+    const best = bestSetEach(real).map(b => `${b.name} · ${b.set.exercise} ${Number(b.set.weight) ? `${fmt(b.set.weight)} × ${b.set.reps}` : `${b.set.reps} reps`}`)
+    setContent(cardContent({ kind: 'room', names, date: localDateKey(new Date(startTime || Date.now())), minutes: duration, volume: volume ? fmtVolume(volume) : '', sets: real.length, best }))
+  }
+  return (
+    <>
+      <Button full variant="secondary" icon="mdi:share-variant-outline" onClick={open}>Share to your story</Button>
+      {content && <ShareSheet content={content} onClose={() => setContent(null)} />}
+    </>
+  )
+}
+
+// For each exercise you did with someone: your best set next to the best partner's
+function BeatIt({ sets, myId }) {
+  const { fmt } = useUnit()
+  const rows = beatItRows(sets.filter(s => !s.pending || s.user_id === myId), myId)
+  if (!rows.length) return null
+  const show = s => (Number(s.weight) ? `${fmt(s.weight)} × ${s.reps}` : `${s.reps} reps`)
+  return (
+    <Card className="rise">
+      <SectionTitle>Beat it next time</SectionTitle>
+      <div className="space-y-2">
+        {rows.map((r, i) => (
+          <div key={r.exercise} className="rise bg-raised rounded-xl px-3 py-2.5" style={{ '--i': i }}>
+            <div className="text-sm font-semibold text-ink break-words">{r.exercise}</div>
+            <div className="grid gap-2 mt-1.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 7rem), 1fr))' }}>
+              <div className={`rounded-lg px-2.5 py-1.5 ${r.ahead === 'me' ? 'bg-neon-tint' : 'bg-inset'}`}>
+                <div className="text-xs text-muted">You</div>
+                <div className="text-sm font-bold text-ink tabular-nums">{show(r.mine)}</div>
+              </div>
+              <div className={`rounded-lg px-2.5 py-1.5 ${r.ahead === 'them' ? 'bg-neon-tint' : 'bg-inset'}`}>
+                <div className="text-xs text-muted break-words">{r.theirs.name}</div>
+                <div className="text-sm font-bold text-ink tabular-nums">{show(r.theirs.set)}</div>
+              </div>
+            </div>
+            <div className={`text-xs mt-1.5 ${r.ahead === 'them' ? 'text-neon-ink font-semibold' : 'text-muted'}`}>
+              {r.ahead === 'them' ? `${r.theirs.name} is ahead. Your target for next time.` : r.ahead === 'me' ? "You're ahead. Keep it that way." : 'Level. Next time decides it.'}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+// Same time next week: one tap books it for everyone in the room, with a reminder an hour before
+function NextWeek({ sessionId, startTime, others }) {
+  const [state, setState] = useState('idle') // idle | busy | booked | hidden | error
+  const [error, setError] = useState('')
+  const when = new Date((startTime || Date.now()) + 7 * 864e5)
+  if (state === 'hidden' || when.getTime() < Date.now() + 3600e3) return null
+  const label = when.toLocaleString(undefined, { weekday: 'long', hour: 'numeric', minute: '2-digit' })
+  const names = others.map(p => `@${p.display_name}`)
+  const withWho = names.length <= 2 ? names.join(' and ') : `${names[0]} and ${names.length - 1} more`
+
+  async function book() {
+    setState('busy'); setError('')
+    try { await scheduleNextSession(sessionId, when); setState('booked') }
+    catch (e) { if (e.missing) setState('hidden'); else { setError(e.message); setState('error') } }
+  }
+
+  return (
+    <Card tone="neon" className="rise">
+      <div className="flex items-start gap-3">
+        <Icon icon={state === 'booked' ? 'mdi:calendar-check' : 'mdi:calendar-refresh-outline'} width={26} className="text-neon-ink flex-shrink-0 mt-0.5" aria-hidden="true" />
+        <div className="min-w-0">
+          <div className="font-bold text-lg text-ink leading-tight">{state === 'booked' ? 'Booked' : 'Same time next week?'}</div>
+          <p className="text-sm text-ink-2 mt-0.5 break-words">
+            {state === 'booked'
+              ? `${label} with ${withWho}. Everyone gets a reminder an hour before, and it shows on Rooms.`
+              : `${label} with ${withWho}, the same workout. Everyone gets a reminder an hour before.`}
+          </p>
+        </div>
+      </div>
+      {error && <p role="alert" className="text-sm text-danger mt-2">{error}</p>}
+      {state !== 'booked' && (
+        <Button full icon="mdi:calendar-plus" className="mt-3" disabled={state === 'busy'} onClick={book}>
+          {state === 'busy' ? 'Booking…' : 'Book it'}
+        </Button>
+      )}
+    </Card>
   )
 }
 
