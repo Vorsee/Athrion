@@ -166,5 +166,6 @@ Each one is its own commit set on `progress-update-v1`. Each runs the tests befo
   - The code is kept through sign-up on the phone and in the new account (for an email confirmed on another device), for 12 hours; the room opens right after onboarding.
   - The lobby has Invite friends (share sheet with the link) and Copy code.
   - The code field is six boxes and joins on the 6th character.
-  - Fast join without stats is still R5: until then someone from a link goes through the normal onboarding first.
 - **R3** (3-tap start): done. Train → Train together → pick today's workout, your last one or a free workout → Invite friends: the room is made with that workout and the share sheet opens. On iPhone the share sheet may need one more tap on Invite friends in the room, since the browser only opens it straight from a tap.
+- **R4** (friends from rooms): done. "Train together now?" right after becoming friends or asking from an invite (Open a room shares its link); the room's done screen lists who you trained with, each with Add friend (they still accept).
+- **R5** (fast join): done. From a room link a new account picks a nickname and its age (13+, under 16 still needs a parent), then the room opens. Body stats wait: a "Finish your profile" pop-up once a day outside workouts, and Food and Plan ask for them first. Google / Apple sign-in still needs the owner to switch the providers on in Supabase and set `VITE_OAUTH_PROVIDERS`.

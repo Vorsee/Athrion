@@ -294,6 +294,41 @@ describe('Upgrade sheet before Stripe', () => {
   })
 })
 
+describe('Fast join from a room link (R5)', () => {
+  function signIn(userProfile) {
+    sb.supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: 't' } } })
+    sb.set('user_profiles', { data: userProfile, error: null })
+    sb.set('fitness_profiles', { data: null, error: null })
+    sb.set('subscriptions', { data: { status: 'free' }, error: null })
+    sb.set('fitness_plans', { data: null, error: null })
+    sb.set('social_profiles', { data: { nickname: 'sam', on_leaderboard: true }, error: null })
+  }
+  afterEach(() => localStorage.clear())
+
+  it('asks a new account from a room link only for its age, and saves just that', async () => {
+    localStorage.setItem('athrion_room_link', JSON.stringify({ code: 'K7M4QX', at: Date.now() }))
+    signIn(null)
+    render(<P.App />)
+    expect(await screen.findByText('Quick setup, then into the room')).toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('button', { name: 'Join the room' }))
+    await waitFor(() => expect(sb.queriesFor('user_profiles').some(q => sb.op(q, 'upsert'))).toBe(true))
+    const row = sb.op(sb.queriesFor('user_profiles').find(q => sb.op(q, 'upsert')), 'upsert')[0]
+    expect(row).toMatchObject({ user_id: USER.id, age: 25 })
+    expect(row.sex).toBeUndefined()
+    expect(row.weight_lb).toBeUndefined()
+  })
+
+  it('lets an account with only an age in, reminds it to add its stats, and asks for them before Food', async () => {
+    signIn({ user_id: USER.id, age: 22, sex: null, height_cm: null, weight_lb: null })
+    render(<P.App />)
+    expect(await screen.findByRole('dialog', { name: 'Finish your profile' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Later' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Finish your profile' })).toBeNull())
+    await userEvent.click(screen.getByText('Food'))
+    expect(await screen.findByText('Update stats')).toBeInTheDocument()
+  })
+})
+
 describe('Train together is its own tab', () => {
   function signInPro() {
     sb.supabase.auth.getSession.mockResolvedValue({ data: { session: { user: USER, access_token: 't' } } })

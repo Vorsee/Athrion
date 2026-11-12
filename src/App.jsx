@@ -29,6 +29,8 @@ const Landing           = lazy(() => import('./pages/Landing.jsx'))
 const Guide             = lazy(() => import('./pages/Guide.jsx'))
 const ShopPreview       = lazy(() => import('./pages/ShopPreview.jsx'))
 const RoomPreview       = lazy(() => import('./pages/RoomPreview.jsx'))
+import FinishProfileSheet, { statsReminderDue, statsReminded } from './components/FinishProfileSheet.jsx'
+import { todayKey } from './lib/data.js'
 const NewPasswordSheet  = lazy(() => import('./components/NewPasswordSheet.jsx'))
 const Onboarding        = lazy(() => import('./pages/Onboarding.jsx'))
 const ConsentScreen     = lazy(() => import('./components/LegalConsent.jsx'))
@@ -65,6 +67,8 @@ const INVITE_PATH = /^\/add\/@?([A-Za-z0-9._-]{3,20})\/?$/
 const PAGES = { workout: Workout, calories: Calories, library: Library, group: Group, plan: Plan, coach: Coach, shop: Coaches, swim: Cardio, clients: Clients }
 // The coach shop is hidden from everyone but admins while it's being built
 const ADMIN_PAGES = ['shop', 'coach']
+// Pages that need body stats (calories, plans); a quick sign-up adds them before opening these
+const STATS_PAGES = ['calories', 'plan']
 
 export default function App() {
   // undefined = auth not yet resolved; null = logged out; object = logged in
@@ -130,6 +134,7 @@ export default function App() {
   const [unread, setUnread] = useUnreadCount(!!session)
   const [showInbox, setShowInbox] = useState(false)
   const [showWeighIn, setShowWeighIn] = useState(false) // a weigh-in reminder was tapped
+  const [, setReminderTick] = useState(0) // re-render once the finish-profile reminder is put off
   // Where a tapped notification points: /?open=friends | ranks | workout | weighin | progress | notifications | coach,
   // or shop (&product=<id>, back from buying a coach's workout). A shared shop link, or one
   // remembered through sign-up, opens that product or coach.
@@ -396,11 +401,19 @@ export default function App() {
   const isMinor = !!(minorConsent?.status === 'approved' && minorConsent.minor)
 
   const profileComplete = profile && profile.sex && profile.height_cm != null && profile.weight_lb != null && profile.age != null
-  if (!profileComplete || editingProfile) return (
+  // Fast join (R5): from a room link a new account gives only a nickname and age and goes
+  // straight to the room; body stats wait (a reminder asks later). Food, Plan and the plan
+  // questions need them, so those ask first.
+  const quickJoin = !profile && !!readRoomLink({ user_metadata: session.roomMeta })
+  const statsLater = !!profile && profile.age != null && !profileComplete
+  const needsStats = statsLater && (STATS_PAGES.includes(page) || planSetup || isPro)
+  if ((!profileComplete && !statsLater) || needsStats || editingProfile) return (
     <Suspense fallback={<Loading />}>
       <Onboarding
         initialValues={profile}
         name={session.name}
+        quick={quickJoin}
+        onCancel={needsStats && !editingProfile ? () => navigate('workout') : undefined}
         onComplete={() => { setEditingProfile(false); refreshProfile() }}
         onMinor={minorConsent?.status === 'approved' ? undefined : setAskParentAge}
       />
@@ -485,6 +498,12 @@ export default function App() {
         </Suspense>
       )}
 
+      {statsLater && !editingProfile && !groupIntent && page !== 'group' && !hasOpenRoom() && statsReminderDue(todayKey()) && (
+        <FinishProfileSheet
+          onLater={() => { statsReminded(todayKey()); setReminderTick(t => t + 1) }}
+          onFinish={() => { statsReminded(todayKey()); setEditingProfile(true) }} />
+      )}
+
       {showWeighIn && (
         <Suspense fallback={null}>
           <WeighInSheet onClose={() => setShowWeighIn(false)} onProfileChange={refreshProfile} />
@@ -541,4 +560,9 @@ function toProfile(session) {
     // account that never agreed is a new sign-up
     agreedBefore: !!session.user?.user_metadata?.legal_version || (session.user?.app_metadata?.provider ?? 'email') === 'email',
   }
+}
+
+// A workout under way on this phone: a Train together room, or one on Train
+function hasOpenRoom() {
+  try { return !!localStorage.getItem('athrion_group_session_state') || !!localStorage.getItem('athrion_workout') } catch { return false }
 }

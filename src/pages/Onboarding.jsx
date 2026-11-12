@@ -196,13 +196,13 @@ function SexStep({ sex, setSex, onNext, onBack, isEditing, n }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 2 — Age
 // ─────────────────────────────────────────────────────────────────────────────
-function AgeStep({ age, setAge, onNext, onBack, n }) {
+function AgeStep({ age, setAge, onNext, onBack, n, quick = false, saving = false }) {
   return (
     <div className="space-y-5">
       <div>
-        <BackLink onClick={onBack} className="mb-3" />
+        {onBack && <BackLink onClick={onBack} className="mb-3" />}
         <div className="font-bold text-3xl text-ink">Your age</div>
-        <div className="text-sm text-muted mt-1">{n} · Needed for calorie calculation</div>
+        <div className="text-sm text-muted mt-1">{n} · {quick ? 'ATHRION is for 13 and up' : 'Needed for calorie calculation'}</div>
       </div>
 
       <div className="bg-raised border border-line rounded-2xl overflow-hidden">
@@ -213,7 +213,10 @@ function AgeStep({ age, setAge, onNext, onBack, n }) {
         <div className="font-bold text-2xl text-neon-ink">{age} years old</div>
       </div>
 
-      <Button full onClick={onNext} iconRight="mdi:arrow-right">Continue</Button>
+      <Button full onClick={onNext} disabled={saving} iconRight={quick ? 'mdi:account-group-outline' : 'mdi:arrow-right'}>
+        {quick ? (saving ? 'Opening the room…' : 'Join the room') : 'Continue'}
+      </Button>
+      {quick && <p className="text-xs text-muted text-center">Height, weight and the rest can wait until after your workout.</p>}
     </div>
   )
 }
@@ -301,7 +304,9 @@ function initHeight(iv) {
 
 // name: the account's name, for a nickname suggestion. A new account picks a nickname first.
 // onMinor(age): an age under 16 without a parent's approval yet; the app asks for it before going on
-export default function Onboarding({ onComplete, initialValues = null, name = '', onMinor }) {
+// quick: arrived from a room link (R5): nickname and age only, then into the room; the rest later
+// onCancel: back out (only when the stats were asked for on the way to Food or Plan)
+export default function Onboarding({ onComplete, initialValues = null, name = '', onMinor, quick = false, onCancel }) {
   const iv = initialValues
   const ih = initHeight(iv)
 
@@ -349,7 +354,20 @@ export default function Onboarding({ onComplete, initialValues = null, name = ''
     }
   }
 
-  const back = askNick ? goBack : undefined
+  // Quick: only the age is saved; the stats are asked for later (App's reminder, or Food and Plan)
+  async function handleQuick() {
+    if (age < 16 && onMinor) return onMinor(age)
+    setSaving(true)
+    try {
+      await saveUserProfile({ age })
+      onComplete()
+    } catch (e) {
+      console.error(e)
+      setSaving(false)
+    }
+  }
+
+  const back = askNick ? goBack : onCancel
   const stats = [
     <SexStep sex={sex} setSex={setSex} onNext={goNext} onBack={back} isEditing={!!initialValues} />,
     <AgeStep age={age} setAge={setAge} onNext={() => (age < 16 && onMinor ? onMinor(age) : goNext())} onBack={goBack} />,
@@ -360,7 +378,9 @@ export default function Onboarding({ onComplete, initialValues = null, name = ''
       lb={lb} setLb={setLb} kg={kg} setKg={setKg}
       onComplete={handleComplete} saving={saving} onBack={goBack} />,
   ]
-  const all = askNick ? [<NicknameStep name={name} onDone={goNext} />, ...stats] : stats
+  const quickSteps = [<AgeStep age={age} setAge={setAge} onNext={handleQuick} onBack={back} quick saving={saving} />]
+  const shown = quick ? quickSteps : stats
+  const all = askNick ? [<NicknameStep name={name} onDone={goNext} />, ...shown] : shown
   const steps = all.map((el, i) => cloneElement(el, { n: `Step ${i + 1} of ${all.length}` }))
 
   return (
@@ -371,7 +391,7 @@ export default function Onboarding({ onComplete, initialValues = null, name = ''
         <div className="text-center mb-8 slide-up">
           <Brand size="text-3xl" />
           <div className="text-xs text-muted mt-1">
-            {initialValues ? 'Update stats' : 'Profile setup'}
+            {quick ? 'Quick setup, then into the room' : initialValues ? 'Update stats' : 'Profile setup'}
           </div>
         </div>
 

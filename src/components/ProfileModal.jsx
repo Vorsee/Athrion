@@ -413,10 +413,11 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
                 <div className="text-lg leading-[1.3] font-semibold text-ink mb-2">Body stats</div>
                 <div className="grid gap-2 mb-5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 3.5rem), 1fr))' }}>
                   {[
-                    ['Height', fmtHeight(profile.height_cm, profile.weight_unit)],
-                    ['Weight', fmtWeight(profile.weight_lb, profile.weight_unit === 'kg' ? 'kg' : 'lb')],
+                    // A quick sign-up from a room link (R5) has only the age until the stats are added
+                    ['Height', profile.height_cm != null ? fmtHeight(profile.height_cm, profile.weight_unit) : '—'],
+                    ['Weight', profile.weight_lb != null ? fmtWeight(profile.weight_lb, profile.weight_unit === 'kg' ? 'kg' : 'lb') : '—'],
                     ['Age',    profile.age ? `${profile.age} yr` : '—'],
-                    ['Sex',    profile.sex === 'other' ? 'N/A'
+                    ['Sex',    !profile.sex ? '—' : profile.sex === 'other' ? 'N/A'
                       : profile.sex.charAt(0).toUpperCase() + profile.sex.slice(1)],
                   ].map(([label, val]) => (
                     <div key={label} className="bg-inset rounded-xl px-1.5 py-3 text-center">
