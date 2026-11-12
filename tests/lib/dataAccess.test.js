@@ -258,7 +258,7 @@ describe('groupApi.js', () => {
   it('subscribes to realtime changes filtered to the session and unsubscribes', () => {
     const unsub = group.subscribeToGroupSession('s1', { onSet: vi.fn(), onParticipant: vi.fn(), onSessionUpdate: vi.fn() })
     const filters = sb.channel.on.mock.calls.map(c => c[1].filter)
-    expect(filters).toEqual(['session_id=eq.s1', 'session_id=eq.s1', 'id=eq.s1'])
+    expect(filters).toEqual(['session_id=eq.s1', 'session_id=eq.s1', 'id=eq.s1', 'session_id=eq.s1']) // sets, people, the room, reactions (037)
     unsub()
     expect(sb.supabase.removeChannel).toHaveBeenCalled()
   })
