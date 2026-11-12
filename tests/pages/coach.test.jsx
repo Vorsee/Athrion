@@ -92,6 +92,31 @@ describe('Train together: sets one by one', () => {
     expect(await screen.findByText('Next exercise')).toBeInTheDocument()
   })
 
+  it('keeps a set logged without signal and sends it once back online', async () => {
+    const plan = [{ name: 'Front Squat', sets: [{ reps: 5, rest: 60 }, { reps: 5, rest: 60 }] }]
+    sb.set('group_sessions', { data: { id: 's1', code: 'ABC234', host_id: USER.id, status: 'active', plan, exercises: ['Front Squat'], total_sets: 2, rest_secs: 60 }, error: null })
+    localStorage.setItem('athrion_group_session_state', JSON.stringify({ sessionId: 's1', screen: 'training', isHost: true, exIdx: 0, setIdx: 0, startTime: Date.now() }))
+    let signal = false
+    sb.set('group_sets', q => {
+      const row = sb.op(q, 'insert')?.[0]
+      if (!row) return { data: [], error: null }
+      return signal ? { data: { ...row, id: 'r1' }, error: null } : { data: null, error: { message: 'TypeError: Failed to fetch', code: '' } }
+    })
+    render(<Group session={{ name: 'Sam' }} intent={{ tab: 'rooms' }} />)
+    await userEvent.type(await screen.findByLabelText('Reps'), '5')
+    await userEvent.click(screen.getByRole('button', { name: 'Log set 1' }))
+    expect(await screen.findByText(/1 set waiting for signal/)).toBeInTheDocument()
+    const queued = JSON.parse(localStorage.getItem('athrion_room_sets'))
+    expect(queued).toMatchObject([{ sessionId: 's1', setNum: 1, reps: 5 }])
+
+    signal = true
+    window.dispatchEvent(new Event('online'))
+    await vi.waitFor(() => expect(screen.queryByText(/waiting for signal/)).toBeNull())
+    expect(localStorage.getItem('athrion_room_sets')).toBeNull()
+    const sent = sb.queriesFor('group_sets').map(q => sb.op(q, 'insert')?.[0]).filter(Boolean)
+    expect(new Set(sent.map(r => r.client_id))).toEqual(new Set([queued[0].clientId])) // one set, however often it was tried
+  })
+
   it('ends a room workout by itself 4 hours after it started', async () => {
     const plan = [{ name: 'Front Squat', sets: [{ reps: 5, rest: 60 }] }]
     sb.set('group_sessions', { data: { id: 's1', code: 'ABC234', host_id: USER.id, status: 'active', plan, exercises: ['Front Squat'], total_sets: 1, rest_secs: 60 }, error: null })

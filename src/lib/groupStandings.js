@@ -3,8 +3,10 @@
 import { totalSets } from './groupPlan.js'
 
 // Sets from realtime and polling arrive in any order and twice: keep one per id, oldest first
+// rows from the server replace a pending set (roomQueue.js) with the same client_id
 export function mergeSets(prev, rows) {
-  const byId = new Map(prev.map(s => [s.id, s]))
+  const arrived = new Set(rows.map(r => r?.client_id).filter(Boolean))
+  const byId = new Map(prev.filter(s => !(s.pending && arrived.has(s.client_id))).map(s => [s.id, s]))
   for (const r of rows) if (r?.id) byId.set(r.id, r)
   return [...byId.values()].sort((a, b) => (a.logged_at < b.logged_at ? -1 : a.logged_at > b.logged_at ? 1 : 0))
 }

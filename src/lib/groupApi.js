@@ -127,23 +127,26 @@ export async function fetchParticipants(sessionId) {
   return data || []
 }
 
-export async function logGroupSet({ sessionId, displayName, exercise, setNum, weight, reps }) {
+// clientId / loggedAt: the set's id and time from the phone (roomQueue.js), so a set queued
+// without signal keeps its place and is stored once however often it's sent (035)
+export async function logGroupSet({ sessionId, displayName, exercise, setNum, weight, reps, clientId, loggedAt }) {
   const { data: { user } } = await supabase.auth.getUser()
+  const row = {
+    session_id: sessionId,
+    user_id: user.id,
+    display_name: displayName,
+    exercise,
+    set_num: setNum,
+    weight,
+    reps,
+  }
+  const insert = values => supabase.from('group_sets').insert(values).select().single()
 
-  const { data, error } = await supabase
-    .from('group_sets')
-    .insert({
-      session_id: sessionId,
-      user_id: user.id,
-      display_name: displayName,
-      exercise,
-      set_num: setNum,
-      weight,
-      reps,
-    })
-    .select()
-    .single()
-
+  let { data, error } = await insert(clientId ? { ...row, client_id: clientId, logged_at: loggedAt } : row)
+  if (error?.code === '23505') return null // already stored: the first send got through
+  if (error && clientId && /client_id/.test(error.message || '')) {
+    ({ data, error } = await insert(row)) // before 035
+  }
   if (error) throw error
   return data // shown straight away, before realtime or polling brings it back
 }

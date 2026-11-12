@@ -22,6 +22,7 @@ import {
   ROOM_SIZE,
 } from '../lib/groupApi.js'
 import { standings, mergeSets } from '../lib/groupStandings.js'
+import { newClientId, queueSet, loadQueued, flushQueued, pendingRow } from '../lib/roomQueue.js'
 import { planFrom, makeSets, totalSets as countSets, setsDone, restAfter, restLabel, setsSummary, REST_OPTIONS, MAX_SETS, freePlan, freeRoom, FREE_SET_OPTIONS, FREE_REST_OPTIONS } from '../lib/groupPlan.js'
 import { saveWorkoutEntry } from '../lib/api.js'
 import { useUnit } from '../lib/units.js'
@@ -85,6 +86,30 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
   // Read at save time, so a set that arrived after a timer started still counts
   const allSetsRef = useRef(allSets)
   allSetsRef.current = allSets
+  const flushing = useRef(null)
+
+  // Sends every queued room set (any room: one finished offline is sent too). One run at a time;
+  // a call while one runs waits for it and then sends what's left.
+  function sendQueued() {
+    const run = async () => {
+      for (const id of [...new Set(loadQueued().map(q => q.sessionId))]) {
+        const rows = await flushQueued(id, async set => {
+          const row = await logGroupSet(set)
+          return row ? { ...row, client_id: row.client_id ?? set.clientId } : null // before 035 the row has none
+        })
+        if (rows.length) setAllSets(prev => (prev.some(s => s.session_id === id) ? mergeSets(prev, rows) : prev))
+      }
+    }
+    const next = (flushing.current || Promise.resolve()).then(run).catch(() => {})
+    flushing.current = next.finally(() => { if (flushing.current === next) flushing.current = null })
+    return next
+  }
+  useEffect(() => {
+    sendQueued()
+    const online = () => sendQueued()
+    window.addEventListener('online', online)
+    return () => window.removeEventListener('online', online)
+  }, [])
 
   useEffect(() => { fetchMySocial().then(setMe).catch(() => setMe(null)) }, [])
   useEffect(() => { currentUserId().then(setMyId).catch(() => {}) }, [])
@@ -163,7 +188,7 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
     if (!groupSession?.id) return
 
     fetchParticipants(groupSession.id).then(setParticipants).catch(() => {})
-    fetchGroupSets(groupSession.id).then(setAllSets).catch(() => {})
+    fetchGroupSets(groupSession.id).then(sets => setAllSets(prev => mergeSets(prev, sets))).catch(() => {})
 
     const unsub = subscribeToGroupSession(groupSession.id, {
       onSet: (row) => setAllSets(prev => mergeSets(prev, [row])),
@@ -188,12 +213,20 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
     return unsub
   }, [groupSession?.id])
 
+  // My sets still waiting to be sent (after a reload, too)
+  useEffect(() => {
+    if (!groupSession?.id || !myId) return
+    const queued = loadQueued(groupSession.id).map(q => pendingRow(q, myId))
+    if (queued.length) setAllSets(prev => mergeSets(prev, queued.filter(q => !prev.some(s => s.client_id === q.client_id))))
+  }, [groupSession?.id, myId])
+
   // Polling for the whole session: realtime makes it instant when it's on, this keeps
   // everyone's sets and positions current when it isn't
   useEffect(() => {
     if (!groupSession?.id || screen === 'home') return
 
     const poll = setInterval(async () => {
+      if (loadQueued(groupSession.id).length) sendQueued()
       try {
         const [parts, sets, sess] = await Promise.all([
           fetchParticipants(groupSession.id),
@@ -335,20 +368,25 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
     } catch (err) { console.error(err) }
   }
 
-  async function handleLogSet() {
+  // The set shows and the rest starts at once; it's sent in the background and waits on the
+  // phone while there's no signal (roomQueue.js)
+  function handleLogSet() {
     const w = toLb(parseFloat(weight || '0')) // typed in the person's unit, stored in lb; 0 for bodyweight
     const r = parseInt(reps)
-    if (!(w >= 0) || !(r >= 1)) return
-    try {
-      const row = await logGroupSet({ sessionId: groupSession.id, displayName, exercise: plan[exIdx]?.name, setNum: setIdx + 1, weight: w, reps: r })
-      if (row) setAllSets(prev => mergeSets(prev, [row]))
-      // A free room always rests, the last set's rest too: it's the break before the next pick
-      const rest = free ? free.rest : restAfter(plan, exIdx, setIdx)
-      if (!rest) { advanceAfterRest(); return } // no rest set for this one, or the workout is done
-      setRestTotal(rest); setRestLeft(rest)
-      localStorage.setItem('athrion_group_rest_end', String(Date.now() + rest * 1000))
-      goScreen('rest')
-    } catch (err) { console.error(err) }
+    if (!(w >= 0) || !(r >= 1) || !groupSession?.id) return
+    const set = {
+      sessionId: groupSession.id, displayName, exercise: plan[exIdx]?.name, setNum: setIdx + 1,
+      weight: w, reps: r, clientId: newClientId(), loggedAt: new Date().toISOString(),
+    }
+    queueSet(set)
+    setAllSets(prev => mergeSets(prev, [pendingRow(set, myId)]))
+    sendQueued()
+    // A free room always rests, the last set's rest too: it's the break before the next pick
+    const rest = free ? free.rest : restAfter(plan, exIdx, setIdx)
+    if (!rest) { advanceAfterRest(); return } // no rest set for this one, or the workout is done
+    setRestTotal(rest); setRestLeft(rest)
+    localStorage.setItem('athrion_group_rest_end', String(Date.now() + rest * 1000))
+    goScreen('rest')
   }
 
   // auto: the 4-hour limit ended it, so it's timed at 4 hours and dated the day it started
@@ -378,6 +416,7 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
     setAutoEnded(auto)
     localStorage.removeItem('athrion_group_rest_end')
     goScreen('done') // first, so the 4-hour timer can't fire twice
+    await sendQueued() // quick: offline, it fails at once and the sets stay queued
     await saveGroupWorkoutToHistory(auto)
     if (isHost && groupSession?.id) {
       try { await leaveGroupSession(groupSession.id, { keepSeat: true }) }
@@ -415,6 +454,8 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
     clearInvite()
     onIntentDone?.()
   }
+
+  const waiting = allSets.filter(s => s.pending && s.session_id === groupSession?.id).length
 
   if (screen === 'home') return (
     <div className="space-y-4 py-4 slide-up">
@@ -471,6 +512,8 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
   )
 
   if (screen === 'picker') return (
+    <>
+    <WaitingNote count={waiting} />
     <PickerScreen
       picked={plan}
       free={free}
@@ -480,9 +523,12 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
       onPick={pickExercise}
       onEnd={handleEnd}
     />
+    </>
   )
 
   if (screen === 'training') return (
+    <>
+    <WaitingNote count={waiting} />
     <TrainingScreen
       plan={plan}
       free={free}
@@ -502,9 +548,12 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
       confirmEnd={confirmEnd}
       setConfirmEnd={setConfirmEnd}
     />
+    </>
   )
 
   if (screen === 'rest') return (
+    <>
+    <WaitingNote count={waiting} />
     <RestScreen
       plan={plan}
       free={free}
@@ -518,9 +567,12 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
       onSkip={advanceAfterRest}
       onEnd={() => handleEnd()}
     />
+    </>
   )
 
   if (screen === 'done') return (
+    <>
+    <WaitingNote count={waiting} />
     <DoneScreen
       allSets={allSets}
       plan={plan}
@@ -532,6 +584,18 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
       startTime={startTime}
       onHome={handleHome}
     />
+    </>
+  )
+}
+
+// My sets logged without signal, sent by themselves once it's back
+function WaitingNote({ count }) {
+  if (!count) return null
+  return (
+    <div role="status" className="mt-3 flex items-center gap-2 rounded-xl bg-raised px-3 py-2 text-sm text-ink-2">
+      <Icon icon="mdi:cloud-upload-outline" width={18} className="text-muted flex-shrink-0" />
+      <span className="break-words">{count === 1 ? '1 set' : `${count} sets`} waiting for signal. {count === 1 ? 'It sends by itself' : 'They send by themselves'} once you're back online.</span>
+    </div>
   )
 }
 

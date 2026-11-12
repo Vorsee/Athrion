@@ -156,3 +156,9 @@ Each one is its own commit set on `progress-update-v1`. Each runs the tests befo
   - Leaving the lobby gives up your seat. A host who leaves or finishes hands the room to the earliest joiner, or it ends if nobody's left.
   - Code clashes retry.
   - Clear messages for ended, full and removed rooms, and for minors.
+- **R1** (sets logged without signal): app side done; `supabase/035_room_sets_offline.sql` written, **not yet run**.
+  - A set shows in the room and the rest starts the moment it's logged; it's sent in the background.
+  - Without signal it waits on the phone (survives a reload) with a "waiting for signal" note, and is sent in order once back online.
+  - Each set has its own id from the phone, so a set sent twice is stored once (after 035).
+  - A queued set keeps the time it was logged, never later than now or before the room was made.
+  - Before 035 runs, sets are sent without the id (no duplicate protection), as before.
