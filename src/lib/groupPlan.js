@@ -49,3 +49,30 @@ export function setsSummary(sets) {
     : ` · ${reps.map(r => r ?? 'any').join(', ')} reps`
   return `${sets.length} ${sets.length === 1 ? 'set' : 'sets'}${repsText}`
 }
+
+// Train's Train together (R3): today's workout or the last one, as a room plan.
+// A plan exercise { name, sets, reps: '6-8', restSeconds } → the reps target is the range's
+// first number (null when it isn't a count, like "30 s" or "20-30 min")
+export function roomPlanFromExercises(exercises = []) {
+  return exercises.filter(e => e?.name).map(e => {
+    const n = Math.min(MAX_SETS, Math.max(1, Number(e.sets) || 3))
+    const reps = /^\s*\d+(\s*-\s*\d+)?\s*(reps?)?\s*$/i.test(String(e.reps ?? '')) ? parseInt(e.reps, 10) : null
+    const rest = REST_OPTIONS.includes(e.restSeconds) ? e.restSeconds : 60
+    return { name: e.name, sets: makeSets(n, rest, reps) }
+  })
+}
+
+// A logged workout's sets [{ ex, set, reps, warmup }] → the same exercises, sets and reps
+export function roomPlanFromLog(entry) {
+  const order = []
+  const byName = new Map()
+  for (const s of entry?.sets ?? []) {
+    if (!s?.ex || s.warmup) continue
+    if (!byName.has(s.ex)) { byName.set(s.ex, []); order.push(s.ex) }
+    byName.get(s.ex).push(s)
+  }
+  return order.map(name => ({
+    name,
+    sets: byName.get(name).slice(0, MAX_SETS).map(s => ({ reps: Number(s.reps) > 0 ? Number(s.reps) : null, rest: 60 })),
+  }))
+}

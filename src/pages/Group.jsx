@@ -23,6 +23,8 @@ import {
 } from '../lib/groupApi.js'
 import { standings, mergeSets } from '../lib/groupStandings.js'
 import { newClientId, queueSet, loadQueued, flushQueued, pendingRow } from '../lib/roomQueue.js'
+import { roomUrl, roomShareText } from '../lib/roomLink.js'
+import { shareLink } from '../lib/shopLink.js'
 import { planFrom, makeSets, totalSets as countSets, setsDone, restAfter, restLabel, setsSummary, REST_OPTIONS, MAX_SETS, freePlan, freeRoom, FREE_SET_OPTIONS, FREE_REST_OPTIONS } from '../lib/groupPlan.js'
 import { saveWorkoutEntry } from '../lib/api.js'
 import { useUnit } from '../lib/units.js'
@@ -122,8 +124,19 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
   useEffect(() => {
     if (intent?.tab) setTab(intent.tab)
     if (intent?.invite) setInvite(intent.invite)
-    else if (intent) onIntentDone?.() // a tab-only intent is used up once applied
+    else if (intent && !intent.join && !intent.host) onIntentDone?.() // a tab-only intent is used up once applied
   }, [intent])
+
+  // From a room link (join: code) or Train's Train together (host: { plan, free }): once the
+  // nickname is known (it's the name in the room) and no room is open
+  const roomIntent = useRef(null)
+  useEffect(() => {
+    if (!intent || (!intent.join && !intent.host) || roomIntent.current === intent || me === undefined || screenRef.current !== 'home') return
+    roomIntent.current = intent
+    onIntentDone?.()
+    if (intent.join) { setJoinCode(intent.join); handleJoin(intent.join) }
+    else handleCreate(intent.host)
+  }, [intent, me])
 
   const displayName = roomName || me?.nickname || session?.name || 'You'
   // Ref so callbacks always see the current screen without stale closure
@@ -330,15 +343,20 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
     finally { hostEditing.current-- }
   }
 
-  async function handleCreate() {
+  // host: Train's Train together, the workout already picked ({ plan } or { free }), and the
+  // share sheet opens as soon as the room exists
+  async function handleCreate(host = null) {
     setLoading(true)
     try {
       const sess = await createGroupSession({ displayName })
       setRoomName(displayName)
       setGroupSession(sess)
       setIsHost(true)
-      setPlan([]); setFree(null)
+      const picked = host?.free ? null : host?.plan?.length ? host.plan : null
+      setPlan(picked ?? []); setFree(host?.free ? { sets: 3, rest: 60, ...host.free } : null)
       goScreen('lobby')
+      if (host?.free || picked) saveSessionPlan(sess.id, host.free ? freePlan({ sets: 3, rest: 60, ...host.free }) : picked).catch(() => {})
+      if (host) shareLink(roomUrl(sess.code), roomShareText(sess.code))
     } catch (err) {
       setJoinError(err.message)
     } finally {
@@ -483,7 +501,7 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
           joinError={joinError}
           startOwn={joinStartOwn}
           loading={loading}
-          onCreate={handleCreate}
+          onCreate={() => handleCreate()}
           onJoin={handleJoin}
           nickname={me?.nickname}
           onTab={pickTab}
@@ -793,9 +811,15 @@ function LobbyScreen({ groupSession, participants, isHost, plan, free, onChange,
   }
 
   function copyCode() {
-    navigator.clipboard.writeText(groupSession?.code || '').then(() => {
-      setCopied(true); setTimeout(() => setCopied(false), 2000)
-    })
+    navigator.clipboard?.writeText(groupSession?.code || '').then(() => {
+      setCopied('code'); setTimeout(() => setCopied(false), 2000)
+    }).catch(() => {})
+  }
+  // The phone's share sheet with the room link (athrion.app/r/CODE), else the link is copied
+  async function shareRoom() {
+    const code = groupSession?.code
+    if (!code) return
+    if (await shareLink(roomUrl(code), roomShareText(code))) { setCopied('link'); setTimeout(() => setCopied(false), 2000) }
   }
 
   const edit = (i, sets) => onChange(plan.map((e, j) => (j === i ? { ...e, sets } : e)))
@@ -829,10 +853,14 @@ function LobbyScreen({ groupSession, participants, isHost, plan, free, onChange,
               style={{ animationDelay: `${i * 60}ms` }}>{ch}</span>
           ))}
         </div>
-        <button onClick={copyCode}
-          className="press text-xs font-semibold text-ink-2 hover:text-ink border border-line-strong px-4 min-h-[36px] rounded-md transition-all">
-          {copied ? <span className="inline-flex items-center gap-1"><Icon icon="mdi:check" width={14} />Copied</span> : <span className="inline-flex items-center gap-1"><Icon icon="mdi:content-copy" width={14} />Copy code</span>}
-        </button>
+        <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr))' }}>
+          <Button icon={copied === 'link' ? 'mdi:check' : 'mdi:share-variant-outline'} onClick={shareRoom}>
+            {copied === 'link' ? 'Link copied' : 'Invite friends'}
+          </Button>
+          <Button variant="secondary" icon={copied === 'code' ? 'mdi:check' : 'mdi:content-copy'} onClick={copyCode}>
+            {copied === 'code' ? 'Copied' : 'Copy code'}
+          </Button>
+        </div>
       </Card>
 
       {/* Participants */}

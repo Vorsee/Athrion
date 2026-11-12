@@ -4,6 +4,7 @@ import { Icon } from '@iconify/react'
 import { Segmented, BackLink } from '../components/ui/index.js'
 import { ConsentChecks } from '../components/LegalConsent.jsx'
 import { consentMetadata } from '../lib/legal.js'
+import { roomLinkMetadata } from '../lib/roomLink.js'
 import { readInvite } from '../lib/socialApi.js'
 import { readSwimStart } from '../lib/swim.js'
 import Brand from '../components/Brand.jsx'
@@ -44,7 +45,7 @@ export default function Auth({ initialMode = 'login', onBack }) {
     const { error } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
-      options: { data: { full_name: form.name, ...consentMetadata() } },
+      options: { data: { full_name: form.name, ...consentMetadata(), ...roomLinkMetadata() } },
     })
     if (error) setError(error.message)
     else setScreen('check-email')

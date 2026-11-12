@@ -22,6 +22,7 @@ import TrainingCalendar from '../components/TrainingCalendar.jsx'
 import { rememberCardioSport } from '../lib/cardio.js'
 import LogPastWorkout from '../components/LogPastWorkout.jsx'
 import InviteFriendsCard from '../components/InviteFriendsCard.jsx'
+import TrainTogetherSheet from '../components/TrainTogetherSheet.jsx'
 import TrainerCard from '../components/TrainerCard.jsx'
 import { markAssignmentStarted, takeStartedAssignment, finishAssignment } from '../lib/clientsApi.js'
 import { CoachNote } from '../components/CoachVideo.jsx'
@@ -47,7 +48,7 @@ function matchPlanExercises(planExercises) {
 
 const SESSION_SCREENS = ['training', 'rest', 'exercise-picker']
 
-export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgrade, onOpenPage, onOpenGuide, resumeTick = 0 }) {
+export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgrade, onOpenPage, onOpenGuide, resumeTick = 0, onTrainTogether }) {
   const { unit, toLb } = useUnit()
   const [screen, setScreen]                   = useState('home')
   const [activeExercises, setActiveExercises] = useState([])
@@ -423,6 +424,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
 
   if (screen === 'home') return (
     <HomeScreen
+      onTrainTogether={onTrainTogether}
       ready={homeReady}
       history={history}
       customWorkouts={customWorkouts}
@@ -688,7 +690,7 @@ export function starterSession(done, goal, place) {
   return { title: s.title, starter: true, workout: { exercises: s.exercises.map(e => ({ name: e.name, sets: e.sets, reps: e.reps, restSeconds: restSecs(e.rest) })) } }
 }
 
-function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade, onOpenPage, onOpenGuide, pendingCount = 0, onRetryPending, onLogPast, starterGoal, starterPlace, onStartAssignment }) {
+function HomeScreen({ onTrainTogether, ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade, onOpenPage, onOpenGuide, pendingCount = 0, onRetryPending, onLogPast, starterGoal, starterPlace, onStartAssignment }) {
   const { fmtVolume } = useUnit()
   const [selectedSession, setSelectedSession] = useState(null)
   const [loggingDay, setLoggingDay] = useState(null) // 'YYYY-MM-DD' a workout is being added to
@@ -721,6 +723,13 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
   const planName = shownWorkout?.title ?? fallbackName
 
   const planSets = planExercises[0]?.sets ?? 3
+
+  // Train together (R3): today's workout as Train shows it, or the last one logged
+  const [together, setTogether] = useState(false)
+  const togetherToday = shownWorkout && !['swim', 'run'].includes(shownWorkout.sport)
+    ? { name: planName, exercises: planExercises }
+    : !isRestDay && fallbackExs.length ? { name: fallbackName, exercises: fallbackExs.map(e => ({ name: e.name, sets: 3, reps: null })) } : null
+  const lastLogged = history.reduce((a, h) => (!a || `${h.date}${h.created_at ?? ''}` > `${a.date}${a.created_at ?? ''}` ? h : a), null)
 
   function handlePlanStart() {
     const mapped = matchPlanExercises(planExercises)
@@ -848,8 +857,23 @@ function HomeScreen({ ready, history, customWorkouts, planWorkout, planSchedule,
             </Button>
             )
           )}
-          <Button variant="ghost" full icon="mdi:plus" onClick={onFreeStart} className="mt-2">Free workout</Button>
+          {onTrainTogether ? (
+            <div className="grid gap-2 mt-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 9rem), 1fr))' }}>
+              <Button full variant="secondary" icon="mdi:account-group-outline" onClick={() => setTogether(true)}>Train together</Button>
+              <Button full variant="ghost" icon="mdi:plus" onClick={onFreeStart}>Free workout</Button>
+            </div>
+          ) : (
+            <Button variant="ghost" full icon="mdi:plus" onClick={onFreeStart} className="mt-2">Free workout</Button>
+          )}
       </Card>
+      )}
+
+      {together && (
+        <TrainTogetherSheet
+          today={togetherToday}
+          last={lastLogged}
+          onClose={() => setTogether(false)}
+          onInvite={host => { setTogether(false); onTrainTogether(host) }} />
       )}
 
       {ready && <TrainerCard onStart={onStartAssignment} />}

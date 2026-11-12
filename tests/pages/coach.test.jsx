@@ -117,6 +117,25 @@ describe('Train together: sets one by one', () => {
     expect(new Set(sent.map(r => r.client_id))).toEqual(new Set([queued[0].clientId])) // one set, however often it was tried
   })
 
+  it("opens a room from Train's Train together with the workout picked, and the share sheet", async () => {
+    const share = vi.fn(async () => {})
+    vi.stubGlobal('navigator', { ...navigator, share })
+    const plan = [{ name: 'Front Squat', sets: [{ reps: 5, rest: 120 }] }]
+    render(<Group session={{ name: 'Sam' }} intent={{ tab: 'rooms', host: { plan } }} onIntentDone={() => {}} />)
+    expect(await screen.findByText('Room code')).toBeInTheDocument()
+    await vi.waitFor(() => expect(updates('group_sessions').at(-1)?.plan).toEqual(plan))
+    expect(share).toHaveBeenCalledWith(expect.objectContaining({ url: expect.stringMatching(/\/r\/ABC234$/) }))
+  })
+
+  it('joins the room from a room link', async () => {
+    sb.supabase.rpc.mockImplementation(async fn => (fn === 'join_group_session'
+      ? { data: { id: 's1', code: 'K7M4QX', host_id: 'other', status: 'lobby', plan: [] }, error: null }
+      : { data: [], error: null }))
+    render(<Group session={{ name: 'Sam' }} intent={{ tab: 'rooms', join: 'K7M4QX' }} onIntentDone={() => {}} />)
+    expect(await screen.findByText('Room code')).toBeInTheDocument()
+    expect(sb.supabase.rpc).toHaveBeenCalledWith('join_group_session', expect.objectContaining({ p_code: 'K7M4QX' }))
+  })
+
   it('ends a room workout by itself 4 hours after it started', async () => {
     const plan = [{ name: 'Front Squat', sets: [{ reps: 5, rest: 60 }] }]
     sb.set('group_sessions', { data: { id: 's1', code: 'ABC234', host_id: USER.id, status: 'active', plan, exercises: ['Front Squat'], total_sets: 1, rest_secs: 60 }, error: null })

@@ -16,6 +16,7 @@ import { parseShopPath, readShopLink, clearShopLink, shopTarget } from './lib/sh
 import { rememberCardioSport } from './lib/cardio.js'
 import { PARENT_PATH, fetchParentalConsent } from './lib/parentConsent.js'
 import { TRAINER_PATH, rememberTrainerInvite, readTrainerInvite, clearTrainerInvite } from './lib/clientsApi.js'
+import { parseRoomPath, rememberRoomLink, readRoomLink, clearRoomLink } from './lib/roomLink.js'
 import { SWIM_INVITE_PATH, rememberSwimInvite, readSwimInvite, rememberSwimStart, readSwimStart, clearSwimStart } from './lib/swim.js'
 import { fetchIsAdmin } from './lib/coachApi.js'
 import { useUnreadCount } from './lib/notifications.js'
@@ -27,6 +28,7 @@ const Auth              = lazy(() => import('./pages/Auth.jsx'))
 const Landing           = lazy(() => import('./pages/Landing.jsx'))
 const Guide             = lazy(() => import('./pages/Guide.jsx'))
 const ShopPreview       = lazy(() => import('./pages/ShopPreview.jsx'))
+const RoomPreview       = lazy(() => import('./pages/RoomPreview.jsx'))
 const NewPasswordSheet  = lazy(() => import('./components/NewPasswordSheet.jsx'))
 const Onboarding        = lazy(() => import('./pages/Onboarding.jsx'))
 const ConsentScreen     = lazy(() => import('./components/LegalConsent.jsx'))
@@ -70,7 +72,7 @@ export default function App() {
   // Signed-out: landing page for new visitors, straight to sign in for people who've been here
   const [authMode, setAuthMode] = useState(() => {
     if (new URLSearchParams(window.location.search).has('signup')) return 'register'
-    if (onGuidePath() || parseShopPath(window.location.pathname)) return null
+    if (onGuidePath() || parseShopPath(window.location.pathname) || parseRoomPath(window.location.pathname)) return null
     if (INVITE_PATH.test(window.location.pathname) || SWIM_INVITE_PATH.test(window.location.pathname) || TRAINER_PATH.test(window.location.pathname)) {
       try { return localStorage.getItem('athrion_signed_in_before') ? 'login' : 'register' } catch { return 'register' }
     }
@@ -81,6 +83,9 @@ export default function App() {
   const [guide, setGuide] = useState(() => onGuidePath() || !!readGuidePick())
   // athrion.app/shop/<product> or /shop/coach/<coach>: a shared coach shop link (public preview signed out)
   const [shopLink, setShopLink] = useState(() => parseShopPath(window.location.pathname))
+  // athrion.app/r/<code>: a room link. Signed out it shows the room's preview; the code is kept
+  // (on the phone and, from sign-up, in the account) and the room opens once signed in
+  const [roomLink, setRoomLink] = useState(() => parseRoomPath(window.location.pathname))
   // A friend invite opens Train together → Friends once signed in; it survives sign-up
   const [groupIntent, setGroupIntent] = useState(() => {
     const m = window.location.pathname.match(INVITE_PATH)
@@ -203,7 +208,7 @@ export default function App() {
     // keep the existing state then, or the whole app reloads and loses the open screen
     const applySession = s => setSession(prev => {
       const next = toProfile(s)
-      return prev && next && prev.email === next.email && prev.name === next.name && prev.consented === next.consented ? prev : next
+      return prev && next && prev.email === next.email && prev.name === next.name && prev.consented === next.consented && prev.roomMeta?.room_code === next.roomMeta?.room_code ? prev : next
     })
     supabase.auth.getSession().then(({ data: { session } }) => applySession(session))
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -239,6 +244,17 @@ export default function App() {
       .catch(() => setIsPro(false))
     fetchIsAdmin().then(setIsAdmin).catch(() => setIsAdmin(false))
   }, [session])
+
+  // A room link, opened signed in or remembered through sign-up: join that room
+  useEffect(() => {
+    if (!session || !profile || guide) return
+    const fromPath = parseRoomPath(window.location.pathname)
+    if (fromPath) { rememberRoomLink(fromPath); window.history.replaceState(null, '', '/'); setRoomLink(null) }
+    const code = readRoomLink({ user_metadata: session.roomMeta })
+    if (!code) return
+    clearRoomLink({ user_metadata: session.roomMeta })
+    setGroupIntent({ tab: 'rooms', join: code })
+  }, [session, profile, guide])
 
   // Each intent opens Train together once (not again when the profile reloads)
   const handledIntent = useRef(null)
@@ -347,6 +363,9 @@ export default function App() {
         ? <Auth key={authMode} initialMode={authMode} onBack={() => setAuthMode(null)} />
         : guide
         ? <Guide onStart={() => setAuthMode('register')} onSignIn={() => setAuthMode('login')} />
+        : roomLink
+        ? <RoomPreview code={roomLink} onStart={() => setAuthMode('register')} onSignIn={() => setAuthMode('login')}
+            onHome={() => { window.history.replaceState(null, '', '/'); setRoomLink(null) }} />
         : shopLink
         ? <ShopPreview link={shopLink} onStart={() => setAuthMode('register')} onSignIn={() => setAuthMode('login')}
             onHome={() => { clearShopLink(); setPendingOpen(null); window.history.replaceState(null, '', '/'); setShopLink(null) }} />
@@ -420,7 +439,7 @@ export default function App() {
   )
 
   const pageProps = {
-    workout: { pendingWorkout, onClearPending: () => setPendingWorkout(null), isPro, onUpgrade: goUpgrade, onOpenPage: navigate, onOpenGuide: openGuide, resumeTick },
+    workout: { pendingWorkout, onClearPending: () => setPendingWorkout(null), isPro, onUpgrade: goUpgrade, onOpenPage: navigate, onOpenGuide: openGuide, resumeTick, onTrainTogether: isMinor ? undefined : host => setGroupIntent({ tab: 'rooms', host }) },
     library: { onStartWorkout: handleStartFromLibrary },
     shop: { isMinor, onStartPlanDay: handleStartPlanDay, onOpenCoach: () => navigate('coach'), shopIntent, onShopIntentDone: () => setShopIntent(null) },
     coach: { onOpenShop: () => navigate('shop') },
@@ -516,6 +535,8 @@ function toProfile(session) {
     name: session.user.user_metadata?.full_name || session.user.email.split('@')[0],
     email: session.user.email,
     consented: hasConsented(session.user),
+    // A room link kept through sign-up (roomLink.js), so it opens on whichever device signs in
+    roomMeta: session.user.user_metadata?.room_code ? { room_code: session.user.user_metadata.room_code, room_at: session.user.user_metadata.room_at } : null,
     // Agreed to an older version, or an email account from before the terms; a Google or Apple
     // account that never agreed is a new sign-up
     agreedBefore: !!session.user?.user_metadata?.legal_version || (session.user?.app_metadata?.provider ?? 'email') === 'email',

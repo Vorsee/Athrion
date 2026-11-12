@@ -162,3 +162,10 @@ Each one is its own commit set on `progress-update-v1`. Each runs the tests befo
   - Each set has its own id from the phone, so a set sent twice is stored once (after 035).
   - A queued set keeps the time it was logged, never later than now or before the room was made.
   - Before 035 runs, sets are sent without the id (no duplicate protection), as before.
+- **R2** (room links): done.
+  - `athrion.app/r/CODE`: signed out, a preview ("@alex invited you", the workout, how many are in) with Join free; an ended room says so and offers your own.
+  - The code is kept through sign-up on the phone and in the new account (for an email confirmed on another device), for 12 hours; the room opens right after onboarding.
+  - The lobby has Invite friends (share sheet with the link) and Copy code.
+  - The code field is six boxes and joins on the 6th character.
+  - Fast join without stats is still R5: until then someone from a link goes through the normal onboarding first.
+- **R3** (3-tap start): done. Train → Train together → pick today's workout, your last one or a free workout → Invite friends: the room is made with that workout and the share sheet opens. On iPhone the share sheet may need one more tap on Invite friends in the room, since the browser only opens it straight from a tap.
