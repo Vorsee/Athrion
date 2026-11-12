@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
-import { Button, Card, Segmented, SectionTitle, IconButton, ExerciseRow, BigNumber, StatTiles, InfoButton, Fact, EmptyState, SkeletonRows, Skeleton, InlineError, RankChip } from './ui/index.js'
+import { Button, Card, Segmented, SectionTitle, IconButton, ExerciseRow, BigNumber, StatTiles, InfoButton, Fact, EmptyState, SkeletonRows, Skeleton, InlineError, RankChip, Avatar } from './ui/index.js'
 import { Toggle } from './ReminderSettings.jsx'
 import {
   saveNickname, setOnLeaderboard, searchNicknames, sendFriendRequest, respondFriendRequest, removeFriend,
@@ -126,7 +126,7 @@ export function LeaderboardTab({ me, onMeChange, onAddFriends, minor = false }) 
 
   return (
     <div className="space-y-4">
-      <Card hero>
+      <Card hero className="rise">
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-xs font-semibold text-neon-ink">{monthName(now)} · {left} day{left === 1 ? '' : 's'} left</div>
@@ -168,8 +168,9 @@ export function LeaderboardTab({ me, onMeChange, onAddFriends, minor = false }) 
             Your friends and you, ranked by points this month.
           </EmptyState>
         ) : (
-          <ol className="space-y-1.5" aria-label={`${scope === 'friends' ? 'Friends' : 'Everyone'} leaderboard`}>
-            {list.map(r => <BoardRow key={r.nickname} row={r} />)}
+          <ol key={scope} className="space-y-1.5" aria-label={`${scope === 'friends' ? 'Friends' : 'Everyone'} leaderboard`}>
+            <Podium rows={list.filter(r => r.place && r.place <= 3)} />
+            {list.filter(r => !(r.place && r.place <= 3)).map((r, i) => <BoardRow key={r.nickname} row={r} i={i + 2} />)}
           </ol>
         )}
 
@@ -203,11 +204,44 @@ export function LeaderboardTab({ me, onMeChange, onAddFriends, minor = false }) 
   )
 }
 
-function BoardRow({ row }) {
+// The top three standing on their places: 2nd, 1st, 3rd, the blocks growing up in turn.
+// Each one is a list item, so the list still reads 1, 2, 3 in order.
+const PODIUM = { 1: { h: 'h-24', order: 'order-2', delay: 0.35 }, 2: { h: 'h-16', order: 'order-1', delay: 0.15 }, 3: { h: 'h-12', order: 'order-3', delay: 0.5 } }
+
+function Podium({ rows }) {
+  if (!rows.length) return null
+  return (
+    <li className="list-none">
+      <ol className="flex items-end gap-2 pt-2 pb-1" aria-label="Top three">
+        {rows.slice(0, 3).map(r => {
+          const p = PODIUM[r.place] ?? PODIUM[3]
+          return (
+            <li key={r.nickname} className={`flex-1 min-w-0 flex flex-col items-center ${p.order}`}>
+              <div className="relative pop-in" style={{ animationDelay: `${p.delay + 0.35}s` }}>
+                <Avatar name={r.nickname} size={r.place === 1 ? 'lg' : 'md'} className={r.is_me ? 'ring-2 ring-neon-stroke ring-offset-2 ring-offset-canvas' : ''} />
+                {r.place === 1 && <Icon icon="mdi:crown-outline" width={20} className="absolute -top-4 left-1/2 -translate-x-1/2 text-neon-ink" aria-hidden="true" />}
+              </div>
+              <div className="mt-1.5 text-sm font-semibold text-ink truncate max-w-full">@{r.nickname}</div>
+              {r.is_me && <div className="text-xs text-muted -mt-0.5">you</div>}
+              <div className="text-sm font-bold text-neon-ink tabular-nums">{r.points}</div>
+              <div className={`mt-1.5 w-full ${p.h} rounded-t-xl grow-y flex items-start justify-center pt-2 ${r.place === 1 ? 'bg-neon text-on-neon' : 'bg-raised text-ink-2 border border-b-0 border-line'}`}
+                style={{ animationDelay: `${p.delay}s` }}>
+                <span className="font-bold text-lg tabular-nums" aria-label={`Rank ${r.place}`}>{r.place}</span>
+              </div>
+            </li>
+          )
+        })}
+      </ol>
+    </li>
+  )
+}
+
+function BoardRow({ row, i = 0 }) {
   const level = levelFor(row.lifetime)
   return (
-    <li className={`flex items-center gap-3 rounded-xl px-3 py-2.5 border ${row.is_me ? 'bg-neon-tint border-neon-stroke/30' : 'bg-raised border-transparent'}`}>
+    <li className={`rise flex items-center gap-3 rounded-xl px-3 py-2.5 border ${row.is_me ? 'bg-neon-tint border-neon-stroke/30' : 'bg-raised border-transparent'}`} style={{ '--i': i }}>
       {row.place ? <RankChip rank={row.place} /> : <span className="text-xs text-muted w-7 text-center">–</span>}
+      <Avatar name={row.nickname} size="sm" />
       <div className="flex-1 min-w-0">
         <div className="text-sm font-semibold text-ink truncate">@{row.nickname}{row.is_me && <span className="text-muted font-normal"> (you)</span>}</div>
         <div className="flex items-center gap-1.5 text-xs text-muted">
@@ -279,22 +313,30 @@ export function FriendsTab({ me, invite, onInviteDone, onEditNickname }) {
 
   return (
     <div className="space-y-4">
-      <Card hero>
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-xs text-muted">Your nickname</div>
-            <div className="font-bold text-2xl text-ink truncate">@{me.nickname}</div>
+      <Card hero className="rise">
+        <div className="flex items-center gap-3">
+          <Avatar name={me.nickname} size="lg" className="pop-in" />
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-semibold text-neon-ink">Your nickname</div>
+            <div className="font-bold text-2xl text-ink truncate leading-tight">@{me.nickname}</div>
+            <div className="text-xs text-muted mt-0.5">
+              {friends ? `${accepted.length} friend${accepted.length === 1 ? '' : 's'}${incoming.length ? ` · ${incoming.length} waiting for you` : ''}` : ' '}
+            </div>
           </div>
           <IconButton icon="mdi:pencil-outline" label="Change nickname" onClick={onEditNickname} />
         </div>
-        <Button full variant="secondary" icon={shared ? 'mdi:check' : 'mdi:share-variant-outline'} className="mt-4" onClick={share}>
+        <p className="text-sm text-ink-2 mt-4">Friends see your rooms and race you on the monthly board. Send your link: they tap it and ask to be your friend.</p>
+        <Button full icon={shared ? 'mdi:check' : 'mdi:share-variant-outline'} className="mt-3" onClick={share}>
           {shared ? 'Link copied' : 'Share invite link'}
         </Button>
       </Card>
 
       {showInvite && (
-        <Card tone="neon">
-          <div className="text-sm text-ink"><span className="font-bold">@{invite}</span> invited you to be friends.</div>
+        <Card tone="neon" className="pop-in">
+          <div className="flex items-center gap-3">
+            <Avatar name={invite} />
+            <div className="text-sm text-ink min-w-0"><span className="font-bold">@{invite}</span> invited you to be friends.</div>
+          </div>
           <div className="flex gap-2 mt-3">
             <Button variant="secondary" className="flex-1" onClick={onInviteDone}>Not now</Button>
             <Button className="flex-1" disabled={busy} onClick={async () => { await add(invite); onInviteDone() }}>Add @{invite}</Button>
@@ -302,8 +344,11 @@ export function FriendsTab({ me, invite, onInviteDone, onEditNickname }) {
         </Card>
       )}
 
-      <Card>
-        <SectionTitle>Add a friend</SectionTitle>
+      <Card className="rise" style={{ '--i': 1 }}>
+        <div className="flex items-center gap-2 mb-3">
+          <Icon icon="mdi:account-search-outline" width={22} className="text-neon-ink" aria-hidden="true" />
+          <h2 className="text-lg font-semibold text-ink">Add a friend</h2>
+        </div>
         <div className="flex gap-2">
           <div className="relative flex-1">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted font-semibold" aria-hidden="true">@</span>
@@ -315,11 +360,14 @@ export function FriendsTab({ me, invite, onInviteDone, onEditNickname }) {
           <Button onClick={() => add(query)} disabled={busy || cleanNickname(query).length < 3}>Add</Button>
         </div>
         {hits.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Matching nicknames">
-            {hits.map(n => (
-              <button key={n} type="button" onClick={() => add(n)}
-                className="press min-h-[36px] px-3 rounded-full bg-raised border border-line text-sm text-ink-2 hover:border-neon-stroke/40">
-                @{n}
+          <div className="mt-2 space-y-1.5" aria-label="Matching nicknames">
+            {hits.map((n, i) => (
+              <button key={n} type="button" onClick={() => add(n)} aria-label={`@${n}`}
+                className="press rise w-full flex items-center gap-3 rounded-xl bg-raised border border-transparent hover:border-neon-stroke/40 px-3 py-2 text-left"
+                style={{ '--i': i }}>
+                <Avatar name={n} size="sm" />
+                <span className="flex-1 min-w-0 text-sm font-semibold text-ink truncate">@{n}</span>
+                <Icon icon="mdi:account-plus-outline" width={20} className="text-neon-ink" aria-hidden="true" />
               </button>
             ))}
           </div>
@@ -334,11 +382,11 @@ export function FriendsTab({ me, invite, onInviteDone, onEditNickname }) {
         <section>
           <SectionTitle>Requests</SectionTitle>
           <div className="space-y-1.5">
-            {incoming.map(f => (
-              <ExerciseRow key={f.id} icon="mdi:account-clock-outline" name={`@${f.nickname}`} meta="Wants to be friends">
-                <IconButton icon="mdi:check" label={`Accept @${f.nickname}`} onClick={() => act(() => respondFriendRequest(f.id, true))} />
+            {incoming.map((f, i) => (
+              <PersonRow key={f.id} name={f.nickname} meta="Wants to be friends" i={i} highlight>
                 <IconButton icon="mdi:close" tone="danger" label={`Decline @${f.nickname}`} onClick={() => act(() => respondFriendRequest(f.id, false))} />
-              </ExerciseRow>
+                <Button size="sm" icon="mdi:check" aria-label={`Accept @${f.nickname}`} onClick={() => act(() => respondFriendRequest(f.id, true))}>Accept</Button>
+              </PersonRow>
             ))}
           </div>
         </section>
@@ -353,15 +401,15 @@ export function FriendsTab({ me, invite, onInviteDone, onEditNickname }) {
             </EmptyState>
           ) : (
             <div className="space-y-1.5">
-              {accepted.map(f => (
-                <ExerciseRow key={f.id} icon="mdi:account-outline" name={`@${f.nickname}`}>
+              {accepted.map((f, i) => (
+                <PersonRow key={f.id} name={f.nickname} i={i}>
                   {confirm === f.id ? <>
                     <Button size="sm" variant="ghost" onClick={() => setConfirm(null)}>Keep</Button>
                     <Button size="sm" variant="danger" onClick={() => act(() => removeFriend(f.id))}>Remove</Button>
                   </> : (
-                    <IconButton icon="mdi:account-remove-outline" label={`Remove @${f.nickname}`} onClick={() => setConfirm(f.id)} />
+                    <IconButton icon="mdi:account-remove-outline" tone="danger" label={`Remove @${f.nickname}`} onClick={() => setConfirm(f.id)} />
                   )}
-                </ExerciseRow>
+                </PersonRow>
               ))}
             </div>
           )}
@@ -372,14 +420,29 @@ export function FriendsTab({ me, invite, onInviteDone, onEditNickname }) {
         <section>
           <SectionTitle>Sent</SectionTitle>
           <div className="space-y-1.5">
-            {outgoing.map(f => (
-              <ExerciseRow key={f.id} icon="mdi:account-arrow-right-outline" name={`@${f.nickname}`} meta="Waiting for them to accept">
+            {outgoing.map((f, i) => (
+              <PersonRow key={f.id} name={f.nickname} meta="Waiting for them to accept" i={i} muted>
                 <IconButton icon="mdi:close" label={`Cancel request to @${f.nickname}`} onClick={() => act(() => removeFriend(f.id))} />
-              </ExerciseRow>
+              </PersonRow>
             ))}
           </div>
         </section>
       )}
+    </div>
+  )
+}
+
+// A person in a list: avatar, @nickname, a line under it, actions on the right
+function PersonRow({ name, meta, i = 0, highlight = false, muted = false, children }) {
+  return (
+    <div className={`rise flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl px-3 py-2.5 border ${highlight ? 'bg-neon-tint border-neon-stroke/30' : 'bg-raised border-transparent'}`}
+      style={{ '--i': i }}>
+      <Avatar name={name} size="md" className={muted ? 'opacity-60' : ''} />
+      <div className="grow basis-0 min-w-[5.5rem]">
+        <div className="text-sm font-semibold text-ink break-words">@{name}</div>
+        {meta && <div className="text-xs text-muted">{meta}</div>}
+      </div>
+      {children && <div className="ml-auto flex items-center gap-1">{children}</div>}
     </div>
   )
 }

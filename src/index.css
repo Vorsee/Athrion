@@ -188,6 +188,15 @@ body {
 @keyframes growY { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 .grow-y { transform-origin: center bottom; animation: growY 0.8s var(--ease) both; }
 .paused, .paused * { animation-play-state: paused !important; }
+/* Content arriving on a screen: rises in, one after another (style --i: 0, 1, 2…) */
+.rise { animation: slideUp 0.45s var(--ease) both; animation-delay: calc(var(--i, 0) * 70ms); }
+@keyframes livePulse { 0% { transform: scale(1); opacity: 0.6; } 100% { transform: scale(2.4); opacity: 0; } }
+.live-pulse { animation: livePulse 1.6s var(--ease) infinite; }
+@keyframes caretBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+.caret-blink { animation: caretBlink 1s steps(1) infinite; }
+/* Avatar initials: dark on the pastel tones in dark mode; the light theme's tones are deep, so white */
+.avatar-ink { color: rgb(var(--on-neon)); }
+.light .avatar-ink:not(.bg-neon) { color: #FFFFFF; }
 
 /* Reduced motion: no slides, pulses or count-ups; fades stay short */
 @media (prefers-reduced-motion: reduce) {

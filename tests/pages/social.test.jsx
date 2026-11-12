@@ -151,7 +151,7 @@ describe('Train together tabs', () => {
     sb.set('group_participants', { data: [], error: null })
     sb.set('group_sets', { data: [], error: null })
     render(<Group session={{ name: 'Sam Real' }} intent={{ tab: 'rooms' }} />)
-    await screen.findByText('Host a room')
+    await screen.findByRole('button', { name: 'Create a room' })
     await vi.waitFor(() => expect(sb.queriesFor('social_profiles').length).toBeGreaterThan(0))
     await new Promise(r => setTimeout(r, 0))
     await userEvent.click(screen.getByRole('button', { name: 'Create a room' }))

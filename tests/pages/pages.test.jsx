@@ -308,7 +308,7 @@ describe('Train together is its own tab', () => {
     expect(await screen.findByText('Exercise library')).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Train together' })).toBeNull()
     await userEvent.click(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('button', { name: /Together/ }))
-    expect(await screen.findByText('Host a room')).toBeInTheDocument()
+    expect(await screen.findByText('Train live with friends')).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Rooms' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.queryByLabelText('Back to Train')).toBeNull() // a tab, not a page inside Train
     await userEvent.click(screen.getByRole('tab', { name: 'Leaderboard' }))
@@ -318,7 +318,7 @@ describe('Train together is its own tab', () => {
     signInPro()
     render(<P.App />)
     await userEvent.click(within(await screen.findByRole('navigation', { name: 'Main' })).getByRole('button', { name: /Together/ }))
-    expect(await screen.findByText('Host a room')).toBeInTheDocument()
+    expect(await screen.findByText('Train live with friends')).toBeInTheDocument()
     await waitFor(() => expect(window.history.state?.page).toBe('group'))
     act(() => window.history.back())
     expect(await screen.findByText('Exercise library')).toBeInTheDocument()
@@ -341,14 +341,18 @@ describe('Library', () => {
 })
 
 describe('Group', () => {
-  it('shows host and join options and rejects an unknown room code', async () => {
+  it('shows host and join options, joins on the 6th character and rejects an unknown room code', async () => {
     sb.supabase.rpc.mockResolvedValue({ data: null, error: { code: 'P0002', message: 'Room not found' } })
     render(<P.Group session={{ name: 'Sam', email: USER.email }} intent={{ tab: 'rooms' }} />)
-    expect(screen.getByText('Host a room')).toBeInTheDocument()
-    await userEvent.type(screen.getByPlaceholderText('ABC123'), 'ZZZZZZ')
-    const join = screen.getAllByRole('button').find(b => /join/i.test(b.textContent) && b.textContent !== 'Join a room')
-    await userEvent.click(join)
+    expect(screen.getByText('Train live with friends')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create a room' })).toBeInTheDocument()
+    const code = screen.getByLabelText('Room code')
+    await userEvent.type(code, 'zz-zz')
+    expect(code).toHaveValue('ZZZZ') // capitals, code characters only
+    expect(screen.getByRole('button', { name: 'Join room' })).toBeDisabled()
+    await userEvent.type(code, 'zz') // the 6th character joins, no button needed
     expect(await screen.findByText(/Room not found/)).toBeInTheDocument()
+    expect(sb.supabase.rpc).toHaveBeenCalledWith('join_group_session', expect.objectContaining({ p_code: 'ZZZZZZ' }))
   })
 })
 

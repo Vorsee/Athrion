@@ -9,3 +9,4 @@ export { EmptyState, Skeleton, SkeletonRows, PageSkeleton, InlineError } from '.
 export { default as InfoButton, Fact } from './InfoButton.jsx'
 export { default as Sheet } from '../Sheet.jsx'
 export { PageHeader, IconButton, ExerciseRow, ActionRow, BigNumber, StatTiles, RankChip } from './Rows.jsx'
+export { default as Avatar, AvatarStack, toneFor } from './Avatar.jsx'

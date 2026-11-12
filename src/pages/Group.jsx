@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { Icon } from '@iconify/react'
 import { useBackHandler, SESSION_LIMIT_MS } from '../lib/shell.js'
-import { Button, Card, Chip, Segmented, PageHeader, SectionTitle, Fact, InfoButton, IconButton, ExerciseRow, RankChip, SkeletonRows } from '../components/ui/index.js'
+import { Button, Card, Chip, Segmented, PageHeader, SectionTitle, Fact, InfoButton, IconButton, ExerciseRow, RankChip, SkeletonRows, Avatar, AvatarStack } from '../components/ui/index.js'
 import { NicknameCard, LeaderboardTab, FriendsTab } from '../components/Social.jsx'
-import { fetchMySocial, clearInvite } from '../lib/socialApi.js'
+import { fetchMySocial, clearInvite, fetchFriends, fetchMyPoints, fetchLeaderboard } from '../lib/socialApi.js'
 import { EXERCISES, MUSCLES, getExerciseIcon, todayKey, localDateKey } from '../lib/data.js'
 import {
   createGroupSession,
@@ -73,6 +73,12 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
   const [restLeft, setRestLeft] = useState(60)
   const [confirmEnd, setConfirmEnd] = useState(false)
   const [tab, setTab] = useState(intent?.tab || 'rooms')
+  const tabDir = useRef(0) // which way the tab content slides: from the right going right, from the left going left
+  function pickTab(t) {
+    tabDir.current = TABS.findIndex(([id]) => id === t) - TABS.findIndex(([id]) => id === tab)
+    setTab(t); setEditingNick(false)
+  }
+  const [joinStartOwn, setJoinStartOwn] = useState(false) // the failed join offers starting your own room
   const [autoEnded, setAutoEnded] = useState(false) // the 4-hour limit ended it
   const [me, setMe] = useState(undefined) // undefined = loading, null = no nickname yet
   const [editingNick, setEditingNick] = useState(false)
@@ -340,11 +346,12 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
     }
   }
 
-  async function handleJoin() {
-    if (!joinCode.trim()) return
+  // code: passed when the 6th character is typed, before the state has caught up
+  async function handleJoin(code = joinCode) {
+    if (!code.trim() || loading) return
     setLoading(true); setJoinError('')
     try {
-      const sess = await joinGroupSession(joinCode.trim(), displayName)
+      const sess = await joinGroupSession(code.trim(), displayName)
       setRoomName(displayName)
       setGroupSession(sess)
       setIsHost(false)
@@ -352,6 +359,7 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
       goScreen('lobby')
     } catch (err) {
       setJoinError(err.message)
+      setJoinStartOwn(!!err.startOwn)
     } finally {
       setLoading(false)
     }
@@ -458,15 +466,11 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
   const waiting = allSets.filter(s => s.pending && s.session_id === groupSession?.id).length
 
   if (screen === 'home') return (
-    <div className="space-y-4 py-4 slide-up">
-      <PageHeader icon="mdi:account-group-outline" title="Train together"
-        facts={<>
-          <Fact icon="mdi:account-multiple-outline">Friends</Fact>
-          <Fact icon="mdi:trophy-outline">Monthly leaderboard</Fact>
-          <Fact icon="mdi:lightning-bolt">Live rooms</Fact>
-        </>} />
-      <Segmented label="Train together" options={TABS} value={tab} onChange={t => { setTab(t); setEditingNick(false) }} />
+    <div className="space-y-4 py-4">
+      <PageHeader icon="mdi:account-group-outline" title="Train together" />
+      <Segmented label="Train together" options={TABS} value={tab} onChange={pickTab} />
 
+      <div key={tab} className={tabDir.current < 0 ? 'slide-from-left' : 'slide-from-right'}>
       {isMinor && tab !== 'ranks' ? (
         <Card className="space-y-2">
           <div className="font-bold text-lg text-ink">Opens when you're 16</div>
@@ -475,11 +479,14 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
       ) : tab === 'rooms' ? (
         <HomeScreen
           joinCode={joinCode}
-          setJoinCode={setJoinCode}
+          setJoinCode={c => { setJoinCode(c); setJoinError(''); setJoinStartOwn(false) }}
           joinError={joinError}
+          startOwn={joinStartOwn}
           loading={loading}
           onCreate={handleCreate}
           onJoin={handleJoin}
+          nickname={me?.nickname}
+          onTab={pickTab}
         />
       ) : me === undefined ? (
         <SkeletonRows rows={3} />
@@ -487,10 +494,11 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
         <NicknameCard current={me?.nickname} onSaved={m => { setMe(m); setEditingNick(false) }}
           onCancel={me ? () => setEditingNick(false) : null} />
       ) : tab === 'ranks' ? (
-        <LeaderboardTab me={me} onMeChange={setMe} onAddFriends={() => setTab('friends')} minor={isMinor} />
+        <LeaderboardTab me={me} onMeChange={setMe} onAddFriends={() => pickTab('friends')} minor={isMinor} />
       ) : (
         <FriendsTab me={me} invite={invite} onInviteDone={inviteDone} onEditNickname={() => setEditingNick(true)} />
       )}
+      </div>
     </div>
   )
 
@@ -603,37 +611,154 @@ function WaitingNote({ count }) {
 // Home
 // ─────────────────────────────────────────────────────────────────────────────
 
-function HomeScreen({ joinCode, setJoinCode, joinError, loading, onCreate, onJoin }) {
+function HomeScreen({ joinCode, setJoinCode, joinError, startOwn, loading, onCreate, onJoin, nickname, onTab }) {
+  const [friends, setFriends] = useState(null)
+  const [board, setBoard] = useState(null) // { points, place }
+  useEffect(() => {
+    fetchFriends().then(f => setFriends(f.filter(x => x.status === 'accepted'))).catch(() => setFriends([]))
+    Promise.all([fetchMyPoints(), fetchLeaderboard('friends')])
+      .then(([p, rows]) => setBoard({ points: p.points ?? 0, place: rows.find(r => r.is_me)?.place ?? null, others: rows.length > 1 }))
+      .catch(() => {})
+  }, [])
+
+  const crew = (friends ?? []).slice(0, 4).map(f => f.nickname)
+  const seats = Math.max(0, Math.min(ROOM_SIZE, 4) - 1 - crew.length)
+
   return (
     <div className="space-y-4">
-      <Card hero className="space-y-3">
-        <div>
-          <SectionTitle className="mb-0">Host a room</SectionTitle>
-          <p className="text-sm text-ink-2 mt-1">Plan the exercises or make it a free workout, share the code, and see everyone's sets as they happen.</p>
+      <Card hero className="rise">
+        <div className="flex items-center gap-2 text-xs font-semibold text-neon-ink">
+          <span className="relative flex w-2 h-2" aria-hidden="true">
+            <span className="absolute inset-0 rounded-full bg-neon live-pulse" />
+            <span className="relative w-2 h-2 rounded-full bg-neon" />
+          </span>
+          Live rooms · free for everyone
+        </div>
+        <h2 className="font-bold text-[1.75rem] xs:text-3xl leading-tight text-ink mt-1.5">Train live with friends</h2>
+        <p className="text-sm text-ink-2 mt-1.5">Everyone in the room sees each set the moment it's logged, wherever they train.</p>
+
+        <RoomSteps />
+
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mt-4 mb-4">
+          <AvatarStack names={[nickname || 'You', ...crew]} seats={seats} />
+          <span className="text-xs text-muted">
+            {crew.length ? `You${crew.length === 1 ? ` and @${crew[0]}` : ` and ${crew.length} friends`} · up to ${ROOM_SIZE} in a room` : `Up to ${ROOM_SIZE} people in a room`}
+          </span>
         </div>
         <Button full icon="mdi:plus" onClick={onCreate} disabled={loading}>
-          {loading ? 'Creating...' : 'Create a room'}
+          {loading ? 'Creating…' : 'Create a room'}
         </Button>
       </Card>
 
-      <Card className="space-y-3">
-        <SectionTitle className="mb-0">Join a room</SectionTitle>
-        <input
-          className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-sm outline-none transition-colors font-bold text-lg text-center"
-          placeholder="ABC123"
-          maxLength={6}
-          value={joinCode}
-          onChange={e => setJoinCode(e.target.value.toUpperCase())}
-          onKeyDown={e => e.key === 'Enter' && onJoin()}
-        />
+      <Card className="rise" style={{ '--i': 1 }}>
+        <div className="flex items-center gap-2">
+          <Icon icon="mdi:door-open" width={22} className="text-neon-ink" aria-hidden="true" />
+          <h2 className="text-lg font-semibold text-ink">Got a code?</h2>
+        </div>
+        <p className="text-sm text-ink-2 mt-1">Type a friend's room code. You're in as soon as it's complete.</p>
+        <CodeInput value={joinCode} onChange={setJoinCode} onComplete={onJoin} busy={loading} invalid={!!joinError} />
         {joinError && (
-          <div className="text-danger text-xs text-center">{joinError}</div>
+          <div role="alert" className="mt-3 flex items-start gap-2 text-sm text-danger fade-in">
+            <Icon icon="mdi:alert-circle-outline" width={18} className="flex-shrink-0 mt-px" aria-hidden="true" />
+            <span className="break-words">{joinError}</span>
+          </div>
         )}
-        <Button variant="secondary" full onClick={onJoin} disabled={loading || joinCode.length < 2}>
-          {loading ? 'Joining...' : 'Join'}
-        </Button>
+        {joinError && startOwn ? (
+          <Button full variant="secondary" icon="mdi:plus" className="mt-3" onClick={onCreate} disabled={loading}>Start your own room</Button>
+        ) : (
+          <Button full variant="secondary" className="mt-3" onClick={() => onJoin()} disabled={loading || joinCode.length < 6}>
+            {loading ? 'Joining…' : 'Join room'}
+          </Button>
+        )}
       </Card>
+
+      <div className="grid gap-3 rise" style={{ '--i': 2, gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr))' }}>
+        <ShortcutTile label="Friends" meta={friends?.length ? 'Your crew' : 'Share your invite link'} onClick={() => onTab('friends')}
+          value={friends === null ? '…' : friends.length ? `${friends.length} friend${friends.length === 1 ? '' : 's'}` : 'Add friends'}>
+          {crew.length ? <AvatarStack names={crew} size="sm" /> : <Icon icon="mdi:account-plus-outline" width={26} className="text-neon-ink" aria-hidden="true" />}
+        </ShortcutTile>
+        <ShortcutTile label="Leaderboard" onClick={() => onTab('ranks')}
+          value={board ? `${board.points} pts` : '…'}
+          meta={board?.place && board.others ? `#${board.place} among friends` : 'This month'}>
+          <Icon icon="mdi:trophy-outline" width={26} className="text-neon-ink" aria-hidden="true" />
+        </ShortcutTile>
+      </div>
     </div>
+  )
+}
+
+// Create, share, train: the three steps light up one after another
+function RoomSteps() {
+  const steps = [['mdi:plus', 'Create'], ['mdi:share-variant-outline', 'Share the code'], ['mdi:lightning-bolt', 'Train live']]
+  return (
+    <ol className="mt-4 flex items-start" aria-label="How a room works">
+      {steps.map(([icon, text], i) => (
+        <li key={text} className="flex-1 flex flex-col items-center text-center relative min-w-0">
+          {i > 0 && (
+            <span aria-hidden="true" className="absolute top-5 right-1/2 w-full h-0.5 -z-0 bg-line overflow-hidden">
+              <span className="block h-full bg-neon-stroke/60 grow-x" style={{ animationDelay: `${i * 260}ms` }} />
+            </span>
+          )}
+          <span className="relative w-10 h-10 rounded-full bg-raised border border-neon-stroke/40 text-neon-ink flex items-center justify-center pop-in"
+            style={{ animationDelay: `${i * 260 + 120}ms` }}>
+            <Icon icon={icon} width={20} aria-hidden="true" />
+          </span>
+          <span className="text-xs font-medium text-ink-2 mt-1.5 px-1 break-words">{text}</span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+// Six boxes over one real input: typed codes, pasted codes and the keyboard all just work.
+// Letters only from the code alphabet; the 6th character joins straight away.
+function CodeInput({ value, onChange, onComplete, busy, invalid }) {
+  const [focused, setFocused] = useState(false)
+  function change(e) {
+    const code = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6)
+    onChange(code)
+    if (code.length === 6 && code !== value) onComplete(code)
+  }
+  return (
+    <div className="relative mt-3">
+      <input
+        aria-label="Room code" inputMode="text" autoCapitalize="characters" autoComplete="off" autoCorrect="off" spellCheck={false}
+        maxLength={6} value={value} onChange={change} disabled={busy}
+        onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+        onKeyDown={e => e.key === 'Enter' && value.length === 6 && onComplete(value)}
+        className="absolute inset-0 w-full h-full opacity-0 cursor-text z-10" />
+      <div className="grid grid-cols-6 gap-1.5 xs:gap-2" aria-hidden="true">
+        {Array.from({ length: 6 }, (_, i) => {
+          const ch = value[i]
+          const active = focused && (i === value.length || (i === 5 && value.length === 6))
+          return (
+            <div key={i} className={`h-14 rounded-xl border-2 flex items-center justify-center font-bold text-2xl tabular-nums transition-colors duration-150 ${
+              invalid ? 'border-danger/60 bg-raised text-ink'
+              : active ? 'border-neon-stroke bg-neon-tint text-ink'
+              : ch ? 'border-line-strong bg-raised text-ink' : 'border-line bg-raised text-placeholder'}`}>
+              {ch ? <span key={ch + i} className="pop-in">{ch}</span>
+                : active ? <span className="w-0.5 h-6 bg-neon-ink caret-blink" />
+                : <span className="w-2.5 h-0.5 rounded-full bg-line-strong" />}
+            </div>
+          )
+        })}
+      </div>
+      {busy && <div className="absolute inset-0 rounded-xl bg-surface/60 flex items-center justify-center text-sm font-semibold text-ink-2 fade-in">Joining…</div>}
+    </div>
+  )
+}
+
+function ShortcutTile({ label, value, meta, onClick, children }) {
+  return (
+    <button type="button" onClick={onClick}
+      className="press text-left bg-surface border border-line hover:border-neon-stroke/30 rounded-2xl p-4 transition-colors min-w-0">
+      <div className="flex items-center justify-between gap-2 min-h-[2rem]">
+        {children}
+        <Icon icon="mdi:chevron-right" width={20} className="text-muted flex-shrink-0" aria-hidden="true" />
+      </div>
+      <div className="mt-3 font-bold text-lg text-ink leading-tight break-words">{value}</div>
+      <div className="text-xs text-muted break-words">{meta || label}</div>
+    </button>
   )
 }
 
@@ -695,9 +820,15 @@ function LobbyScreen({ groupSession, participants, isHost, plan, free, onChange,
     <div className="space-y-4 py-4 slide-up">
 
       {/* Room code */}
-      <Card hero className="text-center">
-        <div className="text-xs font-semibold text-neon-ink mb-2">Room code</div>
-        <div className="font-bold text-5xl text-neon-ink mb-3 tracking-[0.15em] tabular-nums">{groupSession?.code}</div>
+      <Card hero className="text-center rise">
+        <div className="text-xs font-semibold text-neon-ink mb-3">Room code</div>
+        <div className="sr-only">{groupSession?.code}</div>
+        <div className="flex justify-center gap-1.5 xs:gap-2 mb-4" aria-hidden="true">
+          {String(groupSession?.code || '').split('').map((ch, i) => (
+            <span key={i} className="pop-in w-10 h-12 xs:w-11 xs:h-14 rounded-xl bg-raised border border-neon-stroke/30 flex items-center justify-center font-bold text-2xl xs:text-3xl text-neon-ink tabular-nums"
+              style={{ animationDelay: `${i * 60}ms` }}>{ch}</span>
+          ))}
+        </div>
         <button onClick={copyCode}
           className="press text-xs font-semibold text-ink-2 hover:text-ink border border-line-strong px-4 min-h-[36px] rounded-md transition-all">
           {copied ? <span className="inline-flex items-center gap-1"><Icon icon="mdi:check" width={14} />Copied</span> : <span className="inline-flex items-center gap-1"><Icon icon="mdi:content-copy" width={14} />Copy code</span>}
@@ -705,16 +836,14 @@ function LobbyScreen({ groupSession, participants, isHost, plan, free, onChange,
       </Card>
 
       {/* Participants */}
-      <Card>
+      <Card className="rise" style={{ '--i': 1 }}>
         <SectionTitle action={<Fact icon="mdi:account-multiple">{participants.length} of {ROOM_SIZE}</Fact>}>Participants</SectionTitle>
         <div className="space-y-2">
           {participants.map(p => {
             const host = p.user_id === groupSession?.host_id
             return (
-              <div key={p.user_id} className="flex flex-wrap items-center gap-x-3 gap-y-2 bg-raised rounded-xl px-3 py-2.5">
-                <div className="w-7 h-7 rounded-lg bg-neon/15 border border-neon-stroke/20 flex items-center justify-center flex-shrink-0">
-                  <span className="font-bold text-xs text-neon-ink leading-none">{(p.display_name || '?')[0].toUpperCase()}</span>
-                </div>
+              <div key={p.user_id} className="slide-in flex flex-wrap items-center gap-x-3 gap-y-2 bg-raised rounded-xl px-3 py-2.5">
+                <Avatar name={p.display_name} size="sm" className="pop-in" />
                 <span className="text-sm font-semibold text-ink flex-1 min-w-0 break-words">{p.display_name}</span>
                 {host && <Fact>Host</Fact>}
                 {isHost && !host && (removing === p.user_id ? (
@@ -733,8 +862,16 @@ function LobbyScreen({ groupSession, participants, isHost, plan, free, onChange,
             )
           })}
           {removeError && <div className="text-danger text-xs">{removeError}</div>}
-          {participants.length === 0 && (
-            <div className="text-xs text-muted text-center py-2">Waiting for participants...</div>
+          {participants.length < ROOM_SIZE && (
+            <div className="flex items-center gap-3 rounded-xl border border-dashed border-line-strong px-3 py-2.5">
+              <span className="relative flex w-8 h-8 items-center justify-center flex-shrink-0" aria-hidden="true">
+                <span className="absolute inset-1 rounded-full bg-neon/20 live-pulse" />
+                <Icon icon="mdi:account-plus-outline" width={20} className="relative text-neon-ink" />
+              </span>
+              <span className="text-sm text-muted">
+                {participants.length <= 1 ? 'Waiting for friends to join…' : `${ROOM_SIZE - participants.length} seat${ROOM_SIZE - participants.length === 1 ? '' : 's'} left. Friends can join after you start too.`}
+              </span>
+            </div>
           )}
         </div>
       </Card>
