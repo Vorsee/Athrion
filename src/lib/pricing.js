@@ -25,6 +25,7 @@ export const PRO_FEATURES = [
   { icon: 'mdi:target', title: 'Calorie targets that follow your real weight', body: 'Adjusted every week from your weigh-ins and meals.' },
   { icon: 'mdi:camera-outline', title: 'Unlimited meal photo scans', body: 'Snap your plate and get calories and macros in seconds. Free accounts get one a day.' },
   { icon: 'mdi:dumbbell', title: 'Unlimited saved workouts', body: 'Free accounts can save 3.' },
+  { icon: 'mdi:palette-outline', title: 'Colour themes', body: 'Blossom, Blue, and Christmas with falling snow and lights.' },
 ]
 
 // ATHRION's share of each coach sale (api/_coach-fee.js charges it; a test keeps them equal)

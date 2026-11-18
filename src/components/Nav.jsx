@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { useShell, goBack, readSession, SESSION_EVENT, SESSION_LIMIT_MS } from '../lib/shell.js'
 import Brand from './Brand.jsx'
+import { ChristmasLights } from './Festive.jsx'
 
 export const LANDING = 'workout'
 
@@ -42,6 +43,7 @@ export function HeaderBar({ children, label }) {
       <div className="max-w-lg mx-auto px-2 xs:px-3 h-[var(--header-h)] flex items-center gap-1">
         {children}
       </div>
+      <ChristmasLights className="top-full" />
     </header>
   )
 }
@@ -189,7 +191,8 @@ export default function Nav({ page, setPage, session, isPro, isAdmin = false, on
     <>
       <PageHeader page={page} setPage={setPage} session={session} isPro={isPro} onProfileClick={onProfileClick} unread={unread} onBellClick={onBellClick} shell={shell} />
 
-      <div className="fixed bottom-0 left-0 right-0 z-50">
+      {/* data-snow-ledge: where the Christmas theme's snow piles up (Festive.jsx) */}
+      <div data-snow-ledge className="fixed bottom-0 left-0 right-0 z-50">
         {minimised && (
           <div className="max-w-lg mx-auto"><SessionBar session={minimised} onResume={onResume} /></div>
         )}
@@ -214,6 +217,7 @@ export default function Nav({ page, setPage, session, isPro, isAdmin = false, on
             })}
           </div>
         </nav>
+        <ChristmasLights className="top-0" />
       </div>
     </>
   )

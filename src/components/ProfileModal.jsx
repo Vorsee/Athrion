@@ -7,6 +7,7 @@ import { downloadMyData, deleteAccount } from '../lib/account.js'
 import { parseCsv, detectFormat, toWorkouts, importWorkouts, heaviestSet } from '../lib/importWorkouts.js'
 import { Icon } from '@iconify/react'
 import Sheet from './Sheet.jsx'
+import ThemePicker from './ThemePicker.jsx'
 import { Button, Segmented, ListRow, Card, Tag, Skeleton, InlineError } from './ui/index.js'
 import ReminderSettings, { Toggle } from './ReminderSettings.jsx'
 import { readLogRpe, setLogRpe } from '../lib/sets.js'
@@ -351,7 +352,7 @@ function MyTrainer() {
 
 // ── Main modal ────────────────────────────────────────────────────────────────
 
-export default function ProfileModal({ session, profile, isPro, theme, onToggleTheme, onClose, onEdit, onUpgrade, onEditTargets, onOpenCoach, onOpenClients, onProfileChange, initialScreen = 'profile' }) {
+export default function ProfileModal({ session, profile, isPro, theme, onPickTheme, onClose, onEdit, onUpgrade, onEditTargets, onOpenCoach, onOpenClients, onProfileChange, initialScreen = 'profile' }) {
   const [pwState, setPwState] = useState('idle')   // idle | loading | sent | error
   const [screen, setScreen]   = useState(initialScreen) // profile | progress | subscription | import | delete | review
   const [exportState, setExportState] = useState('idle') // idle | loading | error
@@ -432,8 +433,7 @@ export default function ProfileModal({ session, profile, isPro, theme, onToggleT
             {/* ── Appearance ── */}
             <section className="mb-6">
               <h3 className="text-lg leading-[1.3] font-semibold text-ink mb-2">Appearance</h3>
-              <Segmented options={[['dark', 'Dark'], ['light', 'Light']]} value={theme}
-                onChange={t => { if (t !== theme) onToggleTheme?.() }} label="Theme" kind="choice" />
+              <ThemePicker value={theme} isPro={isPro} onPick={t => onPickTheme?.(t)} />
             </section>
 
             {/* ── Workouts ── */}

@@ -2,6 +2,7 @@ import { useEffect, useId, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from '@iconify/react'
 import { useBackHandler } from '../lib/shell.js'
+import { ChristmasLights } from './Festive.jsx'
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
@@ -39,10 +40,11 @@ export default function Sheet({ title, ariaLabel, onClose, children, footer, bod
       style={{ background: 'var(--scrim)' }} onClick={onClose}>
       <div ref={panelRef} role="dialog" aria-modal="true" tabIndex={-1}
         aria-labelledby={title ? titleId : undefined} aria-label={title ? undefined : ariaLabel}
-        className="w-full max-w-lg max-h-[90dvh] flex flex-col bg-overlay border-t border-line rounded-t-3xl outline-none modal-up"
+        className="relative w-full max-w-lg max-h-[90dvh] flex flex-col bg-overlay border-t border-line rounded-t-3xl outline-none modal-up"
         style={{ boxShadow: 'var(--sheet-shadow)' }}
         onClick={e => e.stopPropagation()}>
         <div aria-hidden="true" className="w-10 h-1 rounded-full bg-line-strong mx-auto mt-2.5" />
+        <ChristmasLights style={{ top: -5, left: 28, right: 28 }} skipCenter={34} />
         {title ? (
           <div className="flex items-center justify-between gap-3 pl-5 pr-3 pt-2 pb-2">
             <h2 id={titleId} className="text-lg leading-[1.3] font-semibold text-ink min-w-0">{title}</h2>

@@ -497,7 +497,7 @@ describe('ProfileModal', () => {
     return fetchMock
   }
   const openSubscription = async () => {
-    render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={profile} isPro theme="dark" onToggleTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
+    render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={profile} isPro theme="dark" onPickTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
     await userEvent.click(screen.getByText('ATHRION Pro is active'))
   }
   afterEach(() => vi.unstubAllGlobals())
@@ -550,7 +550,7 @@ describe('ProfileModal', () => {
 
   it('deletes the account only after DELETE is typed, then signs out on this device', async () => {
     const fetchMock = stripeReply({ deleted: true })
-    render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={profile} isPro theme="dark" onToggleTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
+    render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={profile} isPro theme="dark" onPickTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
     await userEvent.click(screen.getByText('Delete account'))
     expect(screen.getByText(/Your Pro subscription ends now/)).toBeInTheDocument()
     const button = screen.getByText('Delete my account').closest('button')
@@ -566,7 +566,7 @@ describe('ProfileModal', () => {
     const saved = { createObjectURL: URL.createObjectURL, revokeObjectURL: URL.revokeObjectURL }
     Object.assign(URL, urls)
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-    render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={profile} isPro={false} theme="dark" onToggleTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
+    render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={profile} isPro={false} theme="dark" onPickTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
     await userEvent.click(screen.getByText('Download my data'))
     await waitFor(() => expect(click).toHaveBeenCalled())
     const blob = urls.createObjectURL.mock.calls[0][0]
@@ -579,12 +579,12 @@ describe('ProfileModal', () => {
   })
 
   it('shows height in cm for people who use kg', () => {
-    render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={{ ...profile, height_cm: 180, weight_unit: 'kg' }} isPro={false} theme="dark" onToggleTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
+    render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={{ ...profile, height_cm: 180, weight_unit: 'kg' }} isPro={false} theme="dark" onPickTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
     expect(screen.getByText('180 cm')).toBeInTheDocument()
     expect(screen.getByText(/Get ATHRION Pro · \$4\.99 a month/)).toBeInTheDocument()
   })
   it('signs out', async () => {
-    render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={profile} isPro={false} theme="dark" onToggleTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
+    render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={profile} isPro={false} theme="dark" onPickTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
     await userEvent.click(screen.getByText('Sign out'))
     expect(sb.supabase.auth.signOut).toHaveBeenCalled()
   })
@@ -594,7 +594,7 @@ describe('ProfileModal', () => {
     // so the next person to sign in sees it and the first user's reminders keep arriving.
     it('signing out clears the saved in-progress workout', async () => {
       localStorage.setItem('athrion_workout', JSON.stringify({ name: 'Secret', startTime: 1 }))
-      render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={profile} isPro={false} theme="dark" onToggleTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
+      render(<P.ProfileModal session={{ name: 'Sam', email: USER.email }} profile={profile} isPro={false} theme="dark" onPickTheme={() => {}} onClose={() => {}} onEdit={() => {}} onUpgrade={() => {}} />)
       await userEvent.click(screen.getByText('Sign out'))
       expect(localStorage.getItem('athrion_workout')).toBeNull()
     })

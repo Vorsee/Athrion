@@ -8,6 +8,8 @@ import Nav, { LANDING, useMinimisedSession } from './components/Nav.jsx'
 import { useShell, onPageBack, pushEntry, replaceEntry, silentBack, dropBackHandlers, setSessionMinimised } from './lib/shell.js'
 import { createCheckoutSession } from './lib/stripe.js'
 import { UnitProvider } from './lib/units.js'
+import { readTheme, saveTheme, shownTheme, themeClasses, applyTheme, isProTheme } from './lib/theme.js'
+import { Snow } from './components/Festive.jsx'
 import HomeScreenPrompt from './components/HomeScreenPrompt.jsx'
 import { PageSkeleton } from './components/ui/States.jsx'
 import { readGuidePick, clearGuidePick } from './lib/guidePlans.js'
@@ -120,7 +122,9 @@ export default function App() {
   const [profile, setProfile]   = useState(undefined) // undefined=loading, null=incomplete, obj=complete
   const [fitnessProfile, setFitnessProfile] = useState(undefined) // undefined=loading, null=not set, obj=loaded
   const [isPro, setIsPro]       = useState(false)
-  const [theme, setTheme]       = useState(() => localStorage.getItem('athrion_theme') || 'dark')
+  const [proKnown, setProKnown] = useState(false) // Pro themes fall back only once the answer is in
+  const [theme, setTheme]       = useState(readTheme)
+  const shown = shownTheme(theme, proKnown ? isPro : undefined)
   const [page, setPage]           = useState('workout')
   const [pendingWorkout, setPendingWorkout] = useState(null)
   const [showProfile, setShowProfile]   = useState(false)
@@ -195,9 +199,7 @@ export default function App() {
   }, [page])
 
   // Theme tokens live on <html> too, so sheets portalled into <body> follow the theme
-  useEffect(() => {
-    document.documentElement.classList.toggle('light', theme === 'light')
-  }, [theme])
+  useEffect(() => { applyTheme(shown) }, [shown])
 
   useEffect(() => {
     if (session) try { localStorage.setItem('athrion_signed_in_before', '1') } catch { /* private mode */ }
@@ -234,7 +236,7 @@ export default function App() {
 
   useEffect(() => {
     if (session === undefined) return // auth not resolved yet
-    if (!session) { setProfile(null); setFitnessProfile(null); setIsPro(false); setMinorConsent(null); return }
+    if (!session) { setProfile(null); setFitnessProfile(null); setIsPro(false); setProKnown(true); setMinorConsent(null); return }
     refreshConsent()
     setProfile(undefined)
     setFitnessProfile(undefined)
@@ -247,6 +249,7 @@ export default function App() {
     fetchSubscriptionStatus()
       .then(setIsPro)
       .catch(() => setIsPro(false))
+      .finally(() => setProKnown(true))
     fetchIsAdmin().then(setIsAdmin).catch(() => setIsAdmin(false))
   }, [session])
 
@@ -348,10 +351,11 @@ export default function App() {
     setGuide(false)
   }
 
-  function toggleTheme() {
-    const next = theme === 'dark' ? 'light' : 'dark'
+  // Pro themes (lib/theme.js) open Get Pro for free accounts
+  function pickTheme(next) {
+    if (isProTheme(next) && !isPro) { goUpgrade(); return }
     setTheme(next)
-    localStorage.setItem('athrion_theme', next)
+    saveTheme(next)
   }
 
   if (parentToken) return (
@@ -465,11 +469,10 @@ export default function App() {
 
   const PageComponent = (!isAdmin && ADMIN_PAGES.includes(page) ? null : PAGES[page]) ?? Workout
 
-  const isLight = theme === 'light'
-
   return (
     <UnitProvider value={profile?.weight_unit === 'kg' ? 'kg' : 'lb'}>
-    <div className={`min-h-dvh bg-canvas text-ink font-dm${isLight ? ' light' : ''}`}>
+    <div className={`min-h-dvh bg-canvas text-ink font-dm ${themeClasses(shown)}`}>
+      <Snow />
       <Nav page={page} setPage={navigate} session={session} isPro={isPro} isAdmin={!!isAdmin} onProfileClick={() => setShowProfile(true)}
         unread={unread} onBellClick={() => setShowInbox(true)}
         minimised={minimised} onResume={resumeWorkout} />
@@ -533,8 +536,8 @@ export default function App() {
             session={session}
             profile={profile}
             isPro={isPro}
-            theme={theme}
-            onToggleTheme={toggleTheme}
+            theme={shown}
+            onPickTheme={pickTheme}
             onClose={() => setShowProfile(false)}
             onEdit={() => { setShowProfile(false); setEditingProfile(true) }}
             onUpgrade={goUpgrade}
