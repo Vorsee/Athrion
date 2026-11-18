@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { Button } from './ui/index.js'
 import Brand from './Brand.jsx'
 import { requestParentConsent, MINOR_LIMITS } from '../lib/parentConsent.js'
 import { signOut } from '../lib/session.js'
+import { readSwimInvite } from '../lib/swim.js'
+import { noteSwimWaiting } from '../lib/swimApi.js'
 
 const INPUT = 'w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-4 py-3 text-base outline-none transition-colors'
 
@@ -18,6 +20,9 @@ export default function ParentGate({ consent, age, onChanged, onBack }) {
   const [err, setErr] = useState('')
   const declined = consent?.status === 'declined'
   const childAge = consent?.child_age ?? age
+  // Opened a swim team's link: the coach sees they're waiting on a parent (039)
+  const swimInvite = readSwimInvite()
+  useEffect(() => { if (swimInvite && consent) noteSwimWaiting(swimInvite).catch(() => {}) }, [swimInvite, consent?.status])
 
   async function send(to) {
     setBusy(true); setErr(''); setSent(false)
@@ -64,6 +69,7 @@ export default function ParentGate({ consent, age, onChanged, onBack }) {
               <Icon icon="mdi:email-fast-outline" width={48} className="mx-auto text-neon-ink" aria-hidden="true" />
               <div className="font-bold text-3xl text-ink leading-tight mt-3">Waiting for your parent</div>
               <p className="text-sm text-ink-2 mt-2">We emailed <span className="font-semibold text-ink break-all">{consent?.parent_email}</span>. Ask them to open it and approve. This screen opens the app once they do.</p>
+              {swimInvite && <p className="text-xs text-muted mt-2">Your swim coach can see your nickname and that you're waiting for a parent's OK.</p>}
             </div>
             {sent && <p role="status" className="text-sm text-neon-ink text-center">Sent again.</p>}
             {err && <p role="alert" className="text-xs text-danger text-center">{err}</p>}

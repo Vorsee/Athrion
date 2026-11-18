@@ -64,3 +64,16 @@ describe('runs for plans and training days', () => {
     expect(firstSport({ logs: [{ kind: 'swim' }, { kind: 'run' }] })).toBe('run')
   })
 })
+
+describe('typed times without a colon (phone number pads have none)', () => {
+  it('reads 3-6 digits as a clock, and 1-2 as minutes, or seconds for a send-off', async () => {
+    const { parseDuration, clockText } = await import('../../src/lib/cardio.js')
+    expect(parseDuration('2830')).toBe(28 * 60 + 30)
+    expect(parseDuration('13015')).toBe(3600 + 30 * 60 + 15)
+    expect(parseDuration('45')).toBe(45 * 60)
+    expect(parseDuration('145', { short: 'seconds' })).toBe(105)
+    expect(parseDuration('90', { short: 'seconds' })).toBe(90)
+    expect(parseDuration('2875')).toBeNull() // 75 seconds isn't a clock
+    expect(clockText('2830')).toBe('28:30')
+  })
+})

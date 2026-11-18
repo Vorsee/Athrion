@@ -6,7 +6,7 @@ import { ProfileForm, Review } from './Coach.jsx'
 import { fetchMyCoach } from '../lib/coachApi.js'
 import {
   fetchClientCode, newClientCode, fetchClients, fetchClientWorkouts, fetchClientWeights, removeClient,
-  fetchAssignmentsFor, assignWorkout, deleteAssignment, trainerLink,
+  fetchAssignmentsFor, assignWorkout, deleteAssignment, trainerLink, fetchTemplates, saveTemplate, deleteTemplate,
 } from '../lib/clientsApi.js'
 import { EXERCISES, MUSCLES, getExerciseIcon, todayKey } from '../lib/data.js'
 import { GOAL_LABELS } from '../lib/nutrition.js'
@@ -31,7 +31,8 @@ async function share(url, text) {
 
 // The coach's clients (031): invite people with a link, see each one's training, weigh-ins and
 // goal, and send them workouts. Needs an approved coach application, the same one as the shop.
-export default function Clients() {
+// coachPlan (039): workout templates, and sending one workout to several clients at once.
+export default function Clients({ coachPlan = false, onCoachPlan }) {
   const [coach, setCoach] = useState(undefined)
   const [editing, setEditing] = useState(false)
   const [error, setError] = useState('')
@@ -48,10 +49,10 @@ export default function Clients() {
     </div>
   )
   if (coach.status !== 'approved') return <div className="py-4 space-y-4 slide-up"><Review coach={coach} onEdit={() => setEditing(true)} /></div>
-  return <ClientList />
+  return <ClientList coachPlan={coachPlan} onCoachPlan={onCoachPlan} />
 }
 
-function ClientList() {
+function ClientList({ coachPlan, onCoachPlan }) {
   const [clients, setClients] = useState(null)
   const [code, setCode] = useState(null)
   const [open, setOpen] = useState(null)
@@ -64,7 +65,7 @@ function ClientList() {
   useEffect(load, [])
   useBackHandler(!!open, () => { setOpen(null); load() }, 'Clients', open?.name ?? '')
 
-  if (open) return <ClientDetail client={open} onRemoved={() => { setOpen(null); load() }} />
+  if (open) return <ClientDetail client={open} clients={clients ?? []} coachPlan={coachPlan} onCoachPlan={onCoachPlan} onRemoved={() => { setOpen(null); load() }} />
 
   async function invite() {
     if (!code) return
@@ -87,6 +88,7 @@ function ClientList() {
         </div>
       </Card>
       {err && <InlineError>{err}</InlineError>}
+      <Templates coachPlan={coachPlan} onCoachPlan={onCoachPlan} />
       {clients === null ? <SkeletonRows rows={3} label="Loading clients" />
         : clients.length === 0 ? <EmptyState icon="mdi:account-plus-outline" title="No clients yet">Send your invite link to the people you coach.</EmptyState>
         : (
@@ -111,7 +113,7 @@ function ClientList() {
   )
 }
 
-function ClientDetail({ client: c, onRemoved }) {
+function ClientDetail({ client: c, clients = [], coachPlan, onCoachPlan, onRemoved }) {
   const { fmt, unit } = useUnit()
   const [workouts, setWorkouts] = useState(null)
   const [weights, setWeights] = useState([])
@@ -217,17 +219,62 @@ function ClientDetail({ client: c, onRemoved }) {
 
       <Button variant="ghost" full icon="mdi:account-remove-outline" onClick={remove} className="text-danger hover:text-danger">Stop coaching {c.name}</Button>
 
-      {assigning && <AssignSheet client={c} onClose={() => setAssigning(false)} onSaved={() => { setAssigning(false); loadAssigned() }} />}
+      {assigning && <AssignSheet client={c} clients={clients} coachPlan={coachPlan} onCoachPlan={onCoachPlan} onClose={() => setAssigning(false)} onSaved={() => { setAssigning(false); loadAssigned() }} />}
     </div>
   )
 }
 
 // A workout for the client: a title, an optional day and note, then exercises with sets and reps
-function AssignSheet({ client, onClose, onSaved }) {
+// The coach's saved workouts (039): listed on Clients, each one removable; they're used from
+// the assign sheet. Without the coach plan, a line saying where they come from.
+function Templates({ coachPlan, onCoachPlan }) {
+  const [list, setList] = useState(null)
+  useEffect(() => { if (coachPlan) fetchTemplates().then(setList).catch(() => setList([])) }, [coachPlan])
+  if (!coachPlan && !onCoachPlan) return null
+  if (!coachPlan) return (
+    <div className="flex flex-wrap items-center gap-3 bg-surface border border-line rounded-2xl px-4 py-3">
+      <p className="grow basis-0 min-w-[12rem] text-sm text-ink-2">Save workouts as templates and send one to many clients at once with the coach and club plan.</p>
+      <Button size="sm" variant="secondary" onClick={onCoachPlan}>See the plan</Button>
+    </div>
+  )
+  if (!list?.length) return null
+  async function remove(t) {
+    if (!window.confirm(`Delete the template "${t.title}"? Workouts already sent stay.`)) return
+    await deleteTemplate(t.id).catch(() => {})
+    setList(l => l.filter(x => x.id !== t.id))
+  }
+  return (
+    <section>
+      <SectionTitle>Templates</SectionTitle>
+      <div className="bg-surface border border-line rounded-2xl p-1">
+        {list.map(t => (
+          <div key={t.id} className="flex items-center gap-2 pr-1">
+            <div className="grow min-w-0"><ListRow icon="mdi:content-copy" title={t.title} meta={`${t.exercises.length} exercise${t.exercises.length === 1 ? '' : 's'}`} /></div>
+            <IconButton icon="mdi:trash-can-outline" tone="danger" label={`Delete template ${t.title}`} onClick={() => remove(t)} />
+          </div>
+        ))}
+      </div>
+      <p className="text-xs text-muted mt-2">Open a client and tap Send a workout to use one.</p>
+    </section>
+  )
+}
+
+const cleanExercises = list => list.map(e => ({ name: e.name, sets: Math.min(10, Math.max(1, parseInt(e.sets) || 3)), reps: String(e.reps || '8-12').slice(0, 20), restSeconds: Math.min(600, Math.max(15, parseInt(e.restSeconds) || 90)), ...(String(e.note ?? '').trim() && { note: String(e.note).trim().slice(0, 200) }) }))
+
+function AssignSheet({ client, clients = [], coachPlan = false, onCoachPlan, onClose, onSaved }) {
   const [title, setTitle] = useState('')
   const [day, setDay] = useState('')
   const [note, setNote] = useState('')
   const [list, setList] = useState([]) // [{ name, sets, reps, restSeconds, note }]
+  const [templates, setTemplates] = useState([])
+  const [asTemplate, setAsTemplate] = useState(false)
+  const [also, setAlso] = useState([]) // more clients to send it to (coach plan)
+  const others = clients.filter(x => x.client_id !== client.client_id)
+  useEffect(() => { if (coachPlan) fetchTemplates().then(setTemplates).catch(() => {}) }, [coachPlan])
+  function applyTemplate(t) {
+    setTitle(t.title); setNote(t.note || '')
+    setList(t.exercises.map(e => ({ name: e.name, sets: e.sets ?? 3, reps: e.reps ?? '8-12', restSeconds: e.restSeconds ?? 90, note: e.note ?? '' })))
+  }
   const [search, setSearch] = useState('')
   const [muscle, setMuscle] = useState('All')
   const [busy, setBusy] = useState(false)
@@ -241,11 +288,10 @@ function AssignSheet({ client, onClose, onSaved }) {
     if (title.trim().length < 2) return setErr('Give the workout a name.')
     if (!list.length) return setErr('Add at least one exercise.')
     setBusy(true)
+    const exercises = cleanExercises(list)
     try {
-      await assignWorkout(client.client_id, {
-        title, day, note,
-        exercises: list.map(e => ({ name: e.name, sets: Math.min(10, Math.max(1, parseInt(e.sets) || 3)), reps: String(e.reps || '8-12').slice(0, 20), restSeconds: Math.min(600, Math.max(15, parseInt(e.restSeconds) || 90)), ...(e.note.trim() && { note: e.note.trim().slice(0, 200) }) })),
-      })
+      for (const id of [client.client_id, ...(coachPlan ? also : [])]) await assignWorkout(id, { title, day, note, exercises })
+      if (coachPlan && asTemplate) await saveTemplate({ title, note, exercises })
       onSaved()
     } catch (e) { setErr(e.message); setBusy(false) }
   }
@@ -253,6 +299,17 @@ function AssignSheet({ client, onClose, onSaved }) {
   return (
     <Sheet title={`Workout for ${client.name}`} onClose={onClose}>
       <div className="space-y-4">
+        {templates.length > 0 && (
+          <div>
+            <span className="text-xs text-muted block mb-1.5">Start from a template</span>
+            <div className="flex flex-wrap gap-1.5">
+              {templates.map(t => (
+                <button key={t.id} type="button" onClick={() => applyTemplate(t)}
+                  className="press min-h-[36px] text-xs px-3 rounded-full border bg-raised text-ink-2 border-line hover:border-line-strong">{t.title}</button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 10rem), 1fr))' }}>
           <label className="block">
             <span className="text-xs text-muted block mb-1">Name</span>
@@ -306,8 +363,33 @@ function AssignSheet({ client, onClose, onSaved }) {
           </div>
         </div>
 
+        {coachPlan ? (
+          <div className="space-y-3">
+            {others.length > 0 && (
+              <div>
+                <span className="text-xs text-muted block mb-1.5">Also send to</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {others.map(o => {
+                    const on = also.includes(o.client_id)
+                    return (
+                      <button key={o.client_id} type="button" aria-pressed={on} onClick={() => setAlso(a => (on ? a.filter(x => x !== o.client_id) : [...a, o.client_id]))}
+                        className={`press min-h-[36px] text-xs px-3 rounded-full border ${on ? 'bg-neon text-on-neon border-neon font-semibold' : 'bg-raised text-ink-2 border-line'}`}>{o.name}</button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+            <label className="flex items-center gap-2 text-sm text-ink-2">
+              <input type="checkbox" checked={asTemplate} onChange={e => setAsTemplate(e.target.checked)} className="w-5 h-5 accent-current" />
+              Save as a template too
+            </label>
+          </div>
+        ) : onCoachPlan && (
+          <p className="text-xs text-muted">Templates and sending to several clients at once come with the <button type="button" onClick={onCoachPlan} className="underline underline-offset-2 text-ink-2">coach and club plan</button>.</p>
+        )}
+
         {err && <p role="alert" className="text-xs text-danger">{err}</p>}
-        <Button full icon="mdi:send-outline" onClick={save} disabled={busy}>{busy ? 'Sending...' : 'Send to client'}</Button>
+        <Button full icon="mdi:send-outline" onClick={save} disabled={busy}>{busy ? 'Sending...' : also.length ? `Send to ${also.length + 1} clients` : 'Send to client'}</Button>
       </div>
     </Sheet>
   )

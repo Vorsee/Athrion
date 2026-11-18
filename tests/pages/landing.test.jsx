@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { sb } from '../helpers/supabaseMock.js'
-import { PLANS, money, annualPerMonth, annualSavingPct } from '../../src/lib/pricing.js'
+import { PLANS, COACH_PLANS, COACH_PLAN_ON_SALE, money, annualPerMonth, annualSavingPct } from '../../src/lib/pricing.js'
 import { POINT_RULES } from '../../src/lib/points.js'
 
 vi.mock('../../src/lib/supabase.js', () => ({ supabase: sb.supabase }))
@@ -50,6 +50,6 @@ describe('Landing', () => {
     const html = readFileSync('index.html', 'utf8')
     const ld = JSON.parse(html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1])
     const prices = ld.offers.map(o => Number(o.price))
-    expect(prices).toEqual([0, PLANS.monthly.price, PLANS.annual.price])
+    expect(prices).toEqual([0, PLANS.monthly.price, PLANS.annual.price, ...(COACH_PLAN_ON_SALE ? [COACH_PLANS.coach_monthly.price, COACH_PLANS.coach_annual.price] : [])])
   })
 })

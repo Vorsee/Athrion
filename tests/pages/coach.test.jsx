@@ -112,8 +112,64 @@ describe('Train together: sets one by one', () => {
     current = room(['Front Squat'])
     expect(await screen.findByText('Set 1 of 3', {}, { timeout: 5000 })).toBeInTheDocument() // the next poll brings the pick
     expect(screen.getAllByText('Front Squat').length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: 'Skip this exercise' })).toBeInTheDocument()
-  }, 10000)
+    expect(screen.getByRole('button', { name: 'Skip it, just for me' })).toBeInTheDocument()
+
+    // A set logged, then the host swaps the exercise: mine stays as I did it
+    await userEvent.type(screen.getByLabelText('Reps'), '8')
+    await userEvent.click(screen.getByRole('button', { name: 'Log set 1' }))
+    current = room(['Deadlift'])
+    await new Promise(r => setTimeout(r, 3300)) // the next poll
+    expect(screen.queryByText('Deadlift')).toBeNull()
+    expect(screen.getAllByText(/Front Squat/).length).toBeGreaterThan(0)
+  }, 15000)
+
+  it('edits a set already logged in the room, and asks before finishing', async () => {
+    const plan = [{ name: 'Front Squat', sets: [{ reps: 5, rest: 0 }, { reps: 5, rest: 0 }] }]
+    sb.set('group_sessions', { data: { id: 's1', code: 'ABC234', host_id: USER.id, status: 'active', plan, exercises: ['Front Squat'], total_sets: 2, rest_secs: 0 }, error: null })
+    localStorage.setItem('athrion_group_session_state', JSON.stringify({ sessionId: 's1', screen: 'training', isHost: true, exIdx: 0, setIdx: 0, startTime: Date.now() }))
+    sb.set('group_sets', q => {
+      const row = sb.op(q, 'insert')?.[0]
+      if (row) return { data: { ...row, id: 'r1', logged_at: new Date().toISOString() }, error: null }
+      const patch = sb.op(q, 'update')?.[0]
+      if (patch) return { data: { id: 'r1', session_id: 's1', user_id: USER.id, exercise: 'Front Squat', set_num: 1, ...patch }, error: null }
+      return { data: [], error: null }
+    })
+    render(<Group session={{ name: 'Sam' }} intent={{ tab: 'rooms' }} />)
+    await userEvent.type(await screen.findByLabelText('Reps'), '5')
+    await userEvent.click(screen.getByRole('button', { name: 'Log set 1' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Your sets/ }))
+    await vi.waitFor(() => expect(screen.queryByText('waiting')).toBeNull()) // sent
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Front Squat, set 1' }))
+    const sheet = await screen.findByRole('dialog', { name: 'Front Squat, set 1' })
+    const reps = within(sheet).getByLabelText('Reps')
+    await userEvent.clear(reps); await userEvent.type(reps, '6')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save set' }))
+    await vi.waitFor(() => {
+      const patch = sb.queriesFor('group_sets').map(q => sb.op(q, 'update')?.[0]).find(Boolean)
+      expect(patch).toEqual({ weight: 0, reps: 6 })
+    })
+
+    await userEvent.click(screen.getAllByRole('button', { name: /End workout early/ }).at(-1))
+    expect(await screen.findByRole('dialog', { name: 'Finish the workout?' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Keep going' }))
+    expect(screen.queryByRole('dialog', { name: 'Finish the workout?' })).toBeNull()
+  })
+
+  it('free workout: the host moves the room on without logging a set', async () => {
+    render(<Group session={{ name: 'Sam' }} intent={{ tab: 'rooms' }} />)
+    await userEvent.click(screen.getByText('Create a room'))
+    await screen.findByText('Room code')
+    await userEvent.click(screen.getByRole('radio', { name: 'Free workout' }))
+    await userEvent.click(screen.getByText('Start workout'))
+    await userEvent.type(await screen.findByPlaceholderText('Search exercises'), 'Front Squat')
+    await userEvent.click(screen.getByRole('button', { name: 'Go: Front Squat' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Next exercise' }))
+    // On to the picker for the second pick; Front Squat stays in the room's list
+    expect(await screen.findByRole('heading', { name: 'Next exercise' })).toBeInTheDocument()
+    await userEvent.type(screen.getByPlaceholderText('Search exercises'), 'Deadlift')
+    await userEvent.click(screen.getByRole('button', { name: 'Go: Deadlift' }))
+    await vi.waitFor(() => expect(updates('group_sessions').at(-1).plan[0].picks).toEqual(['Front Squat', 'Deadlift']))
+  })
 
   it('keeps a set logged without signal and sends it once back online', async () => {
     const plan = [{ name: 'Front Squat', sets: [{ reps: 5, rest: 60 }, { reps: 5, rest: 60 }] }]

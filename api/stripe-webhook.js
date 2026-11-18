@@ -8,6 +8,22 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
+// The coach and club plan's prices (039); anything else is Pro
+export function tierOf(sub) {
+  const coach = [process.env.STRIPE_PRICE_COACH_MONTHLY, process.env.STRIPE_PRICE_COACH_ANNUAL].filter(Boolean)
+  return (sub?.items?.data ?? []).some(i => coach.includes(i.price?.id)) ? 'coach' : 'pro'
+}
+
+// Writes that carry tier: before 039 runs the column isn't there, so try once without it
+async function withTier(write, fields) {
+  const { error } = await write(fields)
+  if (error && /tier/.test(error.message || '')) {
+    const { tier, ...rest } = fields
+    return write(rest)
+  }
+  return { error }
+}
+
 async function getRawBody(req) {
   const chunks = []
   for await (const chunk of req) chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
@@ -68,13 +84,14 @@ export default async function handler(req, res) {
     const session = data.object
     const userId = session.client_reference_id || session.metadata?.user_id
     if (userId) {
-      await supabase.from('subscriptions').upsert({
+      await withTier(f => supabase.from('subscriptions').upsert(f, { onConflict: 'user_id' }), {
         user_id: userId,
         status: 'pro',
+        tier: String(session.metadata?.plan ?? '').startsWith('coach') ? 'coach' : 'pro',
         stripe_customer_id: session.customer,
         stripe_subscription_id: session.subscription,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id' })
+      })
     }
   }
 
@@ -94,16 +111,17 @@ export default async function handler(req, res) {
       row = byUser ?? (await supabase.from('subscriptions').select('user_id, stripe_subscription_id').eq('stripe_customer_id', sub.customer).maybeSingle()).data
       if (row?.stripe_subscription_id) row = null
       if (row) {
-        await supabase.from('subscriptions')
-          .update({ status, stripe_subscription_id: sub.id, updated_at: new Date().toISOString() })
-          .eq('user_id', row.user_id)
+        const uid = row.user_id
+        await withTier(f => supabase.from('subscriptions').update(f).eq('user_id', uid),
+          { status, tier: tierOf(sub), stripe_subscription_id: sub.id, updated_at: new Date().toISOString() })
         row = null // done
       }
     }
     if (row) {
-      await supabase.from('subscriptions')
-        .update({ status, updated_at: new Date().toISOString() })
-        .eq('user_id', row.user_id)
+      const uid = row.user_id
+      // A plan switch (Pro to coach, or back) arrives here too, with the new price
+      await withTier(f => supabase.from('subscriptions').update(f).eq('user_id', uid),
+        { status, tier: tierOf(sub), updated_at: new Date().toISOString() })
     }
   }
 

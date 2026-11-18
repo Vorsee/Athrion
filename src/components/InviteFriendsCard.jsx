@@ -49,7 +49,7 @@ export default function InviteFriendsCard({ onOpenGroup }) {
       </div>
       <div className="mt-4 grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 9rem), 1fr))' }}>
         <Button icon={copied ? 'mdi:check' : 'mdi:share-variant-outline'} onClick={share}>{copied ? 'Link copied' : 'Share invite link'}</Button>
-        {onOpenGroup && <Button variant="secondary" icon="mdi:account-group-outline" onClick={onOpenGroup}>Open Together</Button>}
+        {onOpenGroup && <Button variant="secondary" icon="mdi:account-group-outline" onClick={onOpenGroup}>Open Friends</Button>}
       </div>
     </Card>
   )

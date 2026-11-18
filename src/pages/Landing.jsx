@@ -1,13 +1,16 @@
 import { Icon } from '@iconify/react'
 import { LandingReviews } from '../components/Reviews.jsx'
 import { Button } from '../components/ui/index.js'
-import { PLANS, PRO_FEATURES, TRIAL_DAYS, FREE_WORKOUT_LIMIT, money, annualPerMonth, annualSavingPct } from '../lib/pricing.js'
+import { PLANS, COACH_PLANS, PRO_FEATURES, COACH_FEATURES, COACH_ROOM_SIZE, COACH_PLAN_ON_SALE, TRIAL_DAYS, FREE_WORKOUT_LIMIT, money, annualPerMonth, annualSavingPct } from '../lib/pricing.js'
+import { ROOM_SIZE } from '../lib/groupApi.js'
 import { POINT_RULES, LEVELS, PRIZE_PLACES } from '../lib/points.js'
 import Brand from '../components/Brand.jsx'
 import FriendsWorkoutDemo from '../components/FriendsWorkoutDemo.jsx'
 import LeaderboardDemo from '../components/LeaderboardDemo.jsx'
 import { SwimDemo, RunDemo } from '../components/CardioDemo.jsx'
 import { PlanDemo, ScanDemo } from '../components/PlanScanDemo.jsx'
+import ThemeDemo from '../components/ThemeDemo.jsx'
+import { ChristmasLights } from '../components/Festive.jsx'
 
 const FREE = ['Live rooms with your friends', 'Friends and the monthly leaderboard', 'A starter workout for your goal', 'Workout log with PRs', 'Calorie logging, barcode and a food library', 'Progress and weight tracking', 'Swim and run logs, swim teams']
 
@@ -15,7 +18,8 @@ const FREE = ['Live rooms with your friends', 'Friends and the monthly leaderboa
 export default function Landing({ onCreateAccount, onSignIn }) {
   return (
     <div className="min-h-dvh bg-canvas text-ink font-dm pt-safe pb-safe overflow-x-clip">
-      <header className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
+      <header className="relative max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
+        <ChristmasLights className="top-full" />
         <Brand />
         <nav aria-label="On this page" className="ml-auto mr-2 hidden sm:flex items-center">
           {[['#how', 'How it works'], ['#pricing', 'Pricing'], ['#questions', 'Questions']].map(([href, label]) => (
@@ -54,6 +58,8 @@ export default function Landing({ onCreateAccount, onSignIn }) {
 
         <PlanAndScan onStart={onCreateAccount} />
 
+        <Themes />
+
         {/* Pricing */}
         <section id="pricing" className="max-w-5xl mx-auto px-4 pb-20 scroll-mt-4" aria-labelledby="pricing-title">
           <h2 id="pricing-title" className="font-bold text-4xl xs:text-5xl leading-[1.05] tracking-tight">Free to start. <span className="text-neon-ink">Pro</span> when you want more.</h2>
@@ -65,7 +71,7 @@ export default function Landing({ onCreateAccount, onSignIn }) {
               <ul className="mt-5 space-y-2.5">
                 {FREE.map(f => <Check key={f}>{f}</Check>)}
               </ul>
-              <p className="text-xs text-muted mt-5">Free accounts save up to {FREE_WORKOUT_LIMIT} workouts and get one photo scan a day. Rooms and friends have no limit.</p>
+              <p className="text-xs text-muted mt-5">Free accounts save up to {FREE_WORKOUT_LIMIT} workouts and get one photo scan a day. Open as many rooms as you like, up to {ROOM_SIZE} people in each, and add as many friends.</p>
             </div>
             <div className="bg-surface border border-neon-stroke/40 rounded-2xl p-6">
               <div className="flex items-center justify-between gap-2">
@@ -88,6 +94,21 @@ export default function Landing({ onCreateAccount, onSignIn }) {
               <Button full onClick={onCreateAccount} className="mt-5">Start free, try Pro later</Button>
             </div>
           </div>
+          {/* The coach and club plan (039): for whoever runs the group, once it's on sale */}
+          {COACH_PLAN_ON_SALE && <div className="bg-surface border border-line rounded-2xl p-6 mt-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <div className="font-semibold text-lg">Coach and club</div>
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <span className="font-bold text-2xl">{money(COACH_PLANS.coach_monthly.price)}</span>
+                <span className="text-sm text-muted">a month, or {money(COACH_PLANS.coach_annual.price)} a year</span>
+              </div>
+            </div>
+            <p className="text-sm text-ink-2 mt-2">For trainers, coaches and anyone who runs a group. The people in your club and rooms stay free.</p>
+            <ul className="mt-4 grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 14rem), 1fr))' }}>
+              {COACH_FEATURES.map(f => <Check key={f.title}>{f.title}</Check>)}
+            </ul>
+            <p className="text-xs text-muted mt-4">The same {TRIAL_DAYS}-day free trial for first-time subscribers. Already on Pro? Switch in You, then Coaching; you pay the difference by the day.</p>
+          </div>}
         </section>
 
         {/* Swim and run */}
@@ -360,6 +381,29 @@ function PlanAndScan({ onStart }) {
   )
 }
 
+// Pro colour themes: the scene fades through each one on a drawn Train screen
+function Themes() {
+  return (
+    <section className="max-w-5xl mx-auto px-4 pb-20" aria-labelledby="themes-title">
+      <div className="grid gap-10 md:grid-cols-2 md:items-center">
+        <div>
+          <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-neon-ink border border-neon-stroke/30 rounded-full px-3 py-1">
+            <Icon icon="mdi:palette-outline" width={18} aria-hidden="true" />Colour themes
+          </span>
+          <h2 id="themes-title" className="font-bold text-4xl xs:text-5xl leading-[1.05] tracking-tight mt-4">
+            Make it <span className="text-neon-ink">yours</span>.
+          </h2>
+          <p className="text-lg text-ink-2 mt-4">
+            Dark, Light and the seasonal Christmas theme, with lights along the top and snow piling up on your tabs, are free. Pro adds Blossom, Blue and Mono.
+            Switch any time in You, then Appearance.
+          </p>
+        </div>
+        <ThemeDemo />
+      </div>
+    </section>
+  )
+}
+
 const TRUST = [
   ['mdi:eye-off-outline', 'No third-party trackers'],
   ['mdi:download-outline', 'Download or delete your data'],
@@ -404,7 +448,7 @@ function InstallAndTrust() {
 }
 
 export const FAQ = [
-  ['Do my friends need Pro to train with me?', 'No. Rooms, friends and the leaderboard are free for everyone, with no limit on rooms.'],
+  ['Do my friends need Pro to train with me?', `No. Rooms, friends and the leaderboard are free for everyone. Open as many rooms as you like; each holds up to ${ROOM_SIZE} people${COACH_PLAN_ON_SALE ? `, or ${COACH_ROOM_SIZE} when the host has the coach and club plan` : ''}.`],
   ['Do we have to be at the same gym?', 'No. Each of you trains on your own phone, wherever you are, and every set shows up in the room as it happens.'],
   ['What do my friends see?', 'Your nickname, monthly points, workout days and level. In a room you share, they also see the sets you log there. Your weight, meals and body stats stay private. You can hide from the Everyone board and still show up for friends.'],
   ['Is it really free?', `Yes. The workout log, a starter workout for your goal, calorie logging with barcode and the food library, progress and weight tracking, swim and run logs, swim teams and training with friends are free. Pro adds the coaching plan, the AI meal plan, calorie targets that follow your weight, unlimited photo scans and unlimited saved workouts.`],

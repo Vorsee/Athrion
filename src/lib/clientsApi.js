@@ -46,6 +46,20 @@ export async function assignWorkout(clientId, { title, day = null, note = '', ex
 }
 export const deleteAssignment = async id => must(await supabase.from('coach_assignments').delete().eq('id', id))
 
+// Workout templates (039, the coach and club plan): saved once, sent to any client.
+// Before 039 runs the table is missing: no templates, nothing to show.
+export async function fetchTemplates() {
+  const { data, error } = await supabase.from('coach_templates').select('*').order('created_at', { ascending: false }).limit(100)
+  if (error) { if (['42P01', 'PGRST205'].includes(error.code)) return []; throw error }
+  return data ?? []
+}
+export async function saveTemplate({ title, note = '', exercises }) {
+  const { data: { user } } = await supabase.auth.getUser()
+  return must(await supabase.from('coach_templates')
+    .insert({ coach_id: user.id, title: title.trim(), note: note.trim(), exercises }).select().single())
+}
+export const deleteTemplate = async id => must(await supabase.from('coach_templates').delete().eq('id', id))
+
 // ── Client ──
 export const trainerByCode = async code => one(must(await supabase.rpc('trainer_by_code', { p_code: code })))
 export const joinTrainer = async code => must(await supabase.rpc('join_trainer', { p_code: code }))

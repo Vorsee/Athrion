@@ -14,13 +14,13 @@ import {
   startGroupSession,
   endGroupSession,
   fetchParticipants,
-  fetchGroupSets,
+  fetchGroupSets, updateGroupSet,
   logGroupSet,
   subscribeToGroupSession,
   currentUserId,
   removeRoomMember,
   leaveGroupSession,
-  ROOM_SIZE,
+  ROOM_SIZE, roomSize,
   REACTIONS,
   sendReaction,
   fetchReactions,
@@ -30,11 +30,12 @@ import {
   leaveNextSession,
 } from '../lib/groupApi.js'
 import { standings, mergeSets } from '../lib/groupStandings.js'
-import { newClientId, queueSet, loadQueued, flushQueued, pendingRow } from '../lib/roomQueue.js'
+import { newClientId, queueSet, loadQueued, flushQueued, pendingRow, editQueued, isNetworkError } from '../lib/roomQueue.js'
 import { roomUrl, roomShareText } from '../lib/roomLink.js'
 import { shareLink } from '../lib/shopLink.js'
 import PersonSafetySheet from '../components/PersonSafetySheet.jsx'
 import ShareSheet from '../components/ShareSheet.jsx'
+import Sheet from '../components/Sheet.jsx'
 import { cardContent } from '../lib/shareCard.js'
 import { bestSetEach, beatItRows } from '../lib/roomSummary.js'
 import { planFrom, makeSets, totalSets as countSets, setsDone, restAfter, restLabel, setsSummary, REST_OPTIONS, MAX_SETS, freePlan, freeRoom, freePicks, FREE_SET_OPTIONS, FREE_REST_OPTIONS } from '../lib/groupPlan.js'
@@ -61,12 +62,12 @@ function buildExerciseLeaderboard(allSets, exerciseName) {
 // Main component
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TABS = [['rooms', 'Rooms'], ['friends', 'Friends'], ['ranks', 'Leaderboard']]
+const TABS = [['rooms', 'Rooms'], ['friends', 'My friends'], ['ranks', 'Leaderboard']]
 const SESSION_SCREENS = ['training', 'rest', 'picker']
 
 // intent: { tab, invite } from App, e.g. after opening an athrion.app/add/<nickname> link
 // isMinor: an account under 16 (032): no rooms or friends (the server refuses them too)
-export default function Group({ session, intent, onIntentDone, isMinor = false }) {
+export default function Group({ session, intent, onIntentDone, isMinor = false, coachPlan = false, onCoachPlan }) {
   const { toLb } = useUnit()
   const [screen, setScreen] = useState('home')
   const [joinCode, setJoinCode] = useState('')
@@ -98,6 +99,7 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
   const [me, setMe] = useState(undefined) // undefined = loading, null = no nickname yet
   const [editingNick, setEditingNick] = useState(false)
   const [invite, setInvite] = useState(intent?.invite || null)
+  const [clubInvite, setClubInvite] = useState(intent?.club || null) // a /club/<code> link (039)
   // The name a room was joined with stays fixed for that room, even if the nickname changes
   const [roomName, setRoomName] = useState(null)
   const [myId, setMyId] = useState(null)
@@ -107,6 +109,7 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
   // Read at save time, so a set that arrived after a timer started still counts
   const allSetsRef = useRef(allSets)
   allSetsRef.current = allSets
+  const loggedRef = useRef(new Set()) // exercises I've logged a set of here, sent or still queued
   const flushing = useRef(null)
   // Reactions (037): null before it runs (no buttons then)
   const [reactions, setReactions] = useState([])
@@ -142,6 +145,7 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
   useEffect(() => { currentUserId().then(setMyId).catch(() => {}) }, [])
   useEffect(() => {
     if (intent?.tab) setTab(intent.tab)
+    if (intent?.club) setClubInvite(intent.club)
     if (intent?.invite) setInvite(intent.invite)
     else if (intent && !intent.join && !intent.host) onIntentDone?.() // a tab-only intent is used up once applied
   }, [intent])
@@ -169,7 +173,12 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
     setFree(fr)
     if (!fr) return setPlan(planFrom(sess))
     const picked = freePicks(sess.plan)
-    setPlan(prev => (picked.length >= prev.length ? picked : prev))
+    setPlan(prev => {
+      if (picked.length < prev.length) return prev
+      // The host swapped an exercise I've already logged a set of: mine stays as I did it
+      const mine = new Set([...loggedRef.current, ...(allSetsRef.current ?? []).filter(s => s.user_id === myIdRef.current).map(s => s.exercise)])
+      return picked.map((e, i) => (prev[i] && prev[i].name !== e.name && mine.has(prev[i].name) ? prev[i] : e))
+    })
   }
   // During the workout only a free room changes: the host's next pick. The host's own read
   // waits until their save has landed.
@@ -408,10 +417,10 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
     goScreen(next < plan.length ? 'training' : 'picker')
   }
 
-  // Training screen's button in a free room: the host changes an exercise not started yet;
-  // anyone else (or after a set) moves on to the next one
-  function leaveExercise() {
-    toPicker({ replace: isHost && setIdx === 0 })
+  // Training screen's buttons in a free room: the host changes an exercise not started yet
+  // (change), or moves the room on to the next pick; anyone else skips it, just for them
+  function leaveExercise(change = false) {
+    toPicker({ replace: change && isHost && setIdx === 0 })
   }
 
   // Only the host picks; the pick is saved with the room and everyone else follows it
@@ -513,6 +522,7 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
     const w = toLb(parseFloat(weight || '0')) // typed in the person's unit, stored in lb; 0 for bodyweight
     const r = parseInt(reps)
     if (!(w >= 0) || !(r >= 1) || !groupSession?.id) return
+    if (plan[exIdx]?.name) loggedRef.current.add(plan[exIdx].name)
     const set = {
       sessionId: groupSession.id, displayName, exercise: plan[exIdx]?.name, setNum: setIdx + 1,
       weight: w, reps: r, clientId: newClientId(), loggedAt: new Date().toISOString(),
@@ -599,8 +609,20 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
     <PersonSafetySheet person={safety} sessionId={groupSession?.id} onClose={() => setSafety(null)}
       onBlocked={p => setParticipants(prev => (isHost ? prev.filter(x => x.user_id !== p.id) : prev))} />
   )
+  // One of my sets, changed: shown at once; a queued one changes in the queue, a sent one on the
+  // server (put back if the server says no)
+  async function editSet(set, patch) {
+    setAllSets(prev => prev.map(s => (s.id === set.id ? { ...s, ...patch } : s)))
+    if (set.pending) return editQueued(set.client_id, patch)
+    try { await updateGroupSet(set, patch) } catch (e) {
+      setAllSets(prev => prev.map(s => (s.id === set.id ? set : s)))
+      throw new Error(isNetworkError(e) ? 'No signal: try again in a moment.' : (e.message || "Couldn't change that set."))
+    }
+  }
+
   const feed = (
     <>
+      <MySets sets={allSets.filter(s => s.user_id === myId && s.session_id === groupSession?.id)} onEdit={editSet} />
       <PartnerFeed sets={allSets} reactions={reactions} myId={myId} buzz={buzz} onToggleBuzz={toggleBuzz}
         onReact={react} onPerson={setSafety} />
       {toast && <ReactionToast toast={toast} />}
@@ -630,6 +652,7 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
           onJoin={handleJoin}
           nickname={me?.nickname}
           onTab={pickTab}
+          seatsMax={coachPlan ? 12 : ROOM_SIZE}
           onOpenNext={n => {
             if (n.room_code) { setJoinCode(n.room_code); return handleJoin(n.room_code) }
             const fr = freeRoom(n.plan)
@@ -642,7 +665,8 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
         <NicknameCard current={me?.nickname} onSaved={m => { setMe(m); setEditingNick(false) }}
           onCancel={me ? () => setEditingNick(false) : null} />
       ) : tab === 'ranks' ? (
-        <LeaderboardTab me={me} onMeChange={setMe} onAddFriends={() => pickTab('friends')} minor={isMinor} />
+        <LeaderboardTab me={me} onMeChange={setMe} onAddFriends={() => pickTab('friends')} minor={isMinor}
+          coachPlan={coachPlan} onCoachPlan={onCoachPlan} clubInvite={clubInvite} onClubInviteDone={() => setClubInvite(null)} />
       ) : (
         <FriendsTab me={me} invite={invite} onInviteDone={inviteDone} onEditNickname={() => setEditingNick(true)}
           onTrainNow={() => handleCreate({ share: true })} />
@@ -862,7 +886,7 @@ function WaitingNote({ count }) {
 // Home
 // ─────────────────────────────────────────────────────────────────────────────
 
-function HomeScreen({ joinCode, setJoinCode, joinError, startOwn, loading, onCreate, onJoin, nickname, onTab, onOpenNext }) {
+function HomeScreen({ joinCode, setJoinCode, joinError, startOwn, loading, onCreate, onJoin, nickname, onTab, onOpenNext, seatsMax = ROOM_SIZE }) {
   const [friends, setFriends] = useState(null)
   const [board, setBoard] = useState(null) // { points, place }
   useEffect(() => {
@@ -899,7 +923,7 @@ function HomeScreen({ joinCode, setJoinCode, joinError, startOwn, loading, onCre
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mt-4 mb-4">
           <AvatarStack names={[nickname || 'You', ...crew]} seats={seats} />
           <span className="text-xs text-muted">
-            {crew.length ? `You${crew.length === 1 ? ` and @${crew[0]}` : ` and ${crew.length} friends`} · up to ${ROOM_SIZE} in a room` : `Up to ${ROOM_SIZE} people in a room`}
+            {crew.length ? `You${crew.length === 1 ? ` and @${crew[0]}` : ` and ${crew.length} friends`} · up to ${seatsMax} in a room` : `Up to ${seatsMax} people in a room`}
           </span>
         </div>
         <Button full icon="mdi:plus" onClick={onCreate} disabled={loading}>
@@ -1131,7 +1155,7 @@ function LobbyScreen({ groupSession, participants, isHost, plan, free, onChange,
 
       {/* Participants */}
       <Card className="rise" style={{ '--i': 1 }}>
-        <SectionTitle action={<Fact icon="mdi:account-multiple">{participants.length} of {ROOM_SIZE}</Fact>}>Participants</SectionTitle>
+        <SectionTitle action={<Fact icon="mdi:account-multiple">{participants.length} of {roomSize(groupSession)}</Fact>}>Participants</SectionTitle>
         <div className="space-y-2">
           {participants.map(p => {
             const host = p.user_id === groupSession?.host_id
@@ -1160,14 +1184,14 @@ function LobbyScreen({ groupSession, participants, isHost, plan, free, onChange,
             )
           })}
           {removeError && <div className="text-danger text-xs">{removeError}</div>}
-          {participants.length < ROOM_SIZE && (
+          {participants.length < roomSize(groupSession) && (
             <div className="flex items-center gap-3 rounded-xl border border-dashed border-line-strong px-3 py-2.5">
               <span className="relative flex w-8 h-8 items-center justify-center flex-shrink-0" aria-hidden="true">
                 <span className="absolute inset-1 rounded-full bg-neon/20 live-pulse" />
                 <Icon icon="mdi:account-plus-outline" width={20} className="relative text-neon-ink" />
               </span>
               <span className="text-sm text-muted">
-                {participants.length <= 1 ? 'Waiting for friends to join…' : `${ROOM_SIZE - participants.length} seat${ROOM_SIZE - participants.length === 1 ? '' : 's'} left. Friends can join after you start too.`}
+                {participants.length <= 1 ? 'Waiting for friends to join…' : `${roomSize(groupSession) - participants.length} seat${roomSize(groupSession) - participants.length === 1 ? '' : 's'} left. Friends can join after you start too.`}
               </span>
             </div>
           )}
@@ -1411,17 +1435,106 @@ function LiveBoard({ rows, myId, title, detailed = false }) {
   )
 }
 
+// My sets in this room, by exercise, each one editable (weight and reps): fix a typo on an
+// earlier exercise without leaving the workout. Folded away until opened.
+function MySets({ sets, onEdit }) {
+  const { fromLb, unit } = useUnit()
+  const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState(null)
+  if (!sets.length) return null
+  const order = [...new Set(sets.map(s => s.exercise))]
+  return (
+    <Card>
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+        className="press w-full flex items-center justify-between gap-3 min-h-[44px] text-left">
+        <span className="text-lg leading-[1.3] font-semibold text-ink">Your sets</span>
+        <span className="flex items-center gap-1 text-sm text-muted">{sets.length} · {open ? 'Hide' : 'Edit'}<Icon icon={open ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={20} aria-hidden="true" /></span>
+      </button>
+      {open && (
+        <div className="space-y-3 mt-2">
+          {order.map(name => (
+            <div key={name}>
+              <div className="text-xs font-semibold text-muted mb-1">{name}</div>
+              <ul className="space-y-1">
+                {sets.filter(s => s.exercise === name).sort((a, b) => a.set_num - b.set_num).map(s => (
+                  <li key={s.id} className="flex items-center gap-2 bg-raised rounded-xl pl-3 pr-1 py-1">
+                    <span className="text-xs text-muted w-12 flex-shrink-0">Set {s.set_num}</span>
+                    <span className="grow text-sm font-semibold text-ink tabular-nums">{Number(s.weight) > 0 ? `${Math.round(fromLb(s.weight) * 10) / 10} ${unit}` : 'Bodyweight'} × {s.reps}</span>
+                    {s.pending && <span className="text-xs text-muted">waiting</span>}
+                    <IconButton icon="mdi:pencil-outline" label={`Edit ${name}, set ${s.set_num}`} onClick={() => setEditing(s)} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+      {editing && <EditSetSheet set={editing} onClose={() => setEditing(null)} onSave={patch => onEdit(editing, patch)} />}
+    </Card>
+  )
+}
+
+function EditSetSheet({ set, onClose, onSave }) {
+  const { fromLb, toLb, unit } = useUnit()
+  const [weight, setWeight] = useState(Number(set.weight) > 0 ? String(Math.round(fromLb(set.weight) * 10) / 10) : '')
+  const [reps, setReps] = useState(String(set.reps))
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const r = parseInt(reps, 10)
+  const w = toLb(parseFloat(weight || '0'))
+  async function save() {
+    setBusy(true); setErr('')
+    try { await onSave({ weight: w, reps: r }); onClose() } catch (e) { setErr(e.message); setBusy(false) }
+  }
+  const field = 'w-full bg-raised border border-line-strong focus:border-neon-stroke text-ink rounded-xl px-4 py-3 text-xl font-bold tabular-nums text-center outline-none'
+  return (
+    <Sheet title={`${set.exercise}, set ${set.set_num}`} onClose={onClose}>
+      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 7rem), 1fr))' }}>
+        <label className="block"><span className="text-xs text-muted block mb-1">Weight ({unit})</span>
+          <input type="number" inputMode="decimal" min="0" step="0.5" value={weight} onChange={e => setWeight(e.target.value)} placeholder="0" className={field} /></label>
+        <label className="block"><span className="text-xs text-muted block mb-1">Reps</span>
+          <input type="number" inputMode="numeric" min="1" max="100" value={reps} onChange={e => setReps(e.target.value)} className={field} /></label>
+      </div>
+      <p className="text-xs text-muted">Leave weight empty for bodyweight.</p>
+      {err && <p role="alert" className="text-xs text-danger">{err}</p>}
+      <Button full icon="mdi:check" onClick={save} disabled={busy || !(r >= 1 && r <= 100) || !(w >= 0)}>{busy ? 'Saving…' : 'Save set'}</Button>
+    </Sheet>
+  )
+}
+
+// Ending or finishing always asks first, in a pop-up, so a stray tap near Go can't end it
+function FinishSheet({ onEnd, onClose }) {
+  return (
+    <Sheet title="Finish the workout?" onClose={onClose}>
+      <p className="text-sm text-ink-2">Every set you logged is saved to your log. The room carries on for the others.</p>
+      <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 8rem), 1fr))' }}>
+        <Button variant="secondary" onClick={onClose}>Keep going</Button>
+        <Button variant="danger" icon="mdi:flag-checkered" onClick={() => { onClose(); onEnd() }}>Finish workout</Button>
+      </div>
+    </Sheet>
+  )
+}
+
 function EndEarly({ onEnd, confirm, setConfirm, label = 'End workout early' }) {
-  return confirm ? (
-    <div className="flex gap-3">
-      <Button variant="secondary" className="flex-1" onClick={() => setConfirm(false)}>Keep going</Button>
-      <Button variant="danger" className="flex-1" onClick={() => onEnd()}>End workout</Button>
-    </div>
-  ) : (
-    <button onClick={() => setConfirm(true)}
-      className="w-full text-center text-xs text-muted hover:text-ink-2 py-2 min-h-[44px] transition-colors">
-      {label}
-    </button>
+  return (
+    <>
+      <button onClick={() => setConfirm(true)}
+        className="w-full text-center text-xs text-muted hover:text-ink-2 py-2 min-h-[44px] transition-colors">
+        {label}
+      </button>
+      {confirm && <FinishSheet onEnd={onEnd} onClose={() => setConfirm(false)} />}
+    </>
+  )
+}
+
+// The finish button at the foot of a free room's picker, well away from the Go buttons
+function FinishButton({ onEnd }) {
+  const [asking, setAsking] = useState(false)
+  return (
+    <>
+      <Button full variant="secondary" icon="mdi:flag-checkered" onClick={() => setAsking(true)}>Finish workout</Button>
+      {asking && <FinishSheet onEnd={onEnd} onClose={() => setAsking(false)} />}
+    </>
   )
 }
 
@@ -1507,11 +1620,16 @@ function TrainingScreen({ feed, plan, free, isHost, onNextExercise, exercises, e
         </div>
         <Button full icon="mdi:check" onClick={onLog} disabled={!(parseInt(reps) >= 1)}>Log set {setIdx + 1}</Button>
         <p className="text-xs text-muted text-center mt-2">Bodyweight? Leave weight empty.</p>
-        {free && (
-          <Button variant="ghost" full icon="mdi:swap-horizontal" onClick={onNextExercise} className="mt-2">
-            {setIdx > 0 ? 'Done with this exercise' : isHost ? 'Change exercise' : 'Skip this exercise'}
+        {free && (isHost && setIdx === 0 ? (
+          <div className="grid gap-2 mt-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 9rem), 1fr))' }}>
+            <Button variant="ghost" icon="mdi:swap-horizontal" onClick={() => onNextExercise(true)}>Change exercise</Button>
+            <Button variant="ghost" icon="mdi:skip-next-outline" onClick={() => onNextExercise(false)}>Next exercise</Button>
+          </div>
+        ) : (
+          <Button variant="ghost" full icon={setIdx > 0 ? 'mdi:check' : 'mdi:skip-next-outline'} onClick={() => onNextExercise(false)} className="mt-2">
+            {setIdx > 0 ? 'Done with this exercise' : isHost ? 'Next exercise' : 'Skip it, just for me'}
           </Button>
-        )}
+        ))}
       </Card>
 
       <LiveBoard rows={rows} myId={myId} title="Live standings" />
@@ -1561,12 +1679,10 @@ function PickerScreen({ feed, picked, current, free, isHost, replacing, hostName
         </div>
       </Card>
 
-      {mySets > 0 && <Button full variant="secondary" icon="mdi:flag-checkered" onClick={() => onEnd()}>Finish workout</Button>}
-
       <LiveBoard rows={rows} myId={myId} title="Live standings" />
       {feed}
 
-      {mySets === 0 && <EndEarly onEnd={onEnd} confirm={confirmEnd} setConfirm={setConfirmEnd} label="End workout" />}
+      {mySets > 0 ? <FinishButton onEnd={onEnd} /> : <EndEarly onEnd={onEnd} confirm={confirmEnd} setConfirm={setConfirmEnd} label="End workout" />}
     </div>
   )
 
@@ -1581,7 +1697,6 @@ function PickerScreen({ feed, picked, current, free, isHost, replacing, hostName
 
       <p className="text-sm text-muted">Everyone in the room does the exercise you pick.</p>
       {replacing && <Button full variant="secondary" icon="mdi:arrow-left" onClick={onCancelReplace}>Keep {current ?? 'this exercise'}</Button>}
-      {!replacing && mySets > 0 && <Button full icon="mdi:flag-checkered" onClick={() => onEnd()}>Finish workout</Button>}
 
       <Card>
         <input
@@ -1608,7 +1723,7 @@ function PickerScreen({ feed, picked, current, free, isHost, replacing, hostName
       <LiveBoard rows={rows} myId={myId} title="Live standings" />
       {feed}
 
-      {mySets === 0 && <EndEarly onEnd={onEnd} confirm={confirmEnd} setConfirm={setConfirmEnd} label="End workout" />}
+      {!replacing && (mySets > 0 ? <FinishButton onEnd={onEnd} /> : <EndEarly onEnd={onEnd} confirm={confirmEnd} setConfirm={setConfirmEnd} label="End workout" />)}
     </div>
   )
 }

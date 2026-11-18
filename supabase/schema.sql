@@ -3339,3 +3339,362 @@ REVOKE ALL ON FUNCTION public.remind_next_sessions() FROM PUBLIC, anon, authenti
 SELECT cron.unschedule('remind-next-sessions')
 WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'remind-next-sessions');
 SELECT cron.schedule('remind-next-sessions', '*/5 * * * *', $$SELECT public.remind_next_sessions()$$);
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ═══ 039_coach_plan
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 039: The coach and club plan: clubs, rooms of 12, workout templates, editing room sets,
+--     and swimmers waiting on a parent's OK shown to their coach
+--
+-- The coach plan is a Pro subscription on another Stripe price: subscriptions.status stays
+-- 'pro' (so every Pro check, the Edge Functions too, keeps working) and tier says 'coach'.
+-- The webhook sets tier from the subscription's price (STRIPE_PRICE_COACH_MONTHLY / _ANNUAL).
+
+-- ── Tier ────────────────────────────────────────────────────────────────────
+ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS tier text NOT NULL DEFAULT 'pro';
+DO $$ BEGIN
+  ALTER TABLE public.subscriptions ADD CONSTRAINT subscriptions_tier_check CHECK (tier IN ('pro', 'coach'));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- Someone's coach plan is live (used inside other functions only)
+CREATE OR REPLACE FUNCTION public.coach_plan(p_user uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (SELECT 1 FROM subscriptions WHERE user_id = p_user AND status = 'pro' AND tier = 'coach');
+$$;
+REVOKE ALL ON FUNCTION public.coach_plan(uuid) FROM PUBLIC, anon, authenticated;
+
+-- The caller's own, for policies and the app
+CREATE OR REPLACE FUNCTION public.i_have_coach_plan()
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT public.coach_plan(auth.uid());
+$$;
+REVOKE ALL ON FUNCTION public.i_have_coach_plan() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.i_have_coach_plan() TO authenticated;
+
+-- ── Rooms: 12 seats when the host has the coach plan ─────────────────────────
+ALTER TABLE public.group_sessions ADD COLUMN IF NOT EXISTS room_size int NOT NULL DEFAULT 6;
+
+CREATE OR REPLACE FUNCTION public.group_session_size()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  NEW.room_size := CASE WHEN coach_plan(NEW.host_id) THEN 12 ELSE 6 END;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS group_session_size ON public.group_sessions;
+CREATE TRIGGER group_session_size BEFORE INSERT ON public.group_sessions
+  FOR EACH ROW EXECUTE FUNCTION public.group_session_size();
+
+-- Nobody but this trigger sets the size
+CREATE OR REPLACE FUNCTION public.guard_room_size()
+RETURNS trigger LANGUAGE plpgsql SET search_path = public AS $$
+BEGIN
+  NEW.room_size := OLD.room_size;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS guard_room_size ON public.group_sessions;
+CREATE TRIGGER guard_room_size BEFORE UPDATE ON public.group_sessions
+  FOR EACH ROW EXECUTE FUNCTION public.guard_room_size();
+
+-- Join by code (as in 034), the size check now the room's own
+CREATE OR REPLACE FUNCTION public.join_group_session(p_code text, p_display_name text)
+RETURNS public.group_sessions
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  s public.group_sessions;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Not signed in' USING ERRCODE = '42501';
+  END IF;
+  SELECT * INTO s FROM public.group_sessions
+   WHERE code = upper(trim(p_code)) AND status IN ('lobby', 'active')
+   LIMIT 1
+   FOR UPDATE; -- one join at a time per room, so the size check holds
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Room not found' USING ERRCODE = 'P0002';
+  END IF;
+  IF s.last_activity_at < now() - interval '12 hours' THEN
+    PERFORM set_config('athrion.room_admin', 'on', true);
+    UPDATE public.group_sessions SET status = 'done' WHERE id = s.id;
+    RAISE EXCEPTION 'This room has ended' USING ERRCODE = 'P0003';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.group_removed WHERE session_id = s.id AND user_id = auth.uid()) THEN
+    RAISE EXCEPTION 'The host removed you from this room' USING ERRCODE = 'P0005';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.group_participants WHERE session_id = s.id AND user_id = auth.uid()) THEN
+    RETURN s; -- already in: coming back
+  END IF;
+  IF (SELECT count(*) FROM public.group_participants WHERE session_id = s.id) >= COALESCE(s.room_size, 6) THEN
+    RAISE EXCEPTION 'This room is full' USING ERRCODE = 'P0004';
+  END IF;
+  INSERT INTO public.group_participants (session_id, user_id, display_name)
+  VALUES (s.id, auth.uid(), left(coalesce(nullif(trim(p_display_name), ''), 'Athlete'), 40));
+  RETURN s;
+END $$;
+REVOKE ALL ON FUNCTION public.join_group_session(text, text) FROM public, anon;
+GRANT EXECUTE ON FUNCTION public.join_group_session(text, text) TO authenticated;
+
+-- ── Clubs: up to 50 people with their own monthly board ──────────────────────
+-- Made by someone on the coach plan (up to 5 each); anyone 16+ joins free with the link.
+CREATE TABLE IF NOT EXISTS public.clubs (
+  id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_id   uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  name       text        NOT NULL CHECK (char_length(btrim(name)) BETWEEN 2 AND 40),
+  code       text        NOT NULL UNIQUE DEFAULT substr(md5(gen_random_uuid()::text), 1, 8),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS public.club_members (
+  club_id   uuid        NOT NULL REFERENCES public.clubs(id) ON DELETE CASCADE,
+  user_id   uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  joined_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (club_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS club_members_user ON public.club_members (user_id);
+ALTER TABLE public.clubs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.club_members ENABLE ROW LEVEL SECURITY;
+-- Own rows only (the export); everything else goes through the functions below
+DROP POLICY IF EXISTS "owner reads own clubs" ON public.clubs;
+CREATE POLICY "owner reads own clubs" ON public.clubs FOR SELECT TO authenticated USING (owner_id = auth.uid());
+DROP POLICY IF EXISTS "read own memberships" ON public.club_members;
+CREATE POLICY "read own memberships" ON public.club_members FOR SELECT TO authenticated USING (user_id = auth.uid());
+
+-- Under 16: no clubs, as with friendships and rooms (032)
+CREATE OR REPLACE FUNCTION public.club_members_minor()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF is_minor(NEW.user_id) THEN
+    RAISE EXCEPTION 'Clubs open when you turn 16' USING ERRCODE = 'P0006';
+  END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS club_members_minor ON public.club_members;
+CREATE TRIGGER club_members_minor BEFORE INSERT ON public.club_members
+  FOR EACH ROW EXECUTE FUNCTION public.club_members_minor();
+
+CREATE OR REPLACE FUNCTION public.create_club(p_name text)
+RETURNS TABLE (id uuid, name text, code text)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+#variable_conflict use_column
+DECLARE me uuid := auth.uid(); c public.clubs;
+BEGIN
+  IF me IS NULL THEN RAISE EXCEPTION 'Not signed in' USING ERRCODE = '42501'; END IF;
+  IF NOT coach_plan(me) THEN RAISE EXCEPTION 'Clubs come with the coach plan' USING ERRCODE = 'P0007'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM social_profiles s WHERE s.user_id = me) THEN
+    RAISE EXCEPTION 'Pick a nickname first' USING ERRCODE = 'P0001';
+  END IF;
+  IF (SELECT count(*) FROM clubs WHERE owner_id = me) >= 5 THEN
+    RAISE EXCEPTION 'You have 5 clubs already' USING ERRCODE = 'P0001';
+  END IF;
+  INSERT INTO clubs (owner_id, name) VALUES (me, btrim(p_name)) RETURNING * INTO c;
+  INSERT INTO club_members (club_id, user_id) VALUES (c.id, me);
+  RETURN QUERY SELECT c.id, c.name, c.code;
+END $$;
+
+-- The caller's clubs, with how many are in each
+CREATE OR REPLACE FUNCTION public.my_clubs()
+RETURNS TABLE (id uuid, name text, code text, members int, is_owner boolean, owner text)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT c.id, c.name, c.code,
+         (SELECT count(*)::int FROM club_members x WHERE x.club_id = c.id),
+         c.owner_id = auth.uid(),
+         (SELECT s.nickname FROM social_profiles s WHERE s.user_id = c.owner_id)
+  FROM clubs c JOIN club_members m ON m.club_id = c.id AND m.user_id = auth.uid()
+  ORDER BY m.joined_at;
+$$;
+
+-- What an invite link opens, before joining
+CREATE OR REPLACE FUNCTION public.club_preview(p_code text)
+RETURNS TABLE (name text, owner text, members int, joined boolean)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT c.name, (SELECT s.nickname FROM social_profiles s WHERE s.user_id = c.owner_id),
+         (SELECT count(*)::int FROM club_members x WHERE x.club_id = c.id),
+         EXISTS (SELECT 1 FROM club_members x WHERE x.club_id = c.id AND x.user_id = auth.uid())
+  FROM clubs c WHERE c.code = lower(btrim(p_code)) AND auth.uid() IS NOT NULL;
+$$;
+
+CREATE OR REPLACE FUNCTION public.join_club(p_code text)
+RETURNS TABLE (id uuid, name text)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+#variable_conflict use_column
+DECLARE me uuid := auth.uid(); c public.clubs;
+BEGIN
+  IF me IS NULL THEN RAISE EXCEPTION 'Not signed in' USING ERRCODE = '42501'; END IF;
+  SELECT * INTO c FROM clubs WHERE code = lower(btrim(p_code)) FOR UPDATE;
+  IF c.id IS NULL THEN RAISE EXCEPTION 'Club not found' USING ERRCODE = 'P0002'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM social_profiles s WHERE s.user_id = me) THEN
+    RAISE EXCEPTION 'Pick a nickname first' USING ERRCODE = 'P0001';
+  END IF;
+  IF EXISTS (SELECT 1 FROM club_members WHERE club_id = c.id AND user_id = me) THEN
+    RETURN QUERY SELECT c.id, c.name; RETURN;
+  END IF;
+  IF (SELECT count(*) FROM club_members WHERE club_id = c.id) >= 50 THEN
+    RAISE EXCEPTION 'This club is full' USING ERRCODE = 'P0004';
+  END IF;
+  INSERT INTO club_members (club_id, user_id) VALUES (c.id, me);
+  RETURN QUERY SELECT c.id, c.name;
+END $$;
+
+-- Leave; an owner who leaves hands the club to the earliest member, or it closes
+CREATE OR REPLACE FUNCTION public.leave_club(p_club uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE me uuid := auth.uid(); nxt uuid;
+BEGIN
+  DELETE FROM club_members WHERE club_id = p_club AND user_id = me;
+  IF EXISTS (SELECT 1 FROM clubs WHERE id = p_club AND owner_id = me) THEN
+    SELECT user_id INTO nxt FROM club_members WHERE club_id = p_club ORDER BY joined_at LIMIT 1;
+    IF nxt IS NULL THEN DELETE FROM clubs WHERE id = p_club;
+    ELSE UPDATE clubs SET owner_id = nxt WHERE id = p_club; END IF;
+  END IF;
+END $$;
+
+CREATE OR REPLACE FUNCTION public.remove_club_member(p_club uuid, p_nickname text)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE me uuid := auth.uid();
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM clubs WHERE id = p_club AND owner_id = me) THEN
+    RAISE EXCEPTION 'Only the club''s owner can remove people' USING ERRCODE = '42501';
+  END IF;
+  DELETE FROM club_members m USING social_profiles s
+   WHERE m.club_id = p_club AND s.user_id = m.user_id AND s.nickname = p_nickname AND m.user_id <> me;
+END $$;
+
+CREATE OR REPLACE FUNCTION public.delete_club(p_club uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  DELETE FROM clubs WHERE id = p_club AND owner_id = auth.uid();
+END $$;
+
+-- The club's board this month: every member, by points (the same points as the other boards)
+CREATE OR REPLACE FUNCTION public.club_board(p_club uuid)
+RETURNS TABLE (place int, nickname text, points int, workout_days int, is_me boolean, is_owner boolean)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+#variable_conflict use_column
+DECLARE me uuid := auth.uid(); m date := date_trunc('month', current_date)::date;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM club_members WHERE club_id = p_club AND user_id = me) THEN
+    RAISE EXCEPTION 'Not in this club' USING ERRCODE = '42501';
+  END IF;
+  RETURN QUERY
+  SELECT (row_number() OVER (ORDER BY COALESCE(t.points, 0) DESC, t.last_at ASC NULLS LAST, s.nickname))::int,
+         s.nickname, COALESCE(t.points, 0), COALESCE(t.workout_days, 0), cm.user_id = me, cm.user_id = c.owner_id
+  FROM club_members cm
+  JOIN clubs c ON c.id = cm.club_id
+  JOIN social_profiles s ON s.user_id = cm.user_id
+  LEFT JOIN month_points(m) t ON t.user_id = cm.user_id
+  WHERE cm.club_id = p_club
+  ORDER BY 1;
+END $$;
+
+DO $$
+DECLARE f text;
+BEGIN
+  FOREACH f IN ARRAY ARRAY['create_club(text)', 'my_clubs()', 'club_preview(text)', 'join_club(text)', 'leave_club(uuid)',
+                           'remove_club_member(uuid, text)', 'delete_club(uuid)', 'club_board(uuid)'] LOOP
+    EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC, anon', f);
+    EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO authenticated', f);
+  END LOOP;
+END $$;
+
+-- ── Workout templates for trainers (coach plan) ──────────────────────────────
+CREATE TABLE IF NOT EXISTS public.coach_templates (
+  id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  coach_id   uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  title      text        NOT NULL CHECK (char_length(btrim(title)) BETWEEN 2 AND 60),
+  note       text        NOT NULL DEFAULT '' CHECK (char_length(note) <= 500),
+  exercises  jsonb       NOT NULL CHECK (jsonb_typeof(exercises) = 'array' AND jsonb_array_length(exercises) BETWEEN 1 AND 30),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS coach_templates_coach ON public.coach_templates (coach_id, created_at DESC);
+ALTER TABLE public.coach_templates ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "read own templates" ON public.coach_templates;
+CREATE POLICY "read own templates" ON public.coach_templates FOR SELECT TO authenticated USING (coach_id = auth.uid());
+DROP POLICY IF EXISTS "save templates on the coach plan" ON public.coach_templates;
+CREATE POLICY "save templates on the coach plan" ON public.coach_templates FOR INSERT TO authenticated
+  WITH CHECK (coach_id = auth.uid() AND public.i_have_coach_plan()
+              AND (SELECT count(*) FROM public.coach_templates t WHERE t.coach_id = auth.uid()) < 100);
+DROP POLICY IF EXISTS "delete own templates" ON public.coach_templates;
+CREATE POLICY "delete own templates" ON public.coach_templates FOR DELETE TO authenticated USING (coach_id = auth.uid());
+
+-- ── Swimmers waiting on a parent's OK, shown to the coach ────────────────────
+-- A 13-15 year old who opened a team's invite link and is at ParentGate: the coach sees
+-- their nickname and whether the parent has answered, until they join or the coach clears it.
+CREATE TABLE IF NOT EXISTS public.swim_waiting (
+  user_id    uuid        PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  team_id    uuid        NOT NULL REFERENCES public.swim_teams(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.swim_waiting ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "read own waiting" ON public.swim_waiting;
+CREATE POLICY "read own waiting" ON public.swim_waiting FOR SELECT TO authenticated USING (user_id = auth.uid());
+
+-- The teen, from ParentGate, with the team's invite code (only while not yet approved)
+CREATE OR REPLACE FUNCTION public.note_swim_waiting(p_code text)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE me uuid := auth.uid(); t uuid;
+BEGIN
+  IF me IS NULL THEN RETURN; END IF;
+  IF NOT EXISTS (SELECT 1 FROM parental_consents WHERE user_id = me AND status <> 'approved') THEN RETURN; END IF;
+  SELECT id INTO t FROM swim_teams WHERE code = lower(btrim(p_code));
+  IF t IS NULL THEN RETURN; END IF;
+  INSERT INTO swim_waiting (user_id, team_id) VALUES (me, t)
+  ON CONFLICT (user_id) DO UPDATE SET team_id = EXCLUDED.team_id;
+END $$;
+
+-- The coach's list: nickname, since when, and the parent's answer so far
+CREATE OR REPLACE FUNCTION public.my_team_waiting()
+RETURNS TABLE (nickname text, since timestamptz, status text)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT s.nickname, w.created_at, COALESCE(pc.status, 'pending')
+  FROM swim_waiting w
+  JOIN swim_teams t ON t.id = w.team_id AND t.coach_id = auth.uid()
+  LEFT JOIN social_profiles s ON s.user_id = w.user_id
+  LEFT JOIN parental_consents pc ON pc.user_id = w.user_id
+  WHERE COALESCE(pc.status, 'pending') <> 'approved'
+  ORDER BY w.created_at;
+$$;
+
+CREATE OR REPLACE FUNCTION public.clear_team_waiting(p_nickname text)
+RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+  DELETE FROM swim_waiting w USING swim_teams t, social_profiles s
+   WHERE t.id = w.team_id AND t.coach_id = auth.uid() AND s.user_id = w.user_id AND s.nickname = p_nickname;
+$$;
+
+-- Once they're on the team, they're not waiting any more
+CREATE OR REPLACE FUNCTION public.swim_waiting_done()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  DELETE FROM swim_waiting WHERE user_id = NEW.user_id;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS swim_waiting_done ON public.swim_team_members;
+CREATE TRIGGER swim_waiting_done AFTER INSERT ON public.swim_team_members
+  FOR EACH ROW EXECUTE FUNCTION public.swim_waiting_done();
+
+DO $$
+DECLARE f text;
+BEGIN
+  FOREACH f IN ARRAY ARRAY['note_swim_waiting(text)', 'my_team_waiting()', 'clear_team_waiting(text)'] LOOP
+    EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC, anon', f);
+    EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO authenticated', f);
+  END LOOP;
+END $$;
+
+-- ── Room sets: fix your own weight or reps after logging ─────────────────────
+-- Only weight and reps change; everything else stays as it was logged
+DROP POLICY IF EXISTS "users can edit own sets" ON public.group_sets;
+CREATE POLICY "users can edit own sets" ON public.group_sets
+  FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+CREATE OR REPLACE FUNCTION public.guard_group_set_edit()
+RETURNS trigger LANGUAGE plpgsql SET search_path = public AS $$
+BEGIN
+  IF NEW.reps < 1 OR NEW.reps > 100 OR NEW.weight < 0 OR NEW.weight > 2000 THEN
+    RAISE EXCEPTION 'That set doesn''t look right' USING ERRCODE = '22023';
+  END IF;
+  NEW.id := OLD.id; NEW.session_id := OLD.session_id; NEW.user_id := OLD.user_id;
+  NEW.display_name := OLD.display_name; NEW.exercise := OLD.exercise; NEW.set_num := OLD.set_num;
+  NEW.logged_at := OLD.logged_at; NEW.client_id := OLD.client_id;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS guard_group_set_edit ON public.group_sets;
+CREATE TRIGGER guard_group_set_edit BEFORE UPDATE ON public.group_sets
+  FOR EACH ROW EXECUTE FUNCTION public.guard_group_set_edit();

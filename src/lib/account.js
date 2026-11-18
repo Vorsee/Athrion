@@ -11,6 +11,7 @@ const EXPORT_TABLES = [
   'workout_logs', 'custom_workouts', 'calorie_logs', 'body_measurements', 'daily_health',
   'progress_photos', 'user_badges', 'reminder_settings', 'social_profiles', 'monthly_scores',
   'notifications', 'subscriptions', 'cardio_logs', 'swim_profiles', 'swim_team_members', 'app_reviews', 'meal_plans', 'meal_scans',
+  'club_members', 'swim_waiting',
 ]
 // Tables keyed by another column, or (coach_profiles) only readable column by column
 const EXPORT_OTHER = [
@@ -20,6 +21,8 @@ const EXPORT_OTHER = [
   ['coach_products', 'coach_id', '*'],
   ['coach_purchases', 'buyer_id', '*'],
   ['swim_teams', 'coach_id', 'id, name, created_at'],
+  ['clubs', 'owner_id', 'id, name, code, created_at'],
+  ['coach_templates', 'coach_id', '*'],
   ['swim_practices', 'coach_id', '*'],
   ['coach_clients', 'client_id', '*'],
   ['coach_assignments', 'client_id', '*'],

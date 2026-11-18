@@ -81,7 +81,10 @@ function LogRun({ onSaved }) {
         </label>
         <label className="block">
           <span className="text-xs text-muted">Time</span>
-          <input inputMode="numeric" placeholder="28:30" value={form.time} onChange={change('time')} className={`mt-1 ${inputCls}`} />
+          <input inputMode="numeric" placeholder="28:30" value={form.time} onChange={change('time')} aria-describedby="run-time-reads" className={`mt-1 ${inputCls}`} />
+          <span id="run-time-reads" className="text-xs text-muted block mt-1" aria-live="polite">
+            {form.time ? (seconds ? `Reads as ${fmtDuration(seconds)}` : 'Type it like 28:30 or 2830') : 'Like 28:30, or just 2830'}
+          </span>
         </label>
         <label className="block">
           <span className="text-xs text-muted">Date</span>

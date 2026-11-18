@@ -4,6 +4,8 @@ import { Button, Card, Segmented, SectionTitle, IconButton, ExerciseRow, BigNumb
 import { Toggle } from './ReminderSettings.jsx'
 import PersonSafetySheet from './PersonSafetySheet.jsx'
 import { fetchBlocks, unblockUser } from '../lib/safetyApi.js'
+import { ClubsCard, JoinClubSheet } from './Clubs.jsx'
+import { fetchMyClubs, fetchClubBoard, clubsMissing, clearClubInvite } from '../lib/clubApi.js'
 import {
   saveNickname, setOnLeaderboard, searchNicknames, sendFriendRequest, respondFriendRequest, removeFriend,
   fetchFriends, fetchLeaderboard, fetchMyPoints, fetchMyMonths, inviteUrl,
@@ -90,8 +92,11 @@ function PointsInfo() {
   )
 }
 
-export function LeaderboardTab({ me, onMeChange, onAddFriends, minor = false }) {
+// scope: 'friends', 'everyone', or 'club:<id>' (039). clubInvite: a /club/<code> link to offer.
+export function LeaderboardTab({ me, onMeChange, onAddFriends, minor = false, coachPlan = false, onCoachPlan, clubInvite = null, onClubInviteDone }) {
   const [scope, setScope]   = useState('friends')
+  const [clubs, setClubs]   = useState(null) // null loading, false before 039 runs
+  const [clubTick, setClubTick] = useState(0)
   const [rows, setRows]     = useState({})   // scope → rows
   const [mine, setMine]     = useState(null)
   const [months, setMonths] = useState([])
@@ -106,10 +111,22 @@ export function LeaderboardTab({ me, onMeChange, onAddFriends, minor = false }) 
   }, [tick])
 
   useEffect(() => {
-    fetchLeaderboard(scope)
+    if (minor) return setClubs([])
+    fetchMyClubs().then(setClubs).catch(e => setClubs(clubsMissing(e) ? false : []))
+  }, [clubTick, minor])
+
+  const clubId = scope.startsWith('club:') ? scope.slice(5) : null
+  useEffect(() => {
+    const load = clubId ? fetchClubBoard(clubId) : fetchLeaderboard(scope)
+    load
       .then(r => setRows(prev => ({ ...prev, [scope]: r })))
-      .catch(() => setError(true))
+      .catch(() => (clubId ? setScope('friends') : setError(true)))
   }, [scope, tick, me.on_leaderboard])
+
+  function clubsChanged(openId) {
+    setClubTick(t => t + 1)
+    setScope(openId ? `club:${openId}` : 'friends')
+  }
 
   async function toggleListed(on) {
     onMeChange({ ...me, on_leaderboard: on })
@@ -140,7 +157,7 @@ export function LeaderboardTab({ me, onMeChange, onAddFriends, minor = false }) 
           <Fact icon="mdi:trophy-outline">Top {PRIZE_PLACES} on Everyone win a free month of Pro</Fact>
         </div>
         <StatTiles className="mt-4" items={[
-          [scope === 'friends' ? 'Among friends' : 'On Everyone', myRow?.place ? `#${myRow.place}` : '–'],
+          [clubId ? 'In the club' : scope === 'friends' ? 'Among friends' : 'On Everyone', myRow?.place ? `#${myRow.place}` : '–'],
           ['Workout days', `${days}/${MONTHLY_TARGET}`],
           ['Level', level.name],
         ]} />
@@ -161,7 +178,8 @@ export function LeaderboardTab({ me, onMeChange, onAddFriends, minor = false }) 
         </div>
       </Card>
 
-      <Segmented kind="choice" label="Leaderboard" options={[['friends', 'Friends'], ['everyone', 'Everyone']]} value={scope} onChange={setScope} />
+      <Segmented kind="choice" label="Leaderboard" value={scope} onChange={setScope}
+        options={[['friends', 'Friends'], ['everyone', 'Everyone'], ...(clubs || []).map(c => [`club:${c.id}`, c.name])]} />
 
       {!list ? <SkeletonRows rows={4} label="Loading leaderboard" />
         : scope === 'friends' && list.length <= 1 ? (
@@ -170,7 +188,7 @@ export function LeaderboardTab({ me, onMeChange, onAddFriends, minor = false }) 
             Your friends and you, ranked by points this month.
           </EmptyState>
         ) : (
-          <ol key={scope} className="space-y-1.5" aria-label={`${scope === 'friends' ? 'Friends' : 'Everyone'} leaderboard`}>
+          <ol key={scope} className="space-y-1.5" aria-label={`${clubId ? (clubs || []).find(c => c.id === clubId)?.name ?? 'Club' : scope === 'friends' ? 'Friends' : 'Everyone'} leaderboard`}>
             <Podium rows={list.filter(r => r.place && r.place <= 3)} />
             {list.filter(r => !(r.place && r.place <= 3)).map((r, i) => <BoardRow key={r.nickname} row={r} i={i + 2} />)}
           </ol>
@@ -187,6 +205,16 @@ export function LeaderboardTab({ me, onMeChange, onAddFriends, minor = false }) 
           </div>
           <Toggle on={me.on_leaderboard} onChange={toggleListed} label="Show me on Everyone" />
         </div>
+      )}
+
+      {clubs && !minor && (clubs.length > 0 || coachPlan || onCoachPlan) && (
+        <ClubsCard clubs={clubs} coachPlan={coachPlan} onCoachPlan={onCoachPlan} onChanged={() => clubsChanged(null)}
+          onOpenBoard={c => { setScope(`club:${c.id}`); window.scrollTo({ top: 0, behavior: 'smooth' }) }} />
+      )}
+      {clubInvite && clubs !== false && (
+        <JoinClubSheet code={clubInvite} minor={minor}
+          onClose={() => { clearClubInvite(); onClubInviteDone?.() }}
+          onJoined={c => { clearClubInvite(); onClubInviteDone?.(); clubsChanged(c?.id) }} />
       )}
 
       <section>
@@ -238,8 +266,10 @@ function Podium({ rows }) {
   )
 }
 
+// A club's board (039) has no level or medals: its rows say the workout days instead
 function BoardRow({ row, i = 0 }) {
-  const level = levelFor(row.lifetime)
+  const level = levelFor(row.lifetime ?? 0)
+  const club = row.lifetime == null
   return (
     <li className={`rise flex items-center gap-3 rounded-xl px-3 py-2.5 border ${row.is_me ? 'bg-neon-tint border-neon-stroke/30' : 'bg-raised border-transparent'}`} style={{ '--i': i }}>
       {row.place ? <RankChip rank={row.place} /> : <span className="text-xs text-muted w-7 text-center">–</span>}
@@ -247,7 +277,8 @@ function BoardRow({ row, i = 0 }) {
       <div className="flex-1 min-w-0">
         <div className="text-sm font-semibold text-ink truncate">@{row.nickname}{row.is_me && <span className="text-muted font-normal"> (you)</span>}</div>
         <div className="flex items-center gap-1.5 text-xs text-muted">
-          <Stars count={level.stars} /><span>{level.name}</span>
+          {club ? <span>{row.workout_days} workout day{row.workout_days === 1 ? '' : 's'}{row.is_owner ? ' · owner' : ''}</span>
+            : <><Stars count={level.stars} /><span>{level.name}</span></>}
           {row.medals > 0 && <span className="inline-flex items-center gap-0.5"><Icon icon="mdi:medal-outline" width={13} aria-hidden="true" />{row.medals}</span>}
           {!row.place && <span>· hidden from Everyone</span>}
         </div>

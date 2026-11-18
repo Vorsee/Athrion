@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 
-// Colour schemes. Dark and Light are free; the rest come with Pro. Each one is a set of
+// Colour schemes. Dark, Light and the seasonal Christmas are free; the rest come with Pro. Each one is a set of
 // CSS token overrides in src/index.css (`.theme-<id>`); `base` is the free theme it builds
 // on: light-based ones also take `.light` (its remaps for older hex classes), and it is the
 // theme shown when Pro ends. The choice stays saved on this device, so it comes back with Pro.
@@ -9,8 +9,12 @@ export const THEMES = [
   { id: 'light',     label: 'Light',     base: 'light' },
   { id: 'blossom',   label: 'Blossom',   base: 'light', pro: true },
   { id: 'blue',      label: 'Blue',      base: 'dark',  pro: true },
-  { id: 'christmas', label: 'Christmas', base: 'dark',  pro: true, note: 'Snow and lights' },
+  { id: 'mono',      label: 'Mono',      base: 'dark',  pro: true },
+  { id: 'christmas', label: 'Christmas', base: 'dark',  seasonal: true, note: 'Snow and lights' },
 ]
+
+// The signed-out landing page wears this one for the season (App applies it while Landing shows)
+export const LANDING_THEME = 'christmas'
 
 const BY_ID = Object.fromEntries(THEMES.map(t => [t.id, t]))
 const KEY = 'athrion_theme'

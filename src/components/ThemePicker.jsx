@@ -35,6 +35,7 @@ export default function ThemePicker({ value, isPro, onPick }) {
               {on && <Icon icon="mdi:check" width={16} className="text-neon-ink flex-shrink-0" aria-hidden="true" />}
             </span>
             {t.pro && <span className="block px-0.5 text-xs font-semibold text-neon-ink">Pro</span>}
+            {t.seasonal && <span className="block px-0.5 text-xs font-semibold text-muted">Seasonal, free</span>}
           </button>
         )
       })}

@@ -2,15 +2,17 @@ import { useEffect, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { useShell, goBack, readSession, SESSION_EVENT, SESSION_LIMIT_MS } from '../lib/shell.js'
 import Brand from './Brand.jsx'
-import { ChristmasLights } from './Festive.jsx'
+import { ChristmasLights, GingerbreadIcon } from './Festive.jsx'
+import { useActiveTheme } from '../lib/theme.js'
 
 export const LANDING = 'workout'
 
+// Left to right: Food, Plan, Train in the middle, Friends (Train together: rooms, friends, the board), Cardio
 const TABS = [
-  { id: 'workout',  label: 'Train',    icon: 'mdi:dumbbell' },
-  { id: 'group',    label: 'Together', icon: 'mdi:account-group-outline' },
+  { id: 'calories', label: 'Food',     icon: 'mdi:food-apple-outline', seasonal: { christmas: GingerbreadIcon } },
   { id: 'plan',     label: 'Plan',     icon: 'mdi:calendar-check-outline' },
-  { id: 'calories', label: 'Food',     icon: 'mdi:food-apple-outline' },
+  { id: 'workout',  label: 'Train',    icon: 'mdi:dumbbell' },
+  { id: 'group',    label: 'Friends',  icon: 'mdi:account-group-outline' },
   { id: 'swim',     label: 'Cardio',   icon: 'mdi:heart-pulse' }, // Swim and Run inside (pages/Cardio.jsx)
   // Admins only while the coach shop is being built
   { id: 'shop',     label: 'Coaches',  icon: 'mdi:whistle-outline', admin: true },
@@ -182,6 +184,7 @@ export function SessionBar({ session, onResume }) {
 
 export default function Nav({ page, setPage, session, isPro, isAdmin = false, onProfileClick, unread, onBellClick, minimised, onResume }) {
   const shell = useShell()
+  const theme = useActiveTheme()
   const tabs = TABS.filter(t => !t.admin || isAdmin)
   const activeTab = PARENT_TAB[page] ?? page
 
@@ -206,7 +209,7 @@ export default function Nav({ page, setPage, session, isPro, isAdmin = false, on
                   className={`press relative flex flex-col items-center justify-center gap-0.5 transition-colors ${active ? 'text-ink' : 'text-muted hover:text-ink-2'}`}>
                   <span aria-hidden="true"
                     className={`absolute top-0 left-1/2 -translate-x-1/2 w-7 h-[3px] rounded-b-full bg-neon transition-opacity duration-200 ${active ? 'opacity-100' : 'opacity-0'}`} />
-                  <Icon icon={t.icon} width={24} aria-hidden="true" />
+                  {(() => { const Seasonal = t.seasonal?.[theme]; return Seasonal ? <Seasonal width={24} /> : <Icon icon={t.icon} width={24} aria-hidden="true" /> })()}
                   {/* Five short labels fit down to 280px, the admin's six down to 360px; narrower, only the
                       open tab keeps its label. The names stay for screen readers */}
                   <span className={`text-xs font-semibold leading-tight tracking-tight ${active ? '' : tabs.length > 5 ? 'max-[359px]:sr-only' : 'max-[279px]:sr-only'}`}>
@@ -217,7 +220,7 @@ export default function Nav({ page, setPage, session, isPro, isAdmin = false, on
             })}
           </div>
         </nav>
-        <ChristmasLights className="top-0" />
+        <ChristmasLights style={{ top: -8 }} />
       </div>
     </>
   )

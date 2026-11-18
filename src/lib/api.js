@@ -122,7 +122,13 @@ export async function saveWorkoutEntry(entry) {
 export async function fetchProState() {
   const { data } = await supabase.from('subscriptions').select('*').maybeSingle()
   const prizeUntil = data?.comp_pro_until && new Date(data.comp_pro_until) > new Date() ? data.comp_pro_until : null
-  return { paid: data?.status === 'pro', prizeUntil }
+  // tier (039): 'coach' is the coach and club plan; a prize month is Pro only
+  return { paid: data?.status === 'pro', prizeUntil, coach: data?.status === 'pro' && data?.tier === 'coach' }
+}
+
+// The coach and club plan is live
+export async function fetchCoachPlan() {
+  try { return (await fetchProState()).coach } catch { return false }
 }
 
 export async function fetchSubscriptionStatus() {

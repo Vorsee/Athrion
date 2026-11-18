@@ -48,7 +48,7 @@ function matchPlanExercises(planExercises) {
 
 const SESSION_SCREENS = ['training', 'rest', 'exercise-picker']
 
-export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgrade, onOpenPage, onOpenGuide, resumeTick = 0, onTrainTogether }) {
+export default function Workout({ pendingWorkout, onClearPending, isPro, isMinor = false, onUpgrade, onOpenPage, onOpenGuide, resumeTick = 0, onTrainTogether }) {
   const { unit, toLb } = useUnit()
   const [screen, setScreen]                   = useState('home')
   const [activeExercises, setActiveExercises] = useState([])
@@ -440,6 +440,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
       onUpgrade={onUpgrade}
       onOpenPage={onOpenPage}
       onOpenGuide={onOpenGuide}
+      isMinor={isMinor}
       pendingCount={pendingCount}
       onRetryPending={retryPending}
       onLogPast={handleLogPast}
@@ -534,7 +535,7 @@ export default function Workout({ pendingWorkout, onClearPending, isPro, onUpgra
         }
         startFreeExercise(ex)
       }}
-      onEnd={() => handleEndWorkout()}
+      onEnd={() => setConfirmEnd(true)}
     />
   )
 
@@ -690,7 +691,7 @@ export function starterSession(done, goal, place) {
   return { title: s.title, starter: true, workout: { exercises: s.exercises.map(e => ({ name: e.name, sets: e.sets, reps: e.reps, restSeconds: restSecs(e.rest) })) } }
 }
 
-function HomeScreen({ onTrainTogether, ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade, onOpenPage, onOpenGuide, pendingCount = 0, onRetryPending, onLogPast, starterGoal, starterPlace, onStartAssignment }) {
+function HomeScreen({ onTrainTogether, isMinor = false, ready, history, customWorkouts, planWorkout, planSchedule, onStart, onPlanStart, onFreeStart, onCreateNew, onEdit, onDelete, isPro, onUpgrade, onOpenPage, onOpenGuide, pendingCount = 0, onRetryPending, onLogPast, starterGoal, starterPlace, onStartAssignment }) {
   const { fmtVolume } = useUnit()
   const [selectedSession, setSelectedSession] = useState(null)
   const [loggingDay, setLoggingDay] = useState(null) // 'YYYY-MM-DD' a workout is being added to
@@ -877,7 +878,8 @@ function HomeScreen({ onTrainTogether, ready, history, customWorkouts, planWorko
       )}
 
       {ready && <TrainerCard onStart={onStartAssignment} />}
-      {ready && <InviteFriendsCard onOpenGroup={onOpenPage ? () => onOpenPage('group') : undefined} />}
+      {/* Under 16 (032) there are no friends to invite */}
+      {ready && !isMinor && <InviteFriendsCard onOpenGroup={onOpenPage ? () => onOpenPage('group') : undefined} />}
 
       <TrainingCalendar history={history} planSchedule={planSchedule} onOpenSession={setSelectedSession} onLogDay={onLogPast ? setLoggingDay : undefined} />
       {loggingDay && (
@@ -1555,10 +1557,6 @@ function ExercisePickerScreen({ activeExercises, loggedSets, restDuration, onPic
 
       <RestBar duration={restDuration} />
 
-      {loggedSets.length > 0 && (
-        <Button full icon="mdi:flag-checkered" onClick={onEnd}>Finish workout</Button>
-      )}
-
       <Card>
         <input
           className="w-full bg-raised border border-line focus:border-neon-stroke text-ink placeholder:text-placeholder rounded-xl px-3 py-2.5 text-sm outline-none transition-colors mb-3"
@@ -1586,6 +1584,11 @@ function ExercisePickerScreen({ activeExercises, loggedSets, restDuration, onPic
           })}
         </div>
       </Card>
+
+      {/* Down here, away from the Go buttons, and it asks first (the End workout? sheet) */}
+      {loggedSets.length > 0 && (
+        <Button full variant="secondary" icon="mdi:flag-checkered" onClick={onEnd} className="mt-2">Finish workout</Button>
+      )}
     </div>
   )
 }

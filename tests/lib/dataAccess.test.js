@@ -204,7 +204,7 @@ describe('groupApi.js', () => {
     await expect(group.joinGroupSession('ZZZZZZ', 'Kim')).rejects.toThrow('Room not found')
   })
   it('says why a join failed: ended, full or removed rooms offer starting your own (034)', async () => {
-    for (const [code, text] of [['P0003', 'This room has ended. Start your own.'], ['P0004', `This room is full: ${group.ROOM_SIZE} people already.`], ['P0005', 'The host removed you from this room.']]) {
+    for (const [code, text] of [['P0003', 'This room has ended. Start your own.'], ['P0004', 'This room is full.'], ['P0005', 'The host removed you from this room.']]) {
       sb.supabase.rpc.mockResolvedValueOnce({ data: null, error: { code, message: 'x' } })
       const err = await group.joinGroupSession('ABC123', 'Kim').catch(e => e)
       expect(err.message).toBe(text)

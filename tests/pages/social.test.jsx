@@ -83,7 +83,7 @@ describe('Train together tabs', () => {
       ? { data: null, error: { code: '23505', message: 'duplicate key' } }
       : { data: null, error: null })
     render(<Group session={{ name: 'Sam' }} />)
-    await userEvent.click(screen.getByRole('tab', { name: 'Friends' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'My friends' }))
     await userEvent.type(await screen.findByLabelText('Nickname'), 'taken')
     await userEvent.click(screen.getByRole('button', { name: 'Save nickname' }))
     expect(await screen.findByText('That nickname is taken')).toBeInTheDocument()
@@ -126,7 +126,7 @@ describe('Train together tabs', () => {
       send_friend_request: 'pending',
     })
     render(<Group session={{ name: 'Sam' }} />)
-    await userEvent.click(screen.getByRole('tab', { name: 'Friends' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'My friends' }))
     expect(await screen.findByText('@sam')).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText("Friend's nickname"), '@Alex')
     await userEvent.click(screen.getByRole('button', { name: 'Add' }))
@@ -142,7 +142,7 @@ describe('Train together tabs', () => {
     sb.set('group_participants', { data: [], error: null })
     sb.set('group_sets', { data: [], error: null })
     render(<Group session={{ name: 'Sam' }} />)
-    await userEvent.click(screen.getByRole('tab', { name: 'Friends' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'My friends' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Accept @jo' }))
     expect(await screen.findByText('Train together now?')).toBeInTheDocument()
     expect(screen.getByText(/You and @jo are friends/)).toBeInTheDocument()

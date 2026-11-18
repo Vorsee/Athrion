@@ -14,7 +14,7 @@ import { readLogRpe, setLogRpe } from '../lib/sets.js'
 import { fetchMyTrainer, leaveTrainer } from '../lib/clientsApi.js'
 const Progress = lazy(() => import('../pages/Progress.jsx'))
 import { fmtWeight } from '../lib/units.js'
-import { PRO_FEATURES, PLANS, money } from '../lib/pricing.js'
+import { PRO_FEATURES, PLANS, money, COACH_PLAN_ON_SALE } from '../lib/pricing.js'
 import { ReviewScreen } from './Reviews.jsx'
 
 
@@ -352,7 +352,7 @@ function MyTrainer() {
 
 // ── Main modal ────────────────────────────────────────────────────────────────
 
-export default function ProfileModal({ session, profile, isPro, theme, onPickTheme, onClose, onEdit, onUpgrade, onEditTargets, onOpenCoach, onOpenClients, onProfileChange, initialScreen = 'profile' }) {
+export default function ProfileModal({ session, profile, isPro, coachPlan = false, theme, onPickTheme, onClose, onEdit, onUpgrade, onEditTargets, onOpenCoach, onOpenClients, onProfileChange, initialScreen = 'profile' }) {
   const [pwState, setPwState] = useState('idle')   // idle | loading | sent | error
   const [screen, setScreen]   = useState(initialScreen) // profile | progress | subscription | import | delete | review
   const [exportState, setExportState] = useState('idle') // idle | loading | error
@@ -466,12 +466,12 @@ export default function ProfileModal({ session, profile, isPro, theme, onPickThe
                   className="press w-full py-3.5 rounded-xl text-sm font-semibold bg-neon/8 border border-neon-stroke/20 hover:bg-neon/12 hover:border-neon-stroke/35 transition-all flex items-center justify-between px-5">
                   <div className="flex items-center gap-2 text-neon-ink">
                     <Icon icon="mdi:check-decagram-outline" width={16} />
-                    <span>ATHRION Pro is active</span>
+                    <span>{coachPlan ? 'Coach and club plan is active' : 'ATHRION Pro is active'}</span>
                   </div>
                   <span className="text-muted text-xs flex items-center">Manage <Icon icon="mdi:chevron-right" width={16} /></span>
                 </button>
               ) : (
-                <button onClick={onUpgrade}
+                <button onClick={() => onUpgrade?.()}
                   className="press w-full py-3.5 rounded-xl text-sm font-bold bg-neon/10 border border-neon-stroke/30 text-neon-ink hover:bg-neon/15 hover:border-neon-stroke/50 transition-all flex items-center justify-center gap-2">
                   <Icon icon="mdi:star-four-points-outline" width={16} />
                   <span>Get ATHRION Pro · {money(PLANS.monthly.price)} a month</span>
@@ -486,6 +486,7 @@ export default function ProfileModal({ session, profile, isPro, theme, onPickThe
               <div className="bg-surface border border-line rounded-2xl p-1">
                 {onOpenClients && <ListRow icon="mdi:account-supervisor-outline" tile="neon-ink" title="Coach clients" meta="See their training and send them workouts" chevron onClick={onOpenClients} />}
                 {onOpenCoach && <ListRow icon="mdi:whistle-outline" tile="neon-ink" title="Coach on ATHRION" meta="Sell your workouts and week plans" chevron onClick={onOpenCoach} />}
+                {!coachPlan && COACH_PLAN_ON_SALE && onUpgrade && <ListRow icon="mdi:account-group-outline" tile="neon-ink" title="Coach and club plan" meta="Clubs up to 50, rooms up to 12, workout templates" chevron onClick={() => onUpgrade('coach')} />}
               </div>
             </section>
 

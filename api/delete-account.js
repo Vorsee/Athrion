@@ -13,6 +13,7 @@ const BUCKETS = ['progress-photos', 'coach-videos', 'coach-avatars', 'swimmer-ph
 // Every table with the person's rows, children before parents. Most also cascade from
 // auth.users, but group_sets doesn't, and deleting explicitly doesn't depend on the schema.
 const USER_ROWS = [
+  ['coach_templates', 'coach_id'], ['swim_waiting', 'user_id'], ['club_members', 'user_id'], ['clubs', 'owner_id'],
   ['group_reactions', 'from_user'], ['group_reactions', 'to_user'], ['user_blocks', 'blocker'], ['user_blocks', 'blocked'],
   ['user_reports', 'reporter'], ['user_reports', 'reported'],
   ['coach_assignments', 'client_id'], ['coach_assignments', 'coach_id'], ['coach_clients', 'client_id'], ['coach_clients', 'coach_id'], ['coach_client_codes', 'coach_id'],
@@ -70,6 +71,15 @@ export default async function handler(req, res) {
     }
 
     for (const b of BUCKETS) await removeFolder(b, user.id)
+
+    // Clubs they own (039) pass to the member who joined first, so the club outlives them
+    const { data: owned, error: clubErr } = await supabase.from('clubs').select('id').eq('owner_id', user.id)
+    if (clubErr && !['42P01', 'PGRST205'].includes(clubErr.code)) throw new Error(`clubs: ${clubErr.message}`)
+    for (const c of owned ?? []) {
+      const { data: next } = await supabase.from('club_members').select('user_id')
+        .eq('club_id', c.id).neq('user_id', user.id).order('joined_at').limit(1).maybeSingle()
+      if (next) await supabase.from('clubs').update({ owner_id: next.user_id }).eq('id', c.id)
+    }
 
     for (const [table, column] of USER_ROWS) {
       const { error } = await supabase.from(table).delete().eq(column, user.id)

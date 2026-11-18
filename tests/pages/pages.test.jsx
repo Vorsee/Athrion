@@ -342,7 +342,7 @@ describe('Train together is its own tab', () => {
     render(<P.App />)
     expect(await screen.findByText('Exercise library')).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Train together' })).toBeNull()
-    await userEvent.click(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('button', { name: /Together/ }))
+    await userEvent.click(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('button', { name: /Friends/ }))
     expect(await screen.findByText('Train live with friends')).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Rooms' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.queryByLabelText('Back to Train')).toBeNull() // a tab, not a page inside Train
@@ -352,7 +352,7 @@ describe('Train together is its own tab', () => {
   it('steps back with the phone back gesture instead of leaving the app', async () => {
     signInPro()
     render(<P.App />)
-    await userEvent.click(within(await screen.findByRole('navigation', { name: 'Main' })).getByRole('button', { name: /Together/ }))
+    await userEvent.click(within(await screen.findByRole('navigation', { name: 'Main' })).getByRole('button', { name: /Friends/ }))
     expect(await screen.findByText('Train live with friends')).toBeInTheDocument()
     await waitFor(() => expect(window.history.state?.page).toBe('group'))
     act(() => window.history.back())

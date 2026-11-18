@@ -20,7 +20,7 @@ describe('InviteFriendsCard', () => {
     const open = vi.fn()
     const { unmount } = render(<InviteFriendsCard onOpenGroup={open} />)
     expect(await screen.findByText('Train with friends')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Open Together' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Open Friends' }))
     expect(open).toHaveBeenCalled()
     await userEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(screen.queryByText('Train with friends')).toBeNull()

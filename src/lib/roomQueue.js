@@ -28,6 +28,11 @@ export function queueSet(set) {
   store([...loadQueued().filter(s => s.clientId !== set.clientId), set])
 }
 
+// A queued set edited before it was sent (its weight or reps)
+export function editQueued(clientId, patch) {
+  store(loadQueued().map(s => (s.clientId === clientId ? { ...s, ...patch } : s)))
+}
+
 export function dropQueued(clientId) {
   store(loadQueued().filter(s => s.clientId !== clientId))
 }

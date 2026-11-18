@@ -173,7 +173,7 @@ describe('Nav', () => {
     expect(screen.queryByText('Coaches')).toBeNull()
     expect(screen.queryByText('Swim')).toBeNull() // Swim lives inside Cardio
     expect(screen.queryByText('Progress')).toBeNull()
-    for (const label of ['Together', 'Plan', 'Food', 'Cardio']) await userEvent.click(screen.getByText(label))
+    for (const label of ['Friends', 'Plan', 'Food', 'Cardio']) await userEvent.click(screen.getByText(label))
     expect(setPage.mock.calls.map(c => c[0])).toEqual(['group', 'plan', 'calories', 'swim'])
     // Plan has a free goal card and results, so no tab carries a lock (it read as paid-only)
     expect(screen.getByText('Plan').closest('button')).toHaveTextContent(/^Plan$/)

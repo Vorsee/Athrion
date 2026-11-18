@@ -9,7 +9,8 @@ const GAP = 26 // px between bulbs
 
 // A sagging wire with bulbs hanging from it, as wide as its parent.
 // className places it (e.g. "top-full" under the header, "top-0" along the tab bar).
-export function ChristmasLights({ className = '', style, skipCenter = 0 }) {
+// show: draw them whatever the theme (the landing page's theme scene)
+export function ChristmasLights({ className = '', style, skipCenter = 0, show = false }) {
   const theme = useActiveTheme()
   const ref = useRef(null)
   const [width, setWidth] = useState(0)
@@ -22,7 +23,7 @@ export function ChristmasLights({ className = '', style, skipCenter = 0 }) {
     ro.observe(el)
     return () => ro.disconnect()
   }, [theme])
-  if (theme !== 'christmas') return null
+  if (theme !== 'christmas' && !show) return null
 
   const n = Math.max(2, Math.floor(width / GAP))
   const step = width / n
@@ -161,4 +162,19 @@ export function Snow() {
   if (theme !== 'christmas') return null
   // Above the header and tab bar (z-50) so the drift sits on the bar, under sheets (z-60)
   return <canvas ref={ref} aria-hidden="true" className="fixed inset-0 w-full h-full pointer-events-none z-[55]" />
+}
+
+// Food's tab icon in the Christmas theme: a gingerbread man, drawn in the mdi line style
+// (24 grid, 2px strokes, current colour); mdi has no gingerbread icon
+export function GingerbreadIcon({ width = 24 }) {
+  return (
+    <svg width={width} height={width} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="5" r="3" />
+      <path d="M9.6 7.4C8 8.4 7.7 9.3 5.6 9.4a1.6 1.6 0 0 0 0 3.2c1.4 0 2.2-.5 3.4-1.2v2.4l-2.3 4.7a1.6 1.6 0 0 0 2.9 1.3L12 16.4l2.4 3.4a1.6 1.6 0 0 0 2.9-1.3L15 13.8v-2.4c1.2.7 2 1.2 3.4 1.2a1.6 1.6 0 0 0 0-3.2c-2.1-.1-2.4-1-4-2" />
+      <circle cx="12" cy="11.2" r="0.6" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="13.6" r="0.6" fill="currentColor" stroke="none" />
+      <circle cx="10.9" cy="4.5" r="0.45" fill="currentColor" stroke="none" />
+      <circle cx="13.1" cy="4.5" r="0.45" fill="currentColor" stroke="none" />
+    </svg>
+  )
 }

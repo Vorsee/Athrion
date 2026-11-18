@@ -38,13 +38,30 @@ export function cardioUnits(kind, unit) {
     : { dist: 'mi', per: 'mi', toM: v => v * MI, fromM: m => m / MI, paceM: MI }
 }
 
-// "1:05:30", "45:00" or "45" (minutes) → seconds; null if it can't be read
-export function parseDuration(text) {
-  const parts = String(text).trim().split(':').map(p => p.trim())
+// "1:05:30", "45:00" or "45" (minutes) → seconds; null if it can't be read.
+// Phone number pads have no colon, so digits alone read as a clock too: "2830" is 28:30 and
+// "13015" is 1:30:15. One or two digits are minutes, or seconds with short: 'seconds' (a send-off).
+export function parseDuration(text, { short = 'minutes' } = {}) {
+  const raw = String(text).trim()
+  if (/^\d+$/.test(raw)) {
+    if (raw.length <= 2) return Number(raw) > 0 ? Number(raw) * (short === 'seconds' ? 1 : 60) : null
+    if (raw.length > 6) return null
+    const ss = Number(raw.slice(-2)), mm = Number(raw.slice(-4, -2)), hh = Number(raw.slice(0, -4) || 0)
+    if (ss > 59 || (raw.length > 4 && mm > 59)) return null
+    const secs = hh * 3600 + mm * 60 + ss
+    return secs > 0 ? secs : null
+  }
+  const parts = raw.split(':').map(p => p.trim())
   if (!parts[0] || parts.length > 3 || parts.some(p => !/^\d+(\.\d+)?$/.test(p))) return null
   const n = parts.map(Number)
   const secs = n.length === 1 ? n[0] * 60 : n.length === 2 ? n[0] * 60 + n[1] : n[0] * 3600 + n[1] * 60 + n[2]
   return secs > 0 ? Math.round(secs) : null
+}
+
+// What a typed time reads as, for showing back under the box ("2830" → "28:30"); '' if unreadable
+export const clockText = (text, opts) => {
+  const s = parseDuration(text, opts)
+  return s ? fmtDuration(s) : ''
 }
 
 export function fmtDuration(secs) {

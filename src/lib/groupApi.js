@@ -11,7 +11,8 @@ function makeCode() {
 }
 
 // Most people in one room (034 enforces it when joining)
-export const ROOM_SIZE = 6
+export const ROOM_SIZE = 6 // a room's seats; 12 when its host has the coach and club plan (039: room_size)
+export const roomSize = sess => sess?.room_size ?? ROOM_SIZE
 
 export async function createGroupSession({ displayName }) {
   const { data: { user } } = await supabase.auth.getUser()
@@ -51,7 +52,7 @@ export async function joinGroupSession(code, displayName) {
 const JOIN_ERRORS = {
   P0002: ['Room not found. Check the code and try again.', false],
   P0003: ['This room has ended. Start your own.', true],
-  P0004: [`This room is full: ${ROOM_SIZE} people already.`, true],
+  P0004: ['This room is full.', true],
   P0005: ['The host removed you from this room.', true],
 }
 export function roomError(error) {
@@ -154,6 +155,14 @@ export async function logGroupSet({ sessionId, displayName, exercise, setNum, we
 export async function currentUserId() {
   const { data: { user } } = await supabase.auth.getUser()
   return user?.id ?? null
+}
+
+// Change the weight or reps of one of my sets already sent (039 lets you edit only those two)
+export async function updateGroupSet(set, { weight, reps }) {
+  const { data, error } = await supabase.from('group_sets').update({ weight, reps }).eq('id', set.id).select().maybeSingle()
+  if (error) throw error
+  if (!data) throw new Error("Couldn't change that set.")
+  return data
 }
 
 export async function fetchGroupSets(sessionId) {

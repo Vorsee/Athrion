@@ -38,6 +38,8 @@ beforeEach(async () => {
   process.env.STRIPE_WEBHOOK_SECRET = 'whsec_x'
   process.env.STRIPE_PRICE_MONTHLY = 'price_monthly'
   process.env.STRIPE_PRICE_ANNUAL = 'price_annual'
+  process.env.STRIPE_PRICE_COACH_MONTHLY = 'price_coach_monthly'
+  process.env.STRIPE_PRICE_COACH_ANNUAL = 'price_coach_annual'
   process.env.SUPABASE_URL = 'https://test.supabase.co'
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'service'
   checkout = (await import('../../api/create-checkout.js')).default
@@ -100,6 +102,19 @@ describe('POST /api/create-checkout', () => {
     const r = res(); await fresh(req({ body: { plan: 'annual' }, headers: auth }), r)
     expect(r.statusCode).toBe(500)
     expect(stripe.checkout.sessions.create).not.toHaveBeenCalled()
+  })
+
+  it('sells the coach and club plan, and moves a live subscription to it instead of starting another', async () => {
+    stripe.checkout.sessions.create.mockResolvedValue({ url: 'x' })
+    await checkout(req({ body: { plan: 'coach_monthly' }, headers: auth }), res())
+    expect(stripe.checkout.sessions.create.mock.calls[0][0].line_items[0].price).toBe('price_coach_monthly')
+
+    sb.set('subscriptions', { data: { stripe_customer_id: 'cus_1', stripe_subscription_id: 'sub_1' } })
+    stripe.subscriptions.retrieve.mockResolvedValue({ id: 'sub_1', status: 'active', items: { data: [{ id: 'si_1', price: { id: 'price_monthly' } }] } })
+    const r = res(); await checkout(req({ body: { plan: 'coach_annual' }, headers: auth }), r)
+    expect(r.body).toEqual({ switched: true })
+    expect(stripe.subscriptions.update).toHaveBeenCalledWith('sub_1', expect.objectContaining({ items: [{ id: 'si_1', price: 'price_coach_annual' }], proration_behavior: 'create_prorations' }))
+    expect(stripe.checkout.sessions.create).toHaveBeenCalledTimes(1) // no second subscription
   })
 
   describe('regression: fixed in the October 2026 review', () => {
@@ -262,6 +277,30 @@ describe('POST /api/stripe-webhook', () => {
     sb.reset(); sb.set('subscriptions', rowFor('sub_1'))
     await webhook(req({ body: '{}', headers: sig }), res())
     expect(sb.queriesFor('subscriptions').some(q => sb.op(q, 'update'))).toBe(false)
+  })
+
+  it('records the coach and club plan from the checkout and from the price on later updates', async () => {
+    sb.set('subscriptions', { data: null, error: null })
+    event('checkout.session.completed', { client_reference_id: 'user-1', customer: 'cus_1', subscription: 'sub_1', metadata: { plan: 'coach_annual' } })
+    await webhook(req({ body: '{}', headers: sig }), res())
+    expect(sb.op(sb.queriesFor('subscriptions')[0], 'upsert')[0]).toMatchObject({ status: 'pro', tier: 'coach' })
+
+    sb.reset(); sb.set('subscriptions', { data: { user_id: 'user-1' }, error: null })
+    event('customer.subscription.updated', { id: 'sub_1', status: 'active', items: { data: [{ price: { id: 'price_monthly' } }] } })
+    await webhook(req({ body: '{}', headers: sig }), res())
+    expect(sb.op(sb.queriesFor('subscriptions').at(-1), 'update')[0]).toMatchObject({ status: 'pro', tier: 'pro' })
+  })
+
+  it('still records Pro before 039 adds the tier column', async () => {
+    sb.set('subscriptions', q => {
+      const row = sb.op(q, 'upsert')?.[0]
+      return row && 'tier' in row ? { data: null, error: { message: "Could not find the 'tier' column of 'subscriptions'" } } : { data: null, error: null }
+    })
+    event('checkout.session.completed', { client_reference_id: 'user-1', customer: 'cus_1', subscription: 'sub_1' })
+    await webhook(req({ body: '{}', headers: sig }), res())
+    const writes = sb.queriesFor('subscriptions').map(q => sb.op(q, 'upsert')?.[0]).filter(Boolean)
+    expect(writes.at(-1)).toMatchObject({ status: 'pro', stripe_subscription_id: 'sub_1' })
+    expect('tier' in writes.at(-1)).toBe(false)
   })
 
   describe('regression: fixed in the October 2026 review', () => {

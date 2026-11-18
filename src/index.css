@@ -8,22 +8,22 @@
    .theme-dark carries the dark set too, for theme swatches drawn inside another theme. */
 :root, .theme-dark {
   --canvas:      11 11 10;    /* #0B0B0A page */
-  --surface:     20 20 18;    /* #141412 cards, bars */
-  --raised:      28 28 25;    /* #1C1C19 rows, inputs, chips inside a surface */
-  --overlay:     34 34 30;    /* #22221E sheets, toasts */
+  --surface:     22 22 20;    /* #161614 cards, bars */
+  --raised:      32 32 29;    /* #20201D rows, inputs, chips inside a surface */
+  --overlay:     38 38 34;    /* #262622 sheets, toasts */
   --inset:       15 15 13;    /* #0F0F0D recessed areas */
-  --line:        38 38 31;    /* #26261F hairlines */
-  --line-strong: 52 52 44;    /* #34342C input borders */
+  --line:        50 50 42;    /* #32322A hairlines */
+  --line-strong: 102 102 90;   /* #66665A input borders, 3:1 on cards */
   --ink:         244 242 236; /* #F4F2EC primary text */
   --ink-2:       207 204 194; /* #CFCCC2 secondary text */
-  --muted:       163 160 150; /* #A3A096 meta, the floor for text */
-  --placeholder: 142 139 129; /* #8E8B81 input placeholders only */
-  --neon:        200 241 53;  /* #C8F135 fills */
-  --neon-press:  180 219 42;  /* #B4DB2A pressed primary */
-  --on-neon:     11 11 10;    /* text on neon fills */
-  --neon-ink:    200 241 53;  /* neon-coloured text and thin strokes */
-  --neon-stroke: 200 241 53;  /* thick progress fills, rings, neon borders */
-  --neon-tint:   34 38 21;    /* neon at 8% on surface */
+  --muted:       174 171 161; /* #AEABA1 meta, the floor for text */
+  --placeholder: 150 147 137; /* #969389 input placeholders only */
+  --neon:        184 220 60;  /* #B8DC3C fills */
+  --neon-press:  166 200 48;  /* #A6C830 pressed primary */
+  --on-neon:     11 11 10;    /* #0B0B0A text on neon fills */
+  --neon-ink:    196 228 98;  /* #C4E462 neon-coloured text and thin strokes */
+  --neon-stroke: 184 220 60;  /* #B8DC3C thick progress fills, rings, neon borders */
+  --neon-tint:   34 40 22;    /* #222816 neon at 8% on surface */
   --brand:       201 216 127; /* #C9D87F logo bars */
   --warn:        245 184 65;  /* #F5B841 */
   --danger:      255 123 107; /* #FF7B6B */
@@ -42,24 +42,24 @@
 
 .light {
   color-scheme: light;
-  --canvas:      241 246 240; /* #F1F6F0 pale green */
-  --surface:     251 253 250; /* #FBFDFA */
-  --raised:      230 238 229; /* #E6EEE5 */
-  --overlay:     253 254 252; /* #FDFEFC */
-  --inset:       225 234 224; /* #E1EAE0 */
-  --line:        216 228 215; /* #D8E4D7 */
-  --line-strong: 190 206 189; /* #BECEBD */
-  --ink:         18 34 24;    /* #122218 green-black */
-  --ink-2:       44 64 50;    /* #2C4032 */
-  --muted:       78 96 83;    /* #4E6053 */
-  --placeholder: 98 116 103;  /* #627467 */
-  --neon:        168 230 140; /* #A8E68C light green fills */
-  --neon-press:  146 214 116; /* #92D674 */
-  --on-neon:     18 34 24;
-  --neon-ink:    31 107 58;   /* #1F6B3A dark green text */
-  --neon-stroke: 46 139 79;   /* #2E8B4F */
-  --neon-tint:   226 245 216; /* #E2F5D8 */
-  --brand:       46 120 70;   /* #2E7846 logo bars on light */
+  --canvas:      243 241 237; /* #F3F1ED warm paper */
+  --surface:     255 255 255; /* #FFFFFF */
+  --raised:      233 230 224; /* #E9E6E0 */
+  --overlay:     255 255 255; /* #FFFFFF */
+  --inset:       228 225 218; /* #E4E1DA */
+  --line:        212 207 199; /* #D4CFC7 */
+  --line-strong: 146 140 132; /* #928C84 input borders, 3:1 on cards */
+  --ink:         24 24 27;    /* #18181B */
+  --ink-2:       52 52 58;    /* #34343A */
+  --muted:       82 82 90;    /* #52525A */
+  --placeholder: 104 104 112;  /* #686870 */
+  --neon:        49 72 186; /* #3148BA ink-blue fills, white text */
+  --neon-press:  38 58 160; /* #263AA0 */
+  --on-neon:     255 255 255;
+  --neon-ink:    41 61 168;   /* #293DA8 */
+  --neon-stroke: 49 72 186;   /* #3148BA */
+  --neon-tint:   230 234 250; /* #E6EAFA */
+  --brand:       49 72 186;   /* #3148BA logo bars on light */
   --warn:        138 86 0;    /* #8A5600 */
   --danger:      179 38 30;   /* #B3261E */
   --info:        31 94 150;   /* #1F5E96 */
@@ -80,18 +80,18 @@
   --raised:      235 220 219; /* #EBDCDB */
   --overlay:     251 245 243; /* #FBF5F3 */
   --inset:       231 214 214; /* #E7D6D6 */
-  --line:        226 207 208; /* #E2CFD0 */
-  --line-strong: 206 184 188; /* #CEB8BC */
+  --line:        216 194 196; /* #D8C2C4 */
+  --line-strong: 160 132 140; /* #A0848C input borders, 3:1 on cards */
   --ink:         43 26 32;    /* #2B1A20 */
   --ink-2:       74 52 60;    /* #4A343C */
   --muted:       107 84 92;   /* #6B545C */
   --placeholder: 125 102 110; /* #7D666E */
-  --neon:        245 170 197; /* #F5AAC5 blossom pink fills */
-  --neon-press:  236 148 180; /* #EC94B4 */
+  --neon:        226 150 178; /* #E296B2 dusty rose fills */
+  --neon-press:  212 130 162; /* #D482A2 */
   --on-neon:     43 26 32;
-  --neon-ink:    170 44 97;   /* #AA2C61 pink text */
-  --neon-stroke: 219 98 146;  /* #DB6292 */
-  --neon-tint:   252 234 241; /* #FCEAF1 */
+  --neon-ink:    150 38 86;   /* #962656 */
+  --neon-stroke: 190 84 128;  /* #BE5480 */
+  --neon-tint:   248 228 236; /* #F8E4EC */
   --brand:       212 110 152; /* #D46E98 */
   --scrim: rgb(40 16 26 / 0.42);
   --sheet-shadow: 0 -12px 32px rgb(90 30 55 / 0.12);
@@ -103,21 +103,43 @@
   --raised:      22 31 52;    /* #161F34 */
   --overlay:     27 38 62;    /* #1B263E */
   --inset:       10 16 31;    /* #0A101F */
-  --line:        31 42 67;    /* #1F2A43 */
-  --line-strong: 45 59 91;    /* #2D3B5B */
+  --line:        40 53 82;    /* #283552 */
+  --line-strong: 88 106 145;  /* #586A91 input borders, 3:1 on cards */
   --ink:         237 242 252; /* #EDF2FC */
   --ink-2:       198 209 229; /* #C6D1E5 */
-  --muted:       150 165 192; /* #96A5C0 */
+  --muted:       160 174 200; /* #A0AEC8 */
   --placeholder: 128 143 171; /* #808FAB */
-  --neon:        96 170 255;  /* #60AAFF sky blue fills */
-  --neon-press:  70 148 240;  /* #4694F0 */
+  --neon:        88 152 230;  /* #5898E6 sky blue fills */
+  --neon-press:  70 132 210;  /* #4684D2 */
   --on-neon:     6 14 30;
-  --neon-ink:    124 188 255; /* #7CBCFF */
-  --neon-stroke: 96 170 255;
-  --neon-tint:   19 35 64;    /* #132340 */
+  --neon-ink:    140 186 240; /* #8CBAF0 */
+  --neon-stroke: 88 152 230;
+  --neon-tint:   22 38 66;    /* #162642 */
   --brand:       128 178 242; /* #80B2F2 */
   --info:        110 222 232; /* #6EDEE8 teal, apart from the accent */
   --scrim: rgb(2 5 14 / 0.72);
+}
+
+.theme-mono {
+  --canvas:      20 20 20;    /* #141414 off-black */
+  --surface:     30 30 30;    /* #1E1E1E */
+  --raised:      42 42 42;    /* #2A2A2A */
+  --overlay:     36 36 36;    /* #242424 */
+  --inset:       24 24 24;    /* #181818 */
+  --line:        60 60 60;    /* #3C3C3C */
+  --line-strong: 106 106 106; /* #6A6A6A input borders, 3:1 on cards */
+  --ink:         242 242 240; /* #F2F2F0 */
+  --ink-2:       202 202 200; /* #CACAC8 */
+  --muted:       162 162 160; /* #A2A2A0 grey */
+  --placeholder: 130 130 128; /* #828280 */
+  --neon:        214 214 210; /* #D6D6D2 white fills */
+  --neon-press:  190 190 186; /* #BEBEBA */
+  --on-neon:     20 20 20;
+  --neon-ink:    226 226 222; /* #E2E2DE */
+  --neon-stroke: 206 206 202; /* #CECECA */
+  --neon-tint:   40 40 40;    /* #282828 */
+  --brand:       200 200 196; /* #C8C8C4 */
+  --scrim: rgb(4 4 4 / 0.74);
 }
 
 .theme-christmas {
@@ -126,18 +148,18 @@
   --raised:      22 41 32;    /* #162920 */
   --overlay:     27 49 38;    /* #1B3126 */
   --inset:       11 24 18;    /* #0B1812 */
-  --line:        33 56 44;    /* #21382C */
-  --line-strong: 49 77 62;    /* #314D3E */
+  --line:        42 68 54;    /* #2A4436 */
+  --line-strong: 88 124 104;  /* #587C68 input borders, 3:1 on cards */
   --ink:         247 242 233; /* #F7F2E9 */
   --ink-2:       216 208 194; /* #D8D0C2 */
   --muted:       168 172 157; /* #A8AC9D */
   --placeholder: 142 148 134; /* #8E9486 */
-  --neon:        212 38 56;   /* #D42638 holly red fills */
-  --neon-press:  186 28 46;   /* #BA1C2E */
-  --on-neon:     255 250 244; /* white text on red */
-  --neon-ink:    255 128 128; /* #FF8080 */
-  --neon-stroke: 232 66 80;   /* #E84250 */
-  --neon-tint:   46 24 26;    /* #2E181A */
+  --neon:        168 22 38;   /* #A81626 holly red fills */
+  --neon-press:  140 16 30;   /* #8C101E */
+  --on-neon:     255 250 244; /* #FFFAF4 white text on red */
+  --neon-ink:    240 128 128; /* #F08080 */
+  --neon-stroke: 200 48 60;   /* #C8303C */
+  --neon-tint:   44 22 24;    /* #2C1618 */
   --brand:       240 198 92;  /* #F0C65C gold */
   --warn:        245 198 82;  /* #F5C652 */
   --scrim: rgb(3 8 6 / 0.72);
@@ -370,14 +392,38 @@ body {
 /* ── Christmas: light strings (components/Festive.jsx) ─────────────────────── */
 .xmas-lights { position: absolute; left: 0; right: 0; height: 18px; pointer-events: none; overflow: hidden; }
 .xmas-lights svg { display: block; width: 100%; height: 100%; }
-.xmas-wire { fill: none; stroke: #1F3A2A; stroke-width: 1.4; }
+.xmas-wire { fill: none; stroke: #2A4A38; stroke-width: 1.4; }
 .xmas-cap  { fill: #3A4A3F; }
 .xmas-bulb { animation: xmasTwinkle 2.4s ease-in-out infinite; }
-.xmas-bulb.b0 { fill: #FF4B5C; }
-.xmas-bulb.b1 { fill: #FFD35C; animation-delay: -0.6s; }
-.xmas-bulb.b2 { fill: #5CE08A; animation-delay: -1.2s; }
-.xmas-bulb.b3 { fill: #6CB8FF; animation-delay: -1.8s; }
+.xmas-bulb.b0 { fill: #D9505C; }
+.xmas-bulb.b1 { fill: #E2BE5E; animation-delay: -0.6s; }
+.xmas-bulb.b2 { fill: #5DB883; animation-delay: -1.2s; }
+.xmas-bulb.b3 { fill: #6E9FD6; animation-delay: -1.8s; }
 .xmas-bulb:nth-child(4n+2) { animation-duration: 3.1s; }
 .xmas-bulb:nth-child(5n+3) { animation-duration: 1.9s; }
-@keyframes xmasTwinkle { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes xmasTwinkle { 0%, 100% { opacity: 0.95; } 50% { opacity: 0.6; } }
 @media (prefers-reduced-motion: reduce) { .xmas-bulb { animation: none !important; opacity: 1; } }
+
+/* ── Landing theme scene (components/ThemeDemo.jsx) ───────────────────────── */
+.theme-mock, .theme-mock * { transition: background-color 0.6s var(--ease), color 0.6s var(--ease), border-color 0.6s var(--ease); }
+.mock-flake { position: absolute; top: -6px; border-radius: 9999px; background: #FFFFFF; opacity: 0.85; pointer-events: none; animation: mockSnow 3.6s linear infinite; }
+@keyframes mockSnow {
+  0%   { transform: translate(0, 0); }
+  50%  { transform: translate(6px, 160px); }
+  100% { transform: translate(-2px, 318px); opacity: 0.9; }
+}
+/* The drift on the tab bar's top edge: a wavy white cap that builds up */
+.mock-drift {
+  position: absolute; left: 0; right: 0; bottom: 100%; height: 9px; pointer-events: none;
+  background: radial-gradient(circle at 10px 10px, #F8FBFF 9px, transparent 9.5px) 0 0 / 20px 10px repeat-x,
+              linear-gradient(#F8FBFF, #F8FBFF) 0 100% / 100% 3px no-repeat;
+  transform-origin: bottom;
+}
+.mock-drift-grow { animation: mockDrift 3.8s var(--ease) both; }
+@keyframes mockDrift { from { transform: scaleY(0.15); } to { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .mock-flake { display: none; } }
+
+/* Christmas buttons and fills: deep red with candy-cane stripes; text on them stays white */
+.theme-christmas .bg-neon {
+  background-image: repeating-linear-gradient(135deg, rgb(255 255 255 / 0.16) 0 6px, transparent 6px 14px);
+}

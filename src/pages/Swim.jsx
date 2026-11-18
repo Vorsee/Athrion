@@ -4,7 +4,7 @@ import { useBackHandler } from '../lib/shell.js'
 import { Button, Card, SectionTitle, Segmented, EmptyState, SkeletonRows, InlineError, Fact, InfoButton, ListRow, IconButton } from '../components/ui/index.js'
 import { fetchCardio, saveCardio, deleteCardio, fetchBadges, awardBadges } from '../lib/progressApi.js'
 import { BADGES, computeEarnedBadges } from '../lib/badges.js'
-import { cardioUnits, parseDuration, fmtDuration, fmtDistance, paceSecs } from '../lib/cardio.js'
+import { cardioUnits, parseDuration, clockText, fmtDuration, fmtDistance, paceSecs } from '../lib/cardio.js'
 import {
   STROKES, DISTANCE_BANDS, PR_MIN_M, strokeLabel, strokeStats, strokeBoard, daysAgo, swimInviteLink, clearSwimInvite,
   readPoolUnit, setPoolUnit, subscribePoolUnit, intervalSet,
@@ -14,7 +14,7 @@ import {
   photoUrls, fetchMyPhoto, uploadMyPhoto, fetchCoachedTeam, saveTeam, newTeamCode, deleteTeam, fetchRoster, fetchSwimmerSwims,
   respondToSwimmer, fetchTeamPrs, fetchMyTeam, teamByCode, leaveTeam, searchTeams, joinTeam, setTeamName, accountName,
   fetchTeammates, fetchTeammatesPrs, setTeamVisible,
-  fetchPractices, savePractice, deletePractice,
+  fetchPractices, savePractice, deletePractice, fetchTeamWaiting, clearTeamWaiting,
 } from '../lib/swimApi.js'
 import Sheet from '../components/Sheet.jsx'
 import ShareSheet from '../components/ShareSheet.jsx'
@@ -130,7 +130,7 @@ function LogSwim({ stroke, setStroke, onSaved, bare = false }) {
   const [mode, setMode] = useState('swim') // swim | set
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
-  const set = mode === 'set' ? intervalSet({ reps: parseInt(form.reps, 10), each: parseFloat(form.each), sendOff: parseDuration(form.sendOff.includes(':') ? form.sendOff : `0:${form.sendOff}`), dist: u.dist }) : null
+  const set = mode === 'set' ? intervalSet({ reps: parseInt(form.reps, 10), each: parseFloat(form.each), sendOff: parseDuration(form.sendOff, { short: 'seconds' }), dist: u.dist }) : null
   const distance = mode === 'set' ? set?.distance : parseFloat(form.distance)
   const seconds = mode === 'set' ? set?.seconds : parseDuration(form.time)
   const pace = distance > 0 && seconds ? fmtDuration(paceSecs({ seconds, distance_m: u.toM(distance) }, u)) : null
@@ -369,7 +369,8 @@ function SetEditor({ item, onChange, onDone }) {
         {STROKES.map(st => <button key={st.id} type="button" onClick={() => set('stroke', st.id)} aria-pressed={item.stroke === st.id} aria-label={st.label} className={chipCls(item.stroke === st.id)}>{st.short}</button>)}
       </div>
       <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 8rem), 1fr))' }}>
-        <input inputMode="numeric" value={item.send_off} placeholder="Send-off, like 1:45" aria-label="Send-off" onChange={e => set('send_off', e.target.value.replace(/[^\d:]/g, '').slice(0, 5))} className={inputCls} />
+        <input inputMode="numeric" value={item.send_off} placeholder="Send-off, like 1:45" aria-label="Send-off" onChange={e => set('send_off', e.target.value.replace(/[^\d:]/g, '').slice(0, 5))}
+          onBlur={e => { const t = clockText(e.target.value, { short: 'seconds' }); if (t) set('send_off', t) }} className={inputCls} />
         <input value={item.note} maxLength={60} placeholder="Note: easy, drill, fast" aria-label="Note" onChange={e => set('note', e.target.value)} className={inputCls} />
       </div>
       <Button size="sm" full variant="secondary" onClick={onDone}>Done</Button>
@@ -921,6 +922,35 @@ function Teammates({ mates, urls }) {
   )
 }
 
+// Teens who opened the team's link and wait on a parent's OK (039); the coach can't approve
+// them, only see who's stuck and clear the row
+function WaitingOnParents() {
+  const [rows, setRows] = useState([])
+  useEffect(() => { fetchTeamWaiting().then(setRows).catch(() => {}) }, [])
+  if (!rows.length) return null
+  async function clear(nick) {
+    await clearTeamWaiting(nick).catch(() => {})
+    setRows(r => r.filter(x => x.nickname !== nick))
+  }
+  return (
+    <section aria-label="Waiting for a parent">
+      <SectionTitle>Waiting for a parent's OK</SectionTitle>
+      <p className="text-xs text-muted mb-2">Under 16, they opened your link and join once a parent approves the email we sent. You can't approve for them; a reminder from you helps.</p>
+      <div className="space-y-2">
+        {rows.map(r => (
+          <div key={r.nickname} className="bg-surface border border-line rounded-2xl px-3 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="grow basis-0 min-w-[6rem]">
+              <span className="block text-sm font-semibold text-ink break-words">@{r.nickname}</span>
+              <span className="block text-xs text-muted">{r.status === 'declined' ? 'Their parent said no' : `Waiting since ${new Date(r.since).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`}</span>
+            </span>
+            <IconButton icon="mdi:close" label={`Clear @${r.nickname}`} onClick={() => clear(r.nickname)} />
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function CoachView({ team, roster, prs, urls, onChanged, onOpenSwimmer }) {
   const u = useSwimUnits()
   const [editing, setEditing] = useState(false)
@@ -982,6 +1012,8 @@ function CoachView({ team, roster, prs, urls, onChanged, onOpenSwimmer }) {
       </Card>
 
       <CoachPractices team={team} />
+
+      <WaitingOnParents />
 
       {requests.length > 0 && (
         <section aria-label="Asking to join">

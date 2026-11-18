@@ -45,11 +45,14 @@ async function readReply(res) {
   }
 }
 
-// plan is 'monthly' or 'annual'; the server picks the Stripe price
+// plan is 'monthly' or 'annual', or 'coach_monthly' / 'coach_annual'; the server picks the
+// Stripe price. Someone already subscribed is switched in place: returns { switched: true }.
 export async function createCheckoutSession(plan = 'monthly') {
   const { res, data } = await postAsUser('/api/create-checkout', { plan })
   if (!res.ok) throw new Error(data.error || 'Checkout session failed')
+  if (data.switched) return { switched: true }
   window.location.href = data.url
+  return {}
 }
 
 // action: 'cancel' (at period end), 'resume' (undo a cancel) or 'status'.

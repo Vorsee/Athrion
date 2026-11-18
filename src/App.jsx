@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { supabase } from './lib/supabase.js'
-import { fetchUserProfile, fetchSubscriptionStatus } from './lib/api.js'
+import { fetchUserProfile, fetchProState } from './lib/api.js'
 import { fetchFitnessProfile } from './lib/fitnessApi.js'
 import Workout from './pages/Workout.jsx'
 import { healthSyncAvailable, syncHealthData } from './lib/health.js'
@@ -8,8 +8,10 @@ import Nav, { LANDING, useMinimisedSession } from './components/Nav.jsx'
 import { useShell, onPageBack, pushEntry, replaceEntry, silentBack, dropBackHandlers, setSessionMinimised } from './lib/shell.js'
 import { createCheckoutSession } from './lib/stripe.js'
 import { UnitProvider } from './lib/units.js'
-import { readTheme, saveTheme, shownTheme, themeClasses, applyTheme, isProTheme } from './lib/theme.js'
+import { COACH_PLAN_ON_SALE } from './lib/pricing.js'
+import { readTheme, saveTheme, shownTheme, themeClasses, applyTheme, isProTheme, LANDING_THEME } from './lib/theme.js'
 import { Snow } from './components/Festive.jsx'
+import { CLUB_PATH, rememberClubInvite, readClubInvite } from './lib/clubApi.js'
 import HomeScreenPrompt from './components/HomeScreenPrompt.jsx'
 import { PageSkeleton } from './components/ui/States.jsx'
 import { readGuidePick, clearGuidePick } from './lib/guidePlans.js'
@@ -122,6 +124,7 @@ export default function App() {
   const [profile, setProfile]   = useState(undefined) // undefined=loading, null=incomplete, obj=complete
   const [fitnessProfile, setFitnessProfile] = useState(undefined) // undefined=loading, null=not set, obj=loaded
   const [isPro, setIsPro]       = useState(false)
+  const [coachPlan, setCoachPlan] = useState(false) // the coach and club plan (039)
   const [proKnown, setProKnown] = useState(false) // Pro themes fall back only once the answer is in
   const [theme, setTheme]       = useState(readTheme)
   const shown = shownTheme(theme, proKnown ? isPro : undefined)
@@ -199,7 +202,10 @@ export default function App() {
   }, [page])
 
   // Theme tokens live on <html> too, so sheets portalled into <body> follow the theme
-  useEffect(() => { applyTheme(shown) }, [shown])
+  // The landing page and making an account (signed out, the consent screen, a parent's OK, the
+  // first onboarding) wear the season's theme (LANDING_THEME); after that, the person's own
+  const festive = session === null || (!!session && (!session.consented || profile === null || !!askParentAge || (!!minorConsent && minorConsent.status !== 'approved')))
+  useEffect(() => { applyTheme(festive ? LANDING_THEME : shown) }, [shown, festive])
 
   useEffect(() => {
     if (session) try { localStorage.setItem('athrion_signed_in_before', '1') } catch { /* private mode */ }
@@ -228,7 +234,7 @@ export default function App() {
       window.history.replaceState({}, '', window.location.pathname)
       // Give the webhook ~2s to write before re-fetching
       setTimeout(() => {
-        fetchSubscriptionStatus().then(setIsPro).catch(() => {})
+        refreshPro()
       }, 2000)
     }
     return () => subscription.unsubscribe()
@@ -236,7 +242,7 @@ export default function App() {
 
   useEffect(() => {
     if (session === undefined) return // auth not resolved yet
-    if (!session) { setProfile(null); setFitnessProfile(null); setIsPro(false); setProKnown(true); setMinorConsent(null); return }
+    if (!session) { setProfile(null); setFitnessProfile(null); setIsPro(false); setCoachPlan(false); setProKnown(true); setMinorConsent(null); return }
     refreshConsent()
     setProfile(undefined)
     setFitnessProfile(undefined)
@@ -246,10 +252,7 @@ export default function App() {
     fetchFitnessProfile()
       .then(fp => setFitnessProfile(fp ?? null))
       .catch(() => setFitnessProfile(null))
-    fetchSubscriptionStatus()
-      .then(setIsPro)
-      .catch(() => setIsPro(false))
-      .finally(() => setProKnown(true))
+    refreshPro()
     fetchIsAdmin().then(setIsAdmin).catch(() => setIsAdmin(false))
   }, [session])
 
@@ -262,6 +265,20 @@ export default function App() {
     if (!code) return
     clearRoomLink({ user_metadata: session.roomMeta })
     setGroupIntent({ tab: 'rooms', join: code })
+  }, [session, profile, guide])
+
+  // athrion.app/club/<code> (039): kept through sign-up, then the Friends tab's Leaderboard offers to join
+  useEffect(() => {
+    const m = window.location.pathname.match(CLUB_PATH)
+    if (m) { rememberClubInvite(m[1]); window.history.replaceState(null, '', '/') }
+  }, [])
+  const offeredClub = useRef(null)
+  useEffect(() => {
+    if (!session || !profile || guide) return
+    const code = readClubInvite()
+    if (!code || offeredClub.current === code) return
+    offeredClub.current = code
+    setGroupIntent({ tab: 'ranks', club: code })
   }, [session, profile, guide])
 
   // Each intent opens Train together once (not again when the profile reloads)
@@ -324,18 +341,33 @@ export default function App() {
       .catch(() => setFitnessProfile(null))
   }
 
-  // Every "Get Pro" button opens the upgrade sheet; it hands the chosen plan to Stripe
-  function goUpgrade() {
-    setShowProfile(false)
-    setCheckout({ open: true, busy: false, error: '' })
+  // Pro, and the coach plan on top of it (039); a prize month is Pro only
+  function refreshPro() {
+    return fetchProState()
+      .then(({ paid, prizeUntil, coach }) => { setIsPro(paid || !!prizeUntil); setCoachPlan(!!coach) })
+      .catch(() => { setIsPro(false); setCoachPlan(false) })
+      .finally(() => setProKnown(true))
   }
 
+  // Every "Get Pro" button opens the upgrade sheet; it hands the chosen plan to Stripe.
+  // kind 'coach' opens it on the coach and club plan (a click event counts as Pro).
+  function goUpgrade(kind) {
+    setShowProfile(false)
+    setCheckout({ open: true, busy: false, error: '', kind: kind === 'coach' ? 'coach' : 'pro' })
+  }
+  // Nothing offers the coach plan until it's on sale (pricing.js)
+  const goCoachPlan = COACH_PLAN_ON_SALE ? () => goUpgrade('coach') : undefined
+
   async function startCheckout(plan) {
-    setCheckout({ open: true, busy: true, error: '' })
+    setCheckout(c => ({ ...c, open: true, busy: true, error: '' }))
     try {
-      await createCheckoutSession(plan) // redirects to Stripe
+      const r = await createCheckoutSession(plan) // redirects to Stripe, or switches a live subscription
+      if (r?.switched) {
+        setCheckout(c => ({ ...c, busy: false, done: true }))
+        setTimeout(refreshPro, 2500) // the webhook writes the new tier
+      }
     } catch (e) {
-      setCheckout({ open: true, busy: false, error: e.message || 'Could not open checkout. Please try again.' })
+      setCheckout(c => ({ ...c, open: true, busy: false, error: e.message || 'Could not open checkout. Please try again.' }))
     }
   }
 
@@ -379,12 +411,12 @@ export default function App() {
         : shopLink
         ? <ShopPreview link={shopLink} onStart={() => setAuthMode('register')} onSignIn={() => setAuthMode('login')}
             onHome={() => { clearShopLink(); setPendingOpen(null); window.history.replaceState(null, '', '/'); setShopLink(null) }} />
-        : <Landing onCreateAccount={from => {
+        : <><Snow /><Landing onCreateAccount={from => {
             if (from === 'swim') { rememberSwimStart(); setSwimIntent(i => i ?? { start: true }) }
             // Start running: Cardio opens on Run (remembered on the device) once signed up
             if (from === 'run') { rememberCardioSport('run'); setPendingOpen(p => p ?? 'swim') }
             setAuthMode('register')
-          }} onSignIn={() => setAuthMode('login')} />}
+          }} onSignIn={() => setAuthMode('login')} /></>}
     </Suspense>
   )
 
@@ -457,12 +489,13 @@ export default function App() {
   )
 
   const pageProps = {
-    workout: { pendingWorkout, onClearPending: () => setPendingWorkout(null), isPro, onUpgrade: goUpgrade, onOpenPage: navigate, onOpenGuide: openGuide, resumeTick, onTrainTogether: isMinor ? undefined : host => setGroupIntent({ tab: 'rooms', host }) },
+    workout: { pendingWorkout, onClearPending: () => setPendingWorkout(null), isPro, isMinor, onUpgrade: goUpgrade, onOpenPage: navigate, onOpenGuide: openGuide, resumeTick, onTrainTogether: isMinor ? undefined : host => setGroupIntent({ tab: 'rooms', host }) },
     library: { onStartWorkout: handleStartFromLibrary },
     shop: { isMinor, onStartPlanDay: handleStartPlanDay, onOpenCoach: () => navigate('coach'), shopIntent, onShopIntentDone: () => setShopIntent(null) },
     coach: { onOpenShop: () => navigate('shop') },
     calories: { profile, isPro, onUpgrade: goUpgrade, onGoToPlan: () => navigate('plan'), intent: foodIntent, onIntentHandled: () => setFoodIntent(null) },
-    group: { session, intent: groupIntent, onIntentDone: () => setGroupIntent(null), isMinor },
+    group: { session, intent: groupIntent, onIntentDone: () => setGroupIntent(null), isMinor, coachPlan, onCoachPlan: goCoachPlan },
+    clients: { coachPlan, onCoachPlan: goCoachPlan },
     swim: { intent: swimIntent, onIntentDone: () => setSwimIntent(null), isPro, onUpgrade: goUpgrade },
     plan: { isPro, onUpgrade: goUpgrade, onStartSetup: () => setPlanSetup(true), onGoToWorkout: () => navigate('workout'), onStartWorkout: handleStartPlanDay, onOpenSwim: () => { rememberCardioSport('swim'); navigate('swim') }, onOpenRun: () => { rememberCardioSport('run'); navigate('swim') }, profile, onProfileChange: () => { refreshProfile(); refreshFitnessProfile() } },
   }
@@ -524,6 +557,7 @@ export default function App() {
       {checkout.open && (
         <Suspense fallback={null}>
           <UpgradeSheet busy={checkout.busy} error={checkout.error} onCheckout={startCheckout} minor={isMinor}
+            initialKind={checkout.kind} isPro={isPro} coachPlan={coachPlan} switched={checkout.done}
             onClose={() => setCheckout({ open: false, busy: false, error: '' })} />
         </Suspense>
       )}
@@ -536,6 +570,7 @@ export default function App() {
             session={session}
             profile={profile}
             isPro={isPro}
+            coachPlan={coachPlan}
             theme={shown}
             onPickTheme={pickTheme}
             onClose={() => setShowProfile(false)}

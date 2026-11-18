@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Icon } from '@iconify/react'
 import Sheet from './Sheet.jsx'
-import { Button } from './ui/index.js'
+import { Button, Segmented } from './ui/index.js'
 import { fetchTrialEligible } from '../lib/api.js'
-import { PLANS, PRO_FEATURES, TRIAL_DAYS, annualPerMonth, annualSavingPct, money } from '../lib/pricing.js'
+import { PLANS, COACH_PLANS, PRO_FEATURES, COACH_FEATURES, COACH_PLAN_ON_SALE, TRIAL_DAYS, annualPerMonth, annualSavingPct, money } from '../lib/pricing.js'
 
-// Shown before Stripe: what Pro gives, which plan, and exactly when the first charge happens
-// minor: an account under 16 (032) can't buy; the sheet says so instead of offering checkout
-export default function UpgradeSheet({ onClose, onCheckout, busy = false, error = '', minor = false }) {
-  const [plan, setPlan] = useState('annual')
+// Shown before Stripe: what Pro (or the coach and club plan, 039) gives, which plan, and exactly
+// when the first charge happens. Someone already subscribed switches in place (no new checkout).
+// minor: an account under 16 (032) can't buy; the sheet says so and shows nothing to buy.
+export default function UpgradeSheet({ onClose, onCheckout, busy = false, error = '', minor = false, initialKind = 'pro', isPro = false, coachPlan = false, switched = false }) {
+  const offerCoach = COACH_PLAN_ON_SALE || coachPlan // not on sale: Pro only
+  const [kind, setKind] = useState(initialKind === 'coach' && offerCoach ? 'coach' : 'pro')
+  const [period, setPeriod] = useState('annual')
   const [trial, setTrial] = useState(true)
 
   useEffect(() => {
@@ -17,18 +20,37 @@ export default function UpgradeSheet({ onClose, onCheckout, busy = false, error 
     return () => { live = false }
   }, [])
 
-  const chosen = PLANS[plan]
+  if (minor) return (
+    <Sheet title="ATHRION Pro" onClose={onClose}>
+      <p role="status" className="text-sm text-ink-2">Pro can't be bought on an account under 16. Everything free stays open to you: workouts, food logging, swims and runs.</p>
+      <Button full variant="secondary" onClick={onClose}>Got it</Button>
+    </Sheet>
+  )
+
+  const coach = kind === 'coach'
+  const plans = coach ? COACH_PLANS : PLANS
+  const annual = coach ? plans.coach_annual : plans.annual
+  const monthly = coach ? plans.coach_monthly : plans.monthly
+  const chosen = period === 'annual' ? annual : monthly
+  const perMonth = Math.floor((annual.price / 12) * 100) / 100
+  const saving = Math.round((1 - annual.price / (monthly.price * 12)) * 100)
+  const features = coach ? COACH_FEATURES : PRO_FEATURES
+  // Already paying: the subscription moves to the new price (prorated), no new trial
+  const moving = isPro && !trial
+  const already = coach ? coachPlan : isPro && !coachPlan
   const firstCharge = new Date(Date.now() + TRIAL_DAYS * 86400000)
     .toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
 
   return (
-    <Sheet title="ATHRION Pro" onClose={onClose}>
+    <Sheet title={coach ? 'Coach and club plan' : 'ATHRION Pro'} onClose={onClose}>
+      {offerCoach && <Segmented kind="choice" label="Plan" scroll={false} options={[['pro', 'Pro'], ['coach', 'Coach and club']]} value={kind} onChange={setKind} />}
       <p className="text-ink-2 text-sm">
-        {trial ? `Try everything free for ${TRIAL_DAYS} days.` : 'Everything in ATHRION, built around your goal.'}
+        {coach ? 'For trainers, coaches and anyone who runs a group. Members of your club and rooms stay free.'
+          : trial ? `Try everything free for ${TRIAL_DAYS} days.` : 'Everything in ATHRION, built around your goal.'}
       </p>
 
       <ul className="space-y-3">
-        {PRO_FEATURES.map(f => (
+        {features.map(f => (
           <li key={f.title} className="flex gap-3">
             <div className="w-9 h-9 rounded-xl bg-neon-tint border border-neon-stroke/25 flex items-center justify-center flex-shrink-0">
               <Icon icon={f.icon} width={18} className="text-neon-ink" aria-hidden="true" />
@@ -41,26 +63,31 @@ export default function UpgradeSheet({ onClose, onCheckout, busy = false, error 
         ))}
       </ul>
 
-      <div role="radiogroup" aria-label="Plan" className="space-y-2">
-        <PlanOption selected={plan === 'annual'} onSelect={() => setPlan('annual')}
-          title={`${PLANS.annual.label} · ${money(PLANS.annual.price)}`}
-          detail={`${money(annualPerMonth)} a month, billed once a year`} tag={`Save ${annualSavingPct}%`} />
-        <PlanOption selected={plan === 'monthly'} onSelect={() => setPlan('monthly')}
-          title={`${PLANS.monthly.label} · ${money(PLANS.monthly.price)}`}
+      {switched ? (
+        <p role="status" className="text-sm text-neon-ink bg-neon-tint rounded-xl p-3">Done: your subscription moved to the new plan. It shows here in a moment.</p>
+      ) : already ? (
+        <p role="status" className="text-sm text-ink-2 bg-raised rounded-xl p-3">{coach ? "You're on the coach and club plan." : "You're on Pro."} Manage it in You, then Subscription.</p>
+      ) : (
+      <>
+      <div role="radiogroup" aria-label="Billing" className="space-y-2">
+        <PlanOption selected={period === 'annual'} onSelect={() => setPeriod('annual')}
+          title={`${annual.label} · ${money(annual.price)}`}
+          detail={`${money(coach ? perMonth : annualPerMonth)} a month, billed once a year`} tag={`Save ${coach ? saving : annualSavingPct}%`} />
+        <PlanOption selected={period === 'monthly'} onSelect={() => setPeriod('monthly')}
+          title={`${monthly.label} · ${money(monthly.price)}`}
           detail="Billed every month" />
       </div>
 
       {error && <div role="alert" className="text-sm text-danger">{error}</div>}
 
-      {minor ? (
-        <p role="status" className="text-sm text-ink-2 bg-raised rounded-xl p-3">Pro can't be bought on an account under 16. Everything free stays open to you.</p>
-      ) : (
       <div>
-        <Button full onClick={() => onCheckout(plan)} disabled={busy}>
-          {busy ? 'Opening secure checkout…' : trial ? `Start ${TRIAL_DAYS}-day free trial` : 'Continue to payment'}
+        <Button full onClick={() => onCheckout(chosen.id)} disabled={busy}>
+          {busy ? (moving ? 'Switching…' : 'Opening secure checkout…') : moving ? `Switch to ${coach ? 'the coach plan' : 'Pro'}` : trial ? `Start ${TRIAL_DAYS}-day free trial` : 'Continue to payment'}
         </Button>
         <p className="text-xs text-muted text-center mt-3">
-          {trial
+          {moving
+            ? `Your subscription moves to ${money(chosen.price)} a ${chosen.per} straight away; the difference for the rest of this period is worked out by the day on your next bill.`
+            : trial
             ? `Free until ${firstCharge}, then ${money(chosen.price)} a ${chosen.per}, renewing automatically until you cancel. Cancel before then and you won't be charged.`
             : `${money(chosen.price)} a ${chosen.per}, renewing automatically until you cancel. Cancel anytime from your profile.`}
         </p>
@@ -69,6 +96,7 @@ export default function UpgradeSheet({ onClose, onCheckout, busy = false, error 
         </p>
         <p className="text-xs text-muted text-center mt-1">Workout logging, calorie logging and progress stay free.</p>
       </div>
+      </>
       )}
     </Sheet>
   )

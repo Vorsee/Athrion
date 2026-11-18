@@ -66,6 +66,11 @@ async function optional(fn, args) {
 export const fetchTeammates = async () => (await optional('my_teammates')) ?? []
 export const fetchTeammatesPrs = async () => (await optional('my_teammates_prs')) ?? []
 export const setTeamVisible = async show => must(await supabase.rpc('set_swim_team_visible', { p_show: show }))
+// 13-15 year olds who opened the team's link and wait on a parent's OK (039): the teen notes it
+// from ParentGate, the coach sees nickname, since when and the parent's answer so far
+export const noteSwimWaiting = async code => { await supabase.rpc('note_swim_waiting', { p_code: code }) }
+export const fetchTeamWaiting = async () => (await optional('my_team_waiting')) ?? []
+export const clearTeamWaiting = async nickname => must(await supabase.rpc('clear_team_waiting', { p_nickname: nickname }))
 export const respondToSwimmer = async (userId, accept) => must(await supabase.rpc('respond_swim_request', { p_user: userId, p_accept: accept }))
 
 // ── Swimmer ──────────────────────────────────────────────────────────────────
