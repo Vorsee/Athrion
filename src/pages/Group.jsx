@@ -37,7 +37,7 @@ import PersonSafetySheet from '../components/PersonSafetySheet.jsx'
 import ShareSheet from '../components/ShareSheet.jsx'
 import { cardContent } from '../lib/shareCard.js'
 import { bestSetEach, beatItRows } from '../lib/roomSummary.js'
-import { planFrom, makeSets, totalSets as countSets, setsDone, restAfter, restLabel, setsSummary, REST_OPTIONS, MAX_SETS, freePlan, freeRoom, FREE_SET_OPTIONS, FREE_REST_OPTIONS } from '../lib/groupPlan.js'
+import { planFrom, makeSets, totalSets as countSets, setsDone, restAfter, restLabel, setsSummary, REST_OPTIONS, MAX_SETS, freePlan, freeRoom, freePicks, FREE_SET_OPTIONS, FREE_REST_OPTIONS } from '../lib/groupPlan.js'
 import { saveWorkoutEntry } from '../lib/api.js'
 import { useUnit } from '../lib/units.js'
 
@@ -76,7 +76,8 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
   const [participants, setParticipants] = useState([])
   const [allSets, setAllSets] = useState([])
   const [isHost, setIsHost] = useState(false)
-  const [plan, setPlan] = useState([]) // [{ name, sets: [{ reps, rest }] }], see groupPlan.js; in a free room, my own picks
+  const [plan, setPlan] = useState([]) // [{ name, sets: [{ reps, rest }] }], see groupPlan.js; in a free room, the host's picks so far
+  const [replacing, setReplacing] = useState(false) // a free room's host changing the exercise just picked
   const [free, setFree] = useState(null) // a free room's { sets, rest } (freeRoom), else null
   const [restTotal, setRestTotal] = useState(60) // length of the rest that's running
   const [exIdx, setExIdx] = useState(0)
@@ -161,11 +162,20 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
   const screenRef = useRef('home')
 
   function goScreen(s) { screenRef.current = s; setScreen(s) }
-  // The room as the host set it up: a plan, or a free room (my picks start empty)
+  // The room as the host set it up: a plan, or a free room, where everyone does the host's
+  // picks in order. Picks only grow (or the latest is swapped), so a stale read never drops one.
   function applyRoom(sess) {
     const fr = freeRoom(sess?.plan)
     setFree(fr)
-    setPlan(fr ? [] : planFrom(sess))
+    if (!fr) return setPlan(planFrom(sess))
+    const picked = freePicks(sess.plan)
+    setPlan(prev => (picked.length >= prev.length ? picked : prev))
+  }
+  // During the workout only a free room changes: the host's next pick. The host's own read
+  // waits until their save has landed.
+  const followRoom = sess => {
+    if (hostEditing.current) return
+    if (screenRef.current === 'lobby' || (freeRoom(sess?.plan) && SESSION_SCREENS.includes(screenRef.current))) applyRoom(sess)
   }
   const firstScreen = sess => (freeRoom(sess?.plan) ? 'picker' : 'training')
   // Back from the lobby leaves the room, as its Back button did
@@ -196,7 +206,6 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
       setStartTime(state.startTime || null)
       if (state.restTotal) setRestTotal(state.restTotal)
       applyRoom(sess)
-      if (freeRoom(sess.plan) && state.myPlan) setPlan(state.myPlan)
       const target = state.screen && state.screen !== 'done' ? state.screen : (sess.status === 'lobby' ? 'lobby' : firstScreen(sess))
       goScreen(target)
     }).catch(() => {
@@ -216,7 +225,6 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
       startTime,
       restTotal,
       name: displayName,
-      ...(free && { myPlan: plan }), // a free room's exercises are picked here, not saved with the room
     }))
   }, [groupSession?.id, screen, isHost, exIdx, setIdx, startTime, restTotal, displayName, free, plan])
 
@@ -246,8 +254,8 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
       onSessionUpdate: (updated) => {
         setGroupSession(updated)
         if (myIdRef.current) setIsHost(updated.host_id === myIdRef.current)
-        // The host's edits show in everyone's lobby; once training, the plan stays as it started
-        if (screenRef.current === 'lobby' && !hostEditing.current) applyRoom(updated)
+        // The host's edits show in everyone's lobby; once training, only a free room's picks change
+        followRoom(updated)
         // Transition everyone from lobby → training (or the picker, in a free room) when host starts
         if (updated.status === 'active' && screenRef.current === 'lobby') {
           setStartTime(Date.now())
@@ -329,7 +337,7 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
         if (sess) {
           setGroupSession(sess)
           if (myIdRef.current) setIsHost(sess.host_id === myIdRef.current)
-          if (screenRef.current === 'lobby' && !hostEditing.current) applyRoom(sess)
+          followRoom(sess)
           if (sess.status === 'active' && screenRef.current === 'lobby') {
             setStartTime(Date.now())
             goScreen(firstScreen(sess))
@@ -387,18 +395,47 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
     goScreen('training')
   }
 
-  function toPicker() {
+  // A free room, after an exercise: on to the host's next pick if it's there already, else the
+  // picker (host) or waiting for it (everyone else). replace: the host swaps the exercise just
+  // picked, before any set of it.
+  function toPicker({ replace = false } = {}) {
     localStorage.removeItem('athrion_group_rest_end')
     setSetIdx(0); setWeight(''); setReps('')
-    goScreen('picker')
+    setReplacing(replace)
+    if (replace) return goScreen('picker')
+    const next = exIdx + 1
+    setExIdx(next)
+    goScreen(next < plan.length ? 'training' : 'picker')
   }
 
-  function pickExercise(ex) {
-    const next = [...plan, { name: ex.name, sets: makeSets(free?.sets ?? 3, free?.rest ?? 60) }]
-    setPlan(next)
-    setExIdx(next.length - 1); setSetIdx(0); setWeight(''); setReps('')
-    goScreen('training')
+  // Training screen's button in a free room: the host changes an exercise not started yet;
+  // anyone else (or after a set) moves on to the next one
+  function leaveExercise() {
+    toPicker({ replace: isHost && setIdx === 0 })
   }
+
+  // Only the host picks; the pick is saved with the room and everyone else follows it
+  function pickExercise(ex) {
+    const item = { name: ex.name, sets: makeSets(free?.sets ?? 3, free?.rest ?? 60) }
+    const idx = replacing ? exIdx : plan.length
+    const next = [...plan.slice(0, idx), item, ...plan.slice(idx + 1)]
+    setPlan(next)
+    setReplacing(false)
+    setExIdx(idx); setSetIdx(0); setWeight(''); setReps('')
+    goScreen('training')
+    hostEditing.current++
+    saveSessionPlan(groupSession.id, freePlan({ ...free, picks: next.map(e => e.name) }))
+      .catch(err => console.error(err))
+      .finally(() => { hostEditing.current-- })
+  }
+
+  // Waiting for the host's pick: start it as soon as it arrives
+  useEffect(() => {
+    if (free && screen === 'picker' && !replacing && exIdx < plan.length) {
+      setSetIdx(0); setWeight(''); setReps('')
+      goScreen('training')
+    }
+  }, [free, screen, replacing, exIdx, plan.length])
 
   // Only the host edits the room (RLS allows only them). Their own polling mustn't undo an
   // edit that's still saving, so it waits until the last save lands.
@@ -640,7 +677,12 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
     <PickerScreen
       feed={feed}
       picked={plan}
+      current={plan[exIdx]?.name}
       free={free}
+      isHost={isHost}
+      replacing={replacing}
+      hostName={participants.find(p => p.user_id === groupSession?.host_id)?.display_name}
+      onCancelReplace={() => { setReplacing(false); goScreen('training') }}
       allSets={allSets}
       participants={participants}
       myId={myId}
@@ -657,7 +699,8 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
       feed={feed}
       plan={plan}
       free={free}
-      onNextExercise={toPicker}
+      isHost={isHost}
+      onNextExercise={leaveExercise}
       exercises={exercises}
       exIdx={exIdx}
       setIdx={setIdx}
@@ -685,6 +728,7 @@ export default function Group({ session, intent, onIntentDone, isMinor = false }
       free={free}
       exIdx={exIdx}
       setIdx={setIdx}
+      isHost={isHost}
       restLeft={restLeft}
       restSecs={restTotal}
       allSets={allSets}
@@ -1130,7 +1174,7 @@ function LobbyScreen({ groupSession, participants, isHost, plan, free, onChange,
         </div>
       </Card>
 
-      {/* Host: a planned workout, or a free one where everyone picks their own exercises */}
+      {/* Host: a planned workout, or a free one where the host picks each exercise as they go */}
       {isHost && (
         <Segmented options={[['plan', 'Plan exercises'], ['free', 'Free workout']]} value={free ? 'free' : 'plan'} onChange={setMode}
           label="Room workout" kind="choice" scroll={false} />
@@ -1141,11 +1185,11 @@ function LobbyScreen({ groupSession, participants, isHost, plan, free, onChange,
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-lg leading-[1.3] font-semibold text-ink">Sets per exercise</h2>
-              <p className="text-xs text-muted mt-0.5 mb-3">Everyone picks their own exercises as they go. 3 sets suits most people.</p>
+              <p className="text-xs text-muted mt-0.5 mb-3">You pick each exercise as you go and everyone follows. 3 sets suits most people.</p>
             </div>
             <InfoButton title="Free workout">
               <div className="space-y-3 text-sm text-ink-2">
-                <p>Nobody follows a list: each person picks an exercise, does its sets, then picks the next one, until they finish.</p>
+                <p>No list to plan: you pick an exercise, everyone in the room does its sets, then you pick the next one, until you finish. Anyone who's quicker waits for your next pick.</p>
                 <p><span className="font-semibold text-ink">Rest:</span> the timer after each set. 60 to 90 seconds works for most exercises; 2 minutes for heavy lifts, 30 seconds for light or core work.</p>
               </div>
             </InfoButton>
@@ -1158,7 +1202,7 @@ function LobbyScreen({ groupSession, participants, isHost, plan, free, onChange,
       ) : (
         <Card>
           <SectionTitle>Free workout</SectionTitle>
-          <p className="text-sm text-ink-2">Everyone picks their own exercises as they go.</p>
+          <p className="text-sm text-ink-2">The host picks each exercise as you go, and everyone does it together.</p>
           <div className="flex flex-wrap gap-1.5 mt-3">
             <Fact icon="mdi:repeat">{free.sets} sets each</Fact>
             <Fact icon="mdi:timer-outline">{free.rest}s rest</Fact>
@@ -1385,7 +1429,7 @@ function EndEarly({ onEnd, confirm, setConfirm, label = 'End workout early' }) {
 // Training
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TrainingScreen({ feed, plan, free, onNextExercise, exercises, exIdx, setIdx, participants, allSets, myId, weight, setWeight, reps, setReps, onLog, onEnd, confirmEnd, setConfirmEnd }) {
+function TrainingScreen({ feed, plan, free, isHost, onNextExercise, exercises, exIdx, setIdx, participants, allSets, myId, weight, setWeight, reps, setReps, onLog, onEnd, confirmEnd, setConfirmEnd }) {
   const { unit } = useUnit()
   const now = useNow()
   const ex = exercises[exIdx]
@@ -1465,7 +1509,7 @@ function TrainingScreen({ feed, plan, free, onNextExercise, exercises, exIdx, se
         <p className="text-xs text-muted text-center mt-2">Bodyweight? Leave weight empty.</p>
         {free && (
           <Button variant="ghost" full icon="mdi:swap-horizontal" onClick={onNextExercise} className="mt-2">
-            {setIdx > 0 ? 'Done with this exercise' : 'Pick another exercise'}
+            {setIdx > 0 ? 'Done with this exercise' : isHost ? 'Change exercise' : 'Skip this exercise'}
           </Button>
         )}
       </Card>
@@ -1479,10 +1523,11 @@ function TrainingScreen({ feed, plan, free, onNextExercise, exercises, exIdx, se
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Free room: pick the next exercise (as on Train's free workout), or finish
+// Free room: the host picks the next exercise (as on Train's free workout) for everyone, or
+// finishes; everyone else waits here for it, and it starts the moment it's picked
 // ─────────────────────────────────────────────────────────────────────────────
 
-function PickerScreen({ feed, picked, free, allSets, participants, myId, onPick, onEnd }) {
+function PickerScreen({ feed, picked, current, free, isHost, replacing, hostName, onCancelReplace, allSets, participants, myId, onPick, onEnd }) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('All')
   const [confirmEnd, setConfirmEnd] = useState(false)
@@ -1495,16 +1540,48 @@ function PickerScreen({ feed, picked, free, allSets, participants, myId, onPick,
     return (e.name.toLowerCase().includes(q) || e.muscle.toLowerCase().includes(q)) && (filter === 'All' || e.muscle === filter)
   })
 
+  if (!isHost) return (
+    <div className="space-y-4 py-4 slide-up">
+      <PageHeader icon="mdi:account-clock-outline" title={picked.length === 0 ? 'First exercise' : 'Next exercise'}
+        facts={<>
+          <Fact icon="mdi:repeat">{free?.sets ?? 3} sets each</Fact>
+          <Fact icon="mdi:timer-outline">{free?.rest ?? 60}s rest</Fact>
+          {mySets > 0 && <Fact icon="mdi:check">{mySets} {mySets === 1 ? 'set' : 'sets'} done</Fact>}
+        </>} />
+      <Card>
+        <div className="flex items-center gap-3">
+          <span className="relative flex w-2.5 h-2.5 flex-shrink-0" aria-hidden="true">
+            <span className="absolute inset-0 rounded-full bg-neon live-pulse" />
+            <span className="relative w-2.5 h-2.5 rounded-full bg-neon" />
+          </span>
+          <div className="min-w-0">
+            <div className="text-base font-semibold text-ink">Waiting for {hostName ? `@${hostName}` : 'the host'}</div>
+            <p className="text-sm text-muted">The host picks each exercise. It starts here as soon as they do.</p>
+          </div>
+        </div>
+      </Card>
+
+      {mySets > 0 && <Button full variant="secondary" icon="mdi:flag-checkered" onClick={() => onEnd()}>Finish workout</Button>}
+
+      <LiveBoard rows={rows} myId={myId} title="Live standings" />
+      {feed}
+
+      {mySets === 0 && <EndEarly onEnd={onEnd} confirm={confirmEnd} setConfirm={setConfirmEnd} label="End workout" />}
+    </div>
+  )
+
   return (
     <div className="space-y-4 py-4 slide-up">
-      <PageHeader icon="mdi:format-list-checks" title={picked.length === 0 ? 'First exercise' : 'Next exercise'}
+      <PageHeader icon="mdi:format-list-checks" title={replacing ? 'Change exercise' : picked.length === 0 ? 'First exercise' : 'Next exercise'}
         facts={<>
           <Fact icon="mdi:repeat">{free?.sets ?? 3} sets each</Fact>
           <Fact icon="mdi:timer-outline">{free?.rest ?? 60}s rest</Fact>
           {mySets > 0 && <Fact icon="mdi:check">{mySets} {mySets === 1 ? 'set' : 'sets'} done</Fact>}
         </>} />
 
-      {mySets > 0 && <Button full icon="mdi:flag-checkered" onClick={() => onEnd()}>Finish workout</Button>}
+      <p className="text-sm text-muted">Everyone in the room does the exercise you pick.</p>
+      {replacing && <Button full variant="secondary" icon="mdi:arrow-left" onClick={onCancelReplace}>Keep {current ?? 'this exercise'}</Button>}
+      {!replacing && mySets > 0 && <Button full icon="mdi:flag-checkered" onClick={() => onEnd()}>Finish workout</Button>}
 
       <Card>
         <input
@@ -1540,11 +1617,11 @@ function PickerScreen({ feed, picked, free, allSets, participants, myId, onPick,
 // Rest: the timer, then everyone's standing
 // ─────────────────────────────────────────────────────────────────────────────
 
-function RestScreen({ feed, plan, free, exIdx, setIdx, restLeft, restSecs, allSets, participants, myId, onSkip, onEnd }) {
+function RestScreen({ feed, plan, free, isHost, exIdx, setIdx, restLeft, restSecs, allSets, participants, myId, onSkip, onEnd }) {
   const [confirmEnd, setConfirmEnd] = useState(false)
   const now = useNow()
   const ex = plan[exIdx]
-  const upNext = setIdx + 1 < (ex?.sets.length ?? 0) ? `${ex.name}, set ${setIdx + 2}` : free ? 'your pick' : plan[exIdx + 1]?.name
+  const upNext = setIdx + 1 < (ex?.sets.length ?? 0) ? `${ex.name}, set ${setIdx + 2}` : plan[exIdx + 1]?.name ?? (free ? (isHost ? 'your pick' : "the host's pick") : null)
   const rows = standings({ sets: allSets, participants, plan, free, now })
   const place = rows.findIndex(r => r.id === myId) + 1
 

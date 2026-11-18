@@ -70,7 +70,7 @@ describe('Train together: sets one by one', () => {
     expect(screen.getByText('Set 1 of 3')).toBeInTheDocument()
   })
 
-  it('runs a free workout: the host picks sets and rest, everyone picks their own exercises', async () => {
+  it('runs a free workout: the host sets sets and rest, then picks each exercise for the room', async () => {
     render(<Group session={{ name: 'Sam' }} intent={{ tab: 'rooms' }} />)
     await userEvent.click(screen.getByText('Create a room'))
     await screen.findByText('Room code')
@@ -88,9 +88,32 @@ describe('Train together: sets one by one', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Go: Front Squat' }))
     expect(await screen.findByText('Set 1 of 4')).toBeInTheDocument()
     expect(screen.getByText('Then rest 1m 30s')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Pick another exercise' }))
-    expect(await screen.findByText('Next exercise')).toBeInTheDocument()
+    // The pick is saved with the room, so everyone else does it too
+    await vi.waitFor(() => expect(updates('group_sessions').at(-1).plan[0].picks).toEqual(['Front Squat']))
+
+    // Before a set, the host can swap it: the pick is replaced, not added
+    await userEvent.click(screen.getByRole('button', { name: 'Change exercise' }))
+    expect(await screen.findByRole('button', { name: 'Keep Front Squat' })).toBeInTheDocument()
+    await userEvent.type(screen.getByPlaceholderText('Search exercises'), 'Deadlift')
+    await userEvent.click(screen.getByRole('button', { name: 'Go: Deadlift' }))
+    await vi.waitFor(() => expect(updates('group_sessions').at(-1).plan[0].picks).toEqual(['Deadlift']))
   })
+
+  it("free workout: a guest waits for the host's pick, then does that exercise", async () => {
+    const room = picks => ({ id: 's1', code: 'ABC234', host_id: 'host-1', status: 'active', plan: [{ free: true, sets: Array(3).fill({ reps: null, rest: 60 }), ...(picks && { picks }) }], exercises: [], total_sets: 3, rest_secs: 60 })
+    let current = room(null)
+    sb.set('group_sessions', () => ({ data: current, error: null }))
+    sb.set('group_participants', q => (sb.op(q, 'insert') ? { data: null, error: null } : { data: [{ user_id: USER.id, display_name: 'sam' }, { user_id: 'host-1', display_name: 'alex' }], error: null }))
+    localStorage.setItem('athrion_group_session_state', JSON.stringify({ sessionId: 's1', screen: 'picker', isHost: false, exIdx: 0, setIdx: 0, startTime: Date.now() }))
+    render(<Group session={{ name: 'Sam' }} intent={{ tab: 'rooms' }} />)
+    expect(await screen.findByText('Waiting for @alex')).toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('Search exercises')).toBeNull() // guests don't pick
+
+    current = room(['Front Squat'])
+    expect(await screen.findByText('Set 1 of 3', {}, { timeout: 5000 })).toBeInTheDocument() // the next poll brings the pick
+    expect(screen.getAllByText('Front Squat').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Skip this exercise' })).toBeInTheDocument()
+  }, 10000)
 
   it('keeps a set logged without signal and sends it once back online', async () => {
     const plan = [{ name: 'Front Squat', sets: [{ reps: 5, rest: 60 }, { reps: 5, rest: 60 }] }]

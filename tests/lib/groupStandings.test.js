@@ -87,6 +87,18 @@ describe('free workout rooms', () => {
     expect(freeRoom(planFrom({ exercises: ['Squat'] }))).toBeNull()
     expect(freeRoom(null)).toBeNull()
   })
+
+  it("keeps the host's picks in a free room and turns them into everyone's exercises", async () => {
+    const { freePlan, freeRoom, freePicks } = await import('../../src/lib/groupPlan.js')
+    const plan = freePlan({ sets: 2, rest: 30, picks: ['Squat', 'Pull Up'] })
+    expect(freeRoom(plan)).toEqual({ sets: 2, rest: 30 })
+    expect(freePicks(plan)).toEqual([
+      { name: 'Squat', sets: [{ reps: null, rest: 30 }, { reps: null, rest: 30 }] },
+      { name: 'Pull Up', sets: [{ reps: null, rest: 30 }, { reps: null, rest: 30 }] },
+    ])
+    expect(freePicks(freePlan())).toEqual([])
+    expect(freePicks([{ name: 'Squat', sets: [] }])).toEqual([])
+  })
   it('ranks by volume with no total to finish, resting for the room rest', () => {
     const sets = [set(1, 'a', 'Deadlift', 1, 300, 5, 30), set(2, 'b', 'Curl', 3, 40, 10, 200)]
     const rows = standings({ sets, participants, plan: [], free: { sets: 3, rest: 60 }, now })

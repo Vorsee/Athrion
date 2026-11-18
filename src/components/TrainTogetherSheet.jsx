@@ -13,7 +13,7 @@ export default function TrainTogetherSheet({ today, last, onInvite, onClose }) {
   const options = [
     todayPlan.length && { id: 'today', icon: 'mdi:calendar-today', title: today.name || "Today's workout", meta: `Today's workout · ${count(todayPlan)}`, host: { plan: todayPlan } },
     lastPlan.length && { id: 'last', icon: 'mdi:history', title: last.name || 'Your last workout', meta: `Repeat your last workout · ${count(lastPlan)}`, host: { plan: lastPlan } },
-    { id: 'free', icon: 'mdi:plus-circle-outline', title: 'Free workout', meta: 'Everyone picks their own exercises as they go', host: { free: { sets: 3, rest: 60 } } },
+    { id: 'free', icon: 'mdi:plus-circle-outline', title: 'Free workout', meta: 'You pick each exercise, everyone follows', host: { free: { sets: 3, rest: 60 } } },
   ].filter(Boolean)
   const [pick, setPick] = useState(options[0].id)
   const chosen = options.find(o => o.id === pick) ?? options[0]
