@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { createClient } from "jsr:@supabase/supabase-js@2"
 import webpush from "npm:web-push@3.6.7"
 import { localParts, chooseMessage, buildRecap, openWorkoutMessage, pushAllowed } from "./reminders.ts"
+import { sendApns } from "./apns.ts"
 
 // Called by pg_cron and database triggers, always with the cron secret:
 //   {}               hourly (005): each user's daily reminder at their hour, and the Sunday recap
@@ -34,10 +35,28 @@ async function loadContext(userId: string) {
     lastWeighIn: weigh?.date ?? null, goals: fp ? [fp.primary_goal, ...(fp.secondary_goals ?? [])].filter(Boolean) : [] }
 }
 
-// Push one message to every device of a user; drops subscriptions the browser has ended
-async function pushTo(userId: string, message: any, ttl: number) {
+// The iPhone app's devices (041). Tokens Apple has ended are dropped.
+async function pushToPhones(userId: string, message: any, ttl: number) {
+  const { data: rows } = await admin.from('apns_tokens').select('*').eq('user_id', userId)
+  let sent = 0, removed = 0
+  for (const row of rows ?? []) {
+    const r = await sendApns(row, message, ttl)
+    if (r === 'sent') sent++
+    if (r === 'dead') { await admin.from('apns_tokens').delete().eq('token', row.token); removed++ }
+  }
+  return { sent, removed }
+}
+
+// Push one message to every device of a user; drops subscriptions the browser has ended.
+// phones: false for daily reminders and open workouts, which the iPhone app schedules itself.
+async function pushTo(userId: string, message: any, ttl: number, phones = true) {
   const { data: subs } = await admin.from('push_subscriptions').select('*').eq('user_id', userId)
   let delivered = false, removed = 0
+  if (phones) {
+    const p = await pushToPhones(userId, { url: '/', ...message }, ttl)
+    if (p.sent) delivered = true
+    removed += p.removed
+  }
   for (const sub of subs ?? []) {
     try {
       await webpush.sendNotification(
@@ -81,7 +100,7 @@ async function openWorkouts() {
   let sent = 0
   for (const row of rows ?? []) {
     if (pushAllowed('open-workout', await prefsFor(row.user_id))) {
-      const { delivered } = await pushTo(row.user_id, openWorkoutMessage(row), 3 * 3600)
+      const { delivered } = await pushTo(row.user_id, openWorkoutMessage(row), 3 * 3600, false)
       if (delivered) sent++
     }
     await admin.from('open_workouts').update({ notified_at: new Date().toISOString() }).eq('user_id', row.user_id)
@@ -106,12 +125,14 @@ async function sendTestPush(req: Request) {
   if (!user) return Response.json({ error: 'Please sign in again.' }, { status: 401, headers: cors })
 
   const { data: subs } = await admin.from('push_subscriptions').select('*').eq('user_id', user.id)
-  if (!subs?.length) {
+  const { count: phoneCount } = await admin.from('apns_tokens').select('token', { count: 'exact', head: true }).eq('user_id', user.id)
+  if (!subs?.length && !phoneCount) {
     return Response.json({ error: 'This account has no device with reminders turned on.' }, { status: 404, headers: cors })
   }
   const message = { title: 'Test notification', body: 'Notifications are working on this device.', tag: 'test', url: '/' }
-  let sent = 0, removed = 0
-  for (const sub of subs) {
+  const phones = await pushToPhones(user.id, message, 600)
+  let sent = phones.sent, removed = phones.removed
+  for (const sub of subs ?? []) {
     try {
       await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, JSON.stringify(message), { TTL: 600 })
       sent++
@@ -178,7 +199,7 @@ Deno.serve(async (req) => {
       { last: ctx.logs[0], month: ctx.summary, lastWeighIn: ctx.lastWeighIn, goals: ctx.goals })
     if (!message) { skipped++; continue }
 
-    const { delivered, removed: gone } = await pushTo(s.user_id, message, 4 * 3600)
+    const { delivered, removed: gone } = await pushTo(s.user_id, message, 4 * 3600, false)
     removed += gone
     if (delivered) {
       sent++

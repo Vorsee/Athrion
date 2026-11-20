@@ -26,6 +26,7 @@ export default defineConfig({
       { find: /^jsr:@supabase\/supabase-js@2$/, replacement: '@supabase/supabase-js' },
       { find: /^npm:@anthropic-ai\/sdk@1$/, replacement: '/tests/helpers/denoStubs.js' },
       { find: /^npm:web-push@3\.6\.7$/, replacement: '/tests/helpers/webpushStub.js' },
+      { find: /^npm:jose@5\.9\.6$/, replacement: '/tests/helpers/joseStub.js' },
     ],
     include: ['tests/**/*.test.{js,jsx,ts}'],
     env: {

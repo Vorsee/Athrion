@@ -3698,3 +3698,24 @@ END $$;
 DROP TRIGGER IF EXISTS guard_group_set_edit ON public.group_sets;
 CREATE TRIGGER guard_group_set_edit BEFORE UPDATE ON public.group_sets
   FOR EACH ROW EXECUTE FUNCTION public.guard_group_set_edit();
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ═══ 040_apple_subscriptions
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- 040: ATHRION Pro bought in the iPhone app (Apple In-App Purchase).
+-- An Apple subscription is a Pro row like a Stripe one (status 'pro'), so every Pro check,
+-- the Edge Functions too, keeps working unchanged. api/apple-subscription.js writes it when the
+-- app reports a purchase; api/apple-notifications.js keeps it current on renewals, refunds and
+-- expiry (App Store Server Notifications V2). provider says who bills it, so an Apple expiry
+-- never ends a Stripe subscription and the other way round. Safe to re-run.
+
+ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS provider text NOT NULL DEFAULT 'stripe';
+ALTER TABLE public.subscriptions DROP CONSTRAINT IF EXISTS subscriptions_provider_check;
+ALTER TABLE public.subscriptions ADD CONSTRAINT subscriptions_provider_check CHECK (provider IN ('stripe', 'apple'));
+
+ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS apple_original_transaction_id text UNIQUE;
+ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS apple_product_id text;
+ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS apple_expires_at timestamptz;
+ALTER TABLE public.subscriptions ADD COLUMN IF NOT EXISTS apple_environment text;
