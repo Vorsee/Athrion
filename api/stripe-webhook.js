@@ -30,6 +30,16 @@ async function getRawBody(req) {
   return Buffer.concat(chunks)
 }
 
+// An Apple subscription that's still active on this account (040): when Stripe ends, the
+// account stays PRO through Apple instead of turning free
+async function appleTakesOver(userId) {
+  const { data: row } = await supabase.from('subscriptions')
+    .select('apple_original_transaction_id, apple_product_id, apple_expires_at').eq('user_id', userId).maybeSingle()
+  const live = row?.apple_original_transaction_id && row.apple_expires_at && new Date(row.apple_expires_at) > new Date()
+  if (!live) return null
+  return { provider: 'apple', status: 'pro', tier: String(row.apple_product_id ?? '').includes('coach') ? 'coach' : 'pro' }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
 
@@ -87,6 +97,7 @@ export default async function handler(req, res) {
       await withTier(f => supabase.from('subscriptions').upsert(f, { onConflict: 'user_id' }), {
         user_id: userId,
         status: 'pro',
+        provider: 'stripe',
         tier: String(session.metadata?.plan ?? '').startsWith('coach') ? 'coach' : 'pro',
         stripe_customer_id: session.customer,
         stripe_subscription_id: session.subscription,
@@ -119,9 +130,12 @@ export default async function handler(req, res) {
     }
     if (row) {
       const uid = row.user_id
-      // A plan switch (Pro to coach, or back) arrives here too, with the new price
+      // A plan switch (Pro to coach, or back) arrives here too, with the new price.
+      // Lapsed on Stripe but still paid through Apple: Apple keeps it PRO.
+      const apple = status === 'free' ? await appleTakesOver(uid) : null
       await withTier(f => supabase.from('subscriptions').update(f).eq('user_id', uid),
-        { status, tier: tierOf(sub), updated_at: new Date().toISOString() })
+        apple ? { ...apple, updated_at: new Date().toISOString() }
+              : { status, tier: tierOf(sub), ...(status === 'pro' ? { provider: 'stripe' } : {}), updated_at: new Date().toISOString() })
     }
   }
 
@@ -130,8 +144,9 @@ export default async function handler(req, res) {
     const { data: row } = await supabase.from('subscriptions')
       .select('user_id').eq('stripe_subscription_id', sub.id).maybeSingle()
     if (row) {
+      const apple = await appleTakesOver(row.user_id)
       await supabase.from('subscriptions')
-        .update({ status: 'free', stripe_subscription_id: null, updated_at: new Date().toISOString() })
+        .update({ ...(apple ?? { status: 'free' }), stripe_subscription_id: null, updated_at: new Date().toISOString() })
         .eq('user_id', row.user_id)
     }
   }

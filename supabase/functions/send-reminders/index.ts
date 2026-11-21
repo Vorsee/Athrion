@@ -2,12 +2,13 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { createClient } from "jsr:@supabase/supabase-js@2"
 import webpush from "npm:web-push@3.6.7"
 import { localParts, chooseMessage, buildRecap, openWorkoutMessage, pushAllowed } from "./reminders.ts"
-import { sendApns } from "./apns.ts"
+import { sendApns, sendBuzz } from "./apns.ts"
 
 // Called by pg_cron and database triggers, always with the cron secret:
 //   {}               hourly (005): each user's daily reminder at their hour, and the Sunday recap
 //   { open: true }   every 15 min (011): "your workout is still open"
 //   { deliver: id }  a new row in notifications (011) that should also be pushed
+//   { buzz: id }     a reaction in a room (044): the person it's for gets a sound-only push
 // Plus { test: true } from the app, for the signed-in user's own devices.
 
 webpush.setVapidDetails(
@@ -90,6 +91,20 @@ async function deliver(id: string) {
   return Response.json({ sent: delivered ? 1 : 0, removed })
 }
 
+// A reaction: the phone vibrates, nothing shows. Only phones (browsers can't buzz silently).
+async function buzz(id: string) {
+  const { data: r } = await admin.from('group_reactions').select('to_user, from_user').eq('id', id).maybeSingle()
+  if (!r || r.to_user === r.from_user) return Response.json({ sent: 0 })
+  const { data: rows } = await admin.from('apns_tokens').select('*').eq('user_id', r.to_user)
+  let sent = 0
+  for (const row of rows ?? []) {
+    const res = await sendBuzz(row)
+    if (res === 'sent') sent++
+    if (res === 'dead') await admin.from('apns_tokens').delete().eq('token', row.token)
+  }
+  return Response.json({ sent })
+}
+
 // Workouts left open 45 minutes to 6 hours ago, one push each; day-old rows are cleared
 async function openWorkouts() {
   const now = Date.now()
@@ -160,6 +175,7 @@ Deno.serve(async (req) => {
   }
 
   if (body.deliver) return deliver(String(body.deliver))
+  if (body.buzz) return buzz(String(body.buzz))
   if (body.open === true) return openWorkouts()
 
   // Verifies push encryption works in this runtime without contacting a push service

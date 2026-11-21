@@ -263,6 +263,23 @@ describe('POST /api/stripe-webhook', () => {
     expect(sb.op(sb.queriesFor('subscriptions').at(-1), 'update')[0]).toMatchObject({ status: 'free', stripe_subscription_id: null })
   })
 
+  it('keeps the account PRO through Apple when Stripe ends and an Apple subscription is still active', async () => {
+    const soon = new Date(Date.now() + 10 * 86400000).toISOString()
+    sb.set('subscriptions', { data: { user_id: 'user-1', apple_original_transaction_id: '2000001', apple_product_id: 'athrion.pro.annual', apple_expires_at: soon }, error: null })
+    event('customer.subscription.deleted', { id: 'sub_1' })
+    await webhook(req({ body: '{}', headers: sig }), res())
+    expect(sb.op(sb.queriesFor('subscriptions').at(-1), 'update')[0]).toMatchObject({ provider: 'apple', status: 'pro', stripe_subscription_id: null })
+    event('customer.subscription.updated', { id: 'sub_1', status: 'past_due' })
+    await webhook(req({ body: '{}', headers: sig }), res())
+    expect(sb.op(sb.queriesFor('subscriptions').at(-1), 'update')[0]).toMatchObject({ provider: 'apple', status: 'pro' })
+  })
+  it('turns free when the Apple subscription has already expired', async () => {
+    sb.set('subscriptions', { data: { user_id: 'user-1', apple_original_transaction_id: '2000001', apple_expires_at: '2020-01-01T00:00:00Z' }, error: null })
+    event('customer.subscription.deleted', { id: 'sub_1' })
+    await webhook(req({ body: '{}', headers: sig }), res())
+    expect(sb.op(sb.queriesFor('subscriptions').at(-1), 'update')[0]).toMatchObject({ status: 'free' })
+  })
+
   it('saves a live subscription on an account whose row lost its id, never replacing one it has', async () => {
     const rowFor = id => q => {
       const [col] = sb.op(q, 'eq') ?? []

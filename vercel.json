@@ -7,6 +7,10 @@
   ],
   "rewrites": [
     {
+      "source": "/run-club/:code",
+      "destination": "/run-club.html"
+    },
+    {
       "source": "/privacy",
       "destination": "/privacypolicy.html"
     },

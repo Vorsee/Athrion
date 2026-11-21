@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Join a run club on ATHRION</title>
+<meta name="description" content="You're invited to a run club on ATHRION: group runs, a monthly distance board and news from the organiser.">
+<meta property="og:title" content="Join my run club on ATHRION">
+<meta property="og:description" content="Group runs with RSVP, a monthly distance board and news from the organiser. Free.">
+<meta name="apple-itunes-app" content="app-id=6837463268">
+<style>
+  :root { --bg: #0b0b0a; --card: #151713; --line: #262a22; --ink: #f2f3ee; --muted: #9aa092; --neon: #c8f135; --on: #0b0b0a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 80% 0%, rgba(200,241,53,.16), transparent 50%), var(--bg);
+         color: var(--ink); font: 16px/1.5 -apple-system, BlinkMacSystemFont, "DM Sans", system-ui, sans-serif; display: grid; place-items: center; padding: 24px 16px; }
+  main { width: 100%; max-width: 420px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 900; font-style: italic; font-size: 22px; letter-spacing: -.5px; margin-bottom: 28px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 24px; }
+  .eyebrow { color: var(--neon); font-size: 12px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; }
+  h1 { font-size: 30px; line-height: 1.15; margin: 8px 0 10px; }
+  p { color: var(--muted); margin: 0 0 18px; }
+  ul { padding: 0; margin: 0 0 22px; list-style: none; }
+  li { padding: 6px 0 6px 28px; position: relative; }
+  li::before { content: "✓"; position: absolute; left: 0; color: var(--neon); font-weight: 800; }
+  .code { display: flex; gap: 6px; justify-content: center; margin: 6px 0 22px; }
+  .code span { width: 38px; height: 48px; display: grid; place-items: center; border-radius: 10px; background: #1f221b; font: 700 22px ui-monospace, Menlo, monospace; }
+  .btn { display: block; text-align: center; text-decoration: none; font-weight: 700; padding: 15px; border-radius: 14px; background: var(--neon); color: var(--on); }
+  .btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); margin-top: 10px; }
+  .steps { font-size: 14px; color: var(--muted); margin-top: 18px; }
+  .steps b { color: var(--ink); }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">
+    <svg width="26" height="27" viewBox="312 296 456 474" aria-hidden="true"><path d="M312 770 498 296h84l186 474h-96L540 422 408 770z" fill="#f2f3ee"/><rect x="462" y="644" width="51" height="126" fill="#c8f135"/><rect x="516" y="578" width="51" height="192" fill="#c8f135"/><rect x="570" y="692" width="51" height="78" fill="#c8f135"/></svg>
+    ATHRION
+  </div>
+  <div class="card">
+    <div class="eyebrow">Run club invite</div>
+    <h1>You're invited to run together</h1>
+    <p>Run clubs live in the ATHRION iPhone app. Free to join.</p>
+    <ul>
+      <li>Group runs with the time and meeting place, and a reminder an hour before</li>
+      <li>A monthly distance board for the club</li>
+      <li>News from the organiser</li>
+    </ul>
+    <div class="code" id="code" aria-label="Club code"></div>
+    <a class="btn" href="https://apps.apple.com/app/id6837463268">Get ATHRION on the App Store</a>
+    <a class="btn ghost" id="open" href="#">I have the app: open the club</a>
+    <div class="steps">Or in the app: <b>Cardio → Run → Run clubs → Join with a code</b>, and type the code above.</div>
+  </div>
+</main>
+<script>
+  // /run-club/<code>: show the 8 characters; tapping "open" hands the same link to the app
+  var m = location.pathname.match(/^\/run-club\/([a-z0-9]{8})\/?$/i);
+  var code = m ? m[1].toUpperCase() : '';
+  var box = document.getElementById('code');
+  code.split('').forEach(function (c) { var s = document.createElement('span'); s.textContent = c; box.appendChild(s); });
+  if (!code) box.style.display = 'none';
+  document.getElementById('open').href = code ? 'https://athrion.app/run-club/' + code.toLowerCase() : 'https://athrion.app';
+</script>
+</body>
+</html>

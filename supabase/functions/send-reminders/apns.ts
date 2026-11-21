@@ -27,10 +27,13 @@ const DEAD = new Set(['BadDeviceToken', 'Unregistered', 'DeviceTokenNotForTopic'
 export type ApnsRow = { token: string, environment: string, bundle_id: string }
 export type ApnsMessage = { title: string, body?: string, tag?: string, url?: string }
 
+// A buzz: only a sound, so the phone vibrates and nothing shows (a reaction in a room)
+export function sendBuzz(row: ApnsRow) {
+  return post(row, { aps: { sound: 'default' }, kind: 'reaction' }, 60)
+}
+
 // → 'sent' | 'dead' | 'failed'
 export async function sendApns(row: ApnsRow, message: ApnsMessage, ttlSeconds: number) {
-  if (!apnsConfigured) return 'failed'
-  const host = row.environment === 'sandbox' ? 'api.sandbox.push.apple.com' : 'api.push.apple.com'
   const payload = {
     aps: {
       alert: { title: message.title, body: message.body ?? '' },
@@ -40,6 +43,12 @@ export async function sendApns(row: ApnsRow, message: ApnsMessage, ttlSeconds: n
     url: message.url ?? '/',
     kind: message.tag ?? '',
   }
+  return post(row, payload, ttlSeconds)
+}
+
+async function post(row: ApnsRow, payload: unknown, ttlSeconds: number) {
+  if (!apnsConfigured) return 'failed'
+  const host = row.environment === 'sandbox' ? 'api.sandbox.push.apple.com' : 'api.push.apple.com'
   try {
     const res = await fetch(`https://${host}/3/device/${row.token}`, {
       method: 'POST',
