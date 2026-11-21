@@ -14,13 +14,16 @@ export const MONTHLY_TARGET = 12
 // Places on the Everyone board that win a medal and a free month of Pro
 export const PRIZE_PLACES = 3
 
-// Lifetime points (all months added up) set the level; each level has 3 stars
+// Lifetime points (all months added up) set the level; each level has 3 stars. The first one
+// comes after about 3 workouts, so a new person levels up in their first week; the iPhone app
+// (Social.levels) uses the same numbers.
 export const LEVELS = [
   { name: 'Rookie', min: 0 },
-  { name: 'Regular', min: 300 },
-  { name: 'Athlete', min: 1000 },
-  { name: 'Elite', min: 2500 },
-  { name: 'Legend', min: 5000 },
+  { name: 'Regular', min: 30 },
+  { name: 'Committed', min: 150 },
+  { name: 'Athlete', min: 400 },
+  { name: 'Elite', min: 1000 },
+  { name: 'Legend', min: 2500 },
 ]
 
 export function levelFor(lifetime = 0) {

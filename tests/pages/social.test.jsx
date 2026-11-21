@@ -35,9 +35,10 @@ beforeEach(() => {
 
 describe('levels and trophies', () => {
   it('levels go up with lifetime points, three stars each', () => {
-    expect(levelFor(0)).toMatchObject({ name: 'Rookie', stars: 1, next: 'Regular', toNext: 300 })
-    expect(levelFor(250)).toMatchObject({ name: 'Rookie', stars: 3 })
-    expect(levelFor(1000)).toMatchObject({ name: 'Athlete', stars: 1 })
+    expect(levelFor(0)).toMatchObject({ name: 'Rookie', stars: 1, next: 'Regular', toNext: 30 })
+    expect(levelFor(25)).toMatchObject({ name: 'Rookie', stars: 3 })
+    expect(levelFor(30)).toMatchObject({ name: 'Regular', stars: 1, next: 'Committed' })
+    expect(levelFor(400)).toMatchObject({ name: 'Athlete', stars: 1 })
     expect(levelFor(9000)).toMatchObject({ name: 'Legend', stars: 3, next: null })
   })
 
