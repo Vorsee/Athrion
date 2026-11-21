@@ -9,6 +9,7 @@ import { sendApns, sendBuzz } from "./apns.ts"
 //   { open: true }   every 15 min (011): "your workout is still open"
 //   { deliver: id }  a new row in notifications (011) that should also be pushed
 //   { buzz: id }     a reaction in a room (044): the person it's for gets a sound-only push
+//   { chat: id }     a chat message (046): pushed to the other person's phones
 // Plus { test: true } from the app, for the signed-in user's own devices.
 
 webpush.setVapidDetails(
@@ -105,6 +106,22 @@ async function buzz(id: string) {
   return Response.json({ sent })
 }
 
+// A chat message: "@anna: Leg day at 6?" on the other person's phones (not the bell)
+async function chat(id: string) {
+  const { data: m } = await admin.from('chat_messages').select('sender, recipient, body, hidden').eq('id', id).maybeSingle()
+  if (!m || m.hidden) return Response.json({ sent: 0 })
+  if (!pushAllowed('chat', await prefsFor(m.recipient))) return Response.json({ sent: 0, muted: true })
+  const { data: who } = await admin.from('social_profiles').select('nickname').eq('user_id', m.sender).maybeSingle()
+  const body = String(m.body ?? '')
+  const { sent, removed } = await pushToPhones(m.recipient, {
+    title: `@${who?.nickname ?? 'friend'}`,
+    body: body.length > 140 ? body.slice(0, 137) + '…' : body,
+    tag: `chat-${who?.nickname ?? ''}`,
+    url: `/?open=chat&with=${encodeURIComponent(who?.nickname ?? '')}`,
+  }, 3600)
+  return Response.json({ sent, removed })
+}
+
 // Workouts left open 45 minutes to 6 hours ago, one push each; day-old rows are cleared
 async function openWorkouts() {
   const now = Date.now()
@@ -176,6 +193,7 @@ Deno.serve(async (req) => {
 
   if (body.deliver) return deliver(String(body.deliver))
   if (body.buzz) return buzz(String(body.buzz))
+  if (body.chat) return chat(String(body.chat))
   if (body.open === true) return openWorkouts()
 
   // Verifies push encryption works in this runtime without contacting a push service
