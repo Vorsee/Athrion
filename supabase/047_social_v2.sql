@@ -1,7 +1,7 @@
 -- 047: Train together, version 2. Needs 045 and 046. Includes 029 (fair points). Safe to re-run.
 --
 --   • Moderation: admins read open reports (with the reported message), warn, remove content or
---     ban (api/admin-moderate.js also bans the login); a summary of exit surveys.
+--     ban (the admin-moderate function also bans the login); a summary of exit surveys.
 --   • Cheat check: a workout, run or step count that can't be real is flagged and earns nothing
 --     (no points, no challenge progress, no feed post). It stays in the person's own log.
 --   • Points: month_points now comes from points_between(), which leagues use too. Only workouts
@@ -917,7 +917,7 @@ BEGIN
 END $$;
 
 -- dismiss · warn (they get a notification) · remove (their messages to the reporter are hidden)
--- · ban (everything they posted goes, friendships end; api/admin-moderate.js also locks the login)
+-- · ban (everything they posted goes, friendships end; the admin-moderate function also locks the login)
 CREATE OR REPLACE FUNCTION public.admin_resolve_report(p_id uuid, p_action text)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE r public.user_reports; admin uuid := auth.uid();
