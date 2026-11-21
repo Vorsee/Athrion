@@ -1,0 +1,14 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["QKL6N4G8Y7.app.athrion"],
+        "components": [
+          { "/": "/add/*", "comment": "Add a friend" },
+          { "/": "/r/*", "comment": "Join a room" },
+          { "/": "/run-club/*", "comment": "Join a run club" }
+        ]
+      }
+    ]
+  }
+}

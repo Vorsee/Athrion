@@ -1,22 +1,60 @@
 {
-  "crons": [{ "path": "/api/monthly-prizes", "schedule": "0 14 * * *" }],
+  "crons": [
+    {
+      "path": "/api/monthly-prizes",
+      "schedule": "0 14 * * *"
+    }
+  ],
   "rewrites": [
-    { "source": "/privacy", "destination": "/privacypolicy.html" },
-    { "source": "/terms", "destination": "/terms.html" },
-    { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }
+    {
+      "source": "/privacy",
+      "destination": "/privacypolicy.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/terms.html"
+    },
+    {
+      "source": "/((?!api/|assets/|\\.well-known/).*)",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
     {
+      "source": "/.well-known/apple-app-site-association",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ]
+    },
+    {
       "source": "/assets/(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
     },
     {
       "source": "/exercisedb-index.json",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400, stale-while-revalidate=604800" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400, stale-while-revalidate=604800"
+        }
+      ]
     },
     {
       "source": "/sw.js",
-      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
     }
   ]
 }
