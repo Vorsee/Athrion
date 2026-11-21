@@ -993,3 +993,102 @@ BEGIN
   GRANT EXECUTE ON FUNCTION public.admin_unban(uuid) TO service_role;
   GRANT EXECUTE ON FUNCTION public.admin_ban(uuid, text, uuid) TO service_role;
 END $$;
+
+-- ── Run together: you and up to 2 friends, live distance on each phone ──────
+CREATE TABLE IF NOT EXISTS public.run_together (
+  id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  code       text        NOT NULL UNIQUE,
+  host       uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS public.run_together_members (
+  run_id     uuid        NOT NULL REFERENCES public.run_together(id) ON DELETE CASCADE,
+  user_id    uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  status     text        NOT NULL DEFAULT 'invited' CHECK (status IN ('invited', 'in', 'done')),
+  meters     numeric     NOT NULL DEFAULT 0,
+  seconds    int         NOT NULL DEFAULT 0,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (run_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS run_together_members_user ON public.run_together_members (user_id);
+ALTER TABLE public.run_together ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.run_together_members ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.run_together, public.run_together_members FROM anon, authenticated;
+
+-- Invite 1 or 2 friends; they get a push that opens the run. Returns the run's code.
+CREATE OR REPLACE FUNCTION public.start_run_together(p_nicknames text[])
+RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE me uuid := auth.uid(); rid uuid; c text; n text; them uuid; nick text; ids uuid[] := '{}';
+BEGIN
+  IF me IS NULL THEN RAISE EXCEPTION 'Not signed in' USING ERRCODE = '42501'; END IF;
+  IF is_minor(me) THEN RAISE EXCEPTION 'Running together is for ages 16 and up' USING ERRCODE = 'P0001'; END IF;
+  IF is_banned(me) THEN RAISE EXCEPTION 'Your account can''t do that' USING ERRCODE = '42501'; END IF;
+  IF coalesce(cardinality(p_nicknames), 0) < 1 OR cardinality(p_nicknames) > 2 THEN RAISE EXCEPTION 'Pick 1 or 2 friends' USING ERRCODE = 'P0001'; END IF;
+  FOREACH n IN ARRAY p_nicknames LOOP
+    them := friend_by_nickname(n);
+    IF is_minor(them) THEN RAISE EXCEPTION '@% can''t run together yet', n USING ERRCODE = 'P0001'; END IF;
+    IF NOT them = ANY (ids) THEN ids := ids || them; END IF;
+  END LOOP;
+  IF (SELECT count(*) FROM run_together WHERE host = me AND created_at > now() - interval '1 day') >= 10 THEN
+    RAISE EXCEPTION 'Slow down: that''s a lot of runs today.' USING ERRCODE = 'P0429';
+  END IF;
+  LOOP
+    c := upper(substr(translate(md5(random()::text || clock_timestamp()::text), '01oil', ''), 1, 6));
+    EXIT WHEN NOT EXISTS (SELECT 1 FROM run_together WHERE code = c);
+  END LOOP;
+  INSERT INTO run_together (code, host) VALUES (c, me) RETURNING id INTO rid;
+  INSERT INTO run_together_members (run_id, user_id, status) VALUES (rid, me, 'in');
+  INSERT INTO run_together_members (run_id, user_id) SELECT rid, unnest(ids);
+  SELECT nickname INTO nick FROM social_profiles WHERE user_id = me;
+  FOREACH them IN ARRAY ids LOOP
+    PERFORM notify(them, 'run_together', '@' || coalesce(nick, 'A friend') || ' wants to run with you 🏃',
+      'Tap to join. You''ll see each other''s distance live.', '/?open=run&code=' || c, true);
+  END LOOP;
+  RETURN c;
+END $$;
+
+-- Runs I'm invited to or in, from the last 3 hours
+CREATE OR REPLACE FUNCTION public.my_runs_together()
+RETURNS TABLE (code text, host text, mine boolean, my_status text, names text[], created_at timestamptz)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT r.code, (SELECT nickname FROM social_profiles WHERE user_id = r.host), r.host = auth.uid(), m.status,
+         ARRAY(SELECT sp.nickname FROM run_together_members o JOIN social_profiles sp ON sp.user_id = o.user_id
+               WHERE o.run_id = r.id AND o.user_id <> auth.uid()), r.created_at
+  FROM run_together r JOIN run_together_members m ON m.run_id = r.id AND m.user_id = auth.uid()
+  WHERE r.created_at > now() - interval '3 hours' AND m.status <> 'done'
+  ORDER BY r.created_at DESC;
+$$;
+
+-- My distance and time (every few seconds while running); p_done when I finish
+CREATE OR REPLACE FUNCTION public.run_together_update(p_code text, p_meters numeric, p_seconds int, p_done boolean DEFAULT false)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF p_seconds < 0 OR p_meters < 0 OR (p_meters > 400 AND p_meters / greatest(p_seconds, 1) > 6.5) THEN
+    RAISE EXCEPTION 'That pace isn''t possible' USING ERRCODE = 'P0001';
+  END IF;
+  UPDATE run_together_members m SET status = CASE WHEN p_done THEN 'done' ELSE 'in' END,
+         meters = least(p_meters, 500000), seconds = least(p_seconds, 172800), updated_at = now()
+    FROM run_together r
+   WHERE r.id = m.run_id AND r.code = upper(p_code) AND m.user_id = auth.uid()
+     AND r.created_at > now() - interval '6 hours' AND m.status <> 'done';
+END $$;
+
+-- Everyone in the run, for the live panel
+CREATE OR REPLACE FUNCTION public.run_together_status(p_code text)
+RETURNS TABLE (nickname text, me boolean, status text, meters numeric, seconds int, updated_at timestamptz)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT sp.nickname, m.user_id = auth.uid(), m.status, m.meters, m.seconds, m.updated_at
+  FROM run_together r JOIN run_together_members m ON m.run_id = r.id JOIN social_profiles sp ON sp.user_id = m.user_id
+  WHERE r.code = upper(p_code)
+    AND EXISTS (SELECT 1 FROM run_together_members x WHERE x.run_id = r.id AND x.user_id = auth.uid())
+  ORDER BY m.meters DESC;
+$$;
+
+DO $$
+DECLARE f text;
+BEGIN
+  FOREACH f IN ARRAY ARRAY['start_run_together(text[])', 'my_runs_together()', 'run_together_update(text, numeric, integer, boolean)', 'run_together_status(text)'] LOOP
+    EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC, anon', f);
+    EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO authenticated', f);
+  END LOOP;
+END $$;
