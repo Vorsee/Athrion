@@ -49,13 +49,13 @@ export function consentEmail({ childName, link }: { childName: string, link: str
     'Because they are under 16, they can only use it once you approve. You will see what we collect and what is switched off for them.',
     `Approve or decline: ${link}`,
     'If you don\'t know about this, ignore this email and the account stays locked.',
-    'ATHRION · BABUSHKAKNOWSBETTER LLC · athrionsportapp@gmail.com',
+    'ATHRION · Athrion LLC · athrionsportapp@gmail.com',
   ].join('\n\n')
   const html = `<div style="font-family:system-ui,sans-serif;font-size:16px;line-height:1.5;color:#1C1917;max-width:520px">
 <p><strong>${name}</strong> signed up for ATHRION, a fitness app for workouts, swimming, running and food, and gave your email as their parent or guardian.</p>
 <p>Because they are under 16, they can only use it once you approve. You will see what we collect and what is switched off for them.</p>
 <p><a href="${esc(link)}" style="display:inline-block;background:#C8F135;color:#1C1917;font-weight:600;padding:12px 20px;border-radius:12px;text-decoration:none">Review and decide</a></p>
-<p style="color:#57534E;font-size:14px">If you don't know about this, ignore this email and the account stays locked.<br>ATHRION · BABUSHKAKNOWSBETTER LLC · athrionsportapp@gmail.com</p>
+<p style="color:#57534E;font-size:14px">If you don't know about this, ignore this email and the account stays locked.<br>ATHRION · Athrion LLC · athrionsportapp@gmail.com</p>
 </div>`
   return { subject, text, html }
 }
